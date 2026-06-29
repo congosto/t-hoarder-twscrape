@@ -1,0 +1,405 @@
+import math
+from pathlib import Path
+
+import networkx as nx
+import pandas as pd
+
+_NODE_ATTR_TYPES = {
+    "community": "VARCHAR",
+    "log_followers_count": "INT",
+    "log_friends_count": "INT",
+    "log_statuses_count": "INT",
+    "log_favourites_count": "INT",
+    "log_listed_count": "INT",
+    "location_country": "VARCHAR",
+    "location_region": "VARCHAR",
+    "location_city": "VARCHAR",
+    "create_at_year": "INT",
+    "user_verified": "BOOLEAN",
+    "is_blue_verified": "BOOLEAN",
+    "verified_type": "VARCHAR",
+}
+_NODE_ATTR_COLUMNS = list(_NODE_ATTR_TYPES.keys())
+
+_AUTHOR_COLUMNS = [
+    "username", "followers_count", "friends_count", "statuses_count",
+    "favourites_count", "listed_count", "location", "created_at",
+    "user_verified", "is_blue_verified", "verified_type",
+]
+
+
+def _log10(series: pd.Series) -> pd.Series:
+    values = pd.to_numeric(series, errors="coerce").fillna(0).clip(lower=0).add(1).apply(math.log10)
+    return values.round().astype(int)
+
+
+def _load_relations(project_dir: Path, prefix: str, relation: str) -> pd.DataFrame:
+    if relation == "RT":
+        path = project_dir / f"{prefix}_RTs.csv"
+        if not path.exists():
+            raise FileNotFoundError(f"No existe {path}. Descarga primero los Retweets.")
+        df = pd.read_csv(path, encoding="utf-8")
+        df["source"] = df["username"]
+        df["target"] = df["user_retweeted"]
+    elif relation == "replies_advanced":
+        path = project_dir / f"{prefix}_replies_advanced.csv"
+        if not path.exists():
+            raise FileNotFoundError(f"No existe {path}. Descarga primero las Advanced Comments.")
+        df = pd.read_csv(path, encoding="utf-8")
+        df["source"] = df["username"]
+        df["target"] = df["in_reply_to_user_username"]
+    elif relation == "replies":
+        path = project_dir / f"{prefix}_replies.csv"
+        if not path.exists():
+            raise FileNotFoundError(f"No existe {path}. Descarga primero las Comments.")
+        df = pd.read_csv(path, encoding="utf-8")
+        df["source"] = df["username"]
+        df["target"] = df["in_reply_to_user_username"]
+    else:
+        raise ValueError("relation debe ser 'RT', 'replies' o 'replies_advanced'")
+
+    df = df.dropna(subset=["source", "target"])
+    df = df[df["source"] != df["target"]]
+    return df
+
+
+def _build_giant_graph(project_dir: Path, prefix: str, relation: str, log=print) -> tuple[nx.DiGraph, pd.DataFrame]:
+    """Construye el grafo dirigido de la relación indicada y se queda solo con la
+    componente gigante, descartando el resto de nodos."""
+    relations_df = _load_relations(project_dir, prefix, relation)
+    log(f"Relaciones cargadas: {len(relations_df)}")
+
+    edges = relations_df.groupby(["source", "target"]).size().reset_index(name="weight")
+
+    G = nx.DiGraph()
+    for _, row in edges.iterrows():
+        G.add_edge(row["source"], row["target"], weight=int(row["weight"]))
+    log(f"Grafo: {G.number_of_nodes()} nodos, {G.number_of_edges()} aristas")
+
+    undirected = G.to_undirected()
+    giant = max(nx.connected_components(undirected), key=len)
+    log(f"Componente gigante: {len(giant)} nodos de {G.number_of_nodes()}")
+    G_giant = G.subgraph(giant).copy()
+
+    return G_giant, relations_df
+
+
+def _node_attributes_table(tweets_df: pd.DataFrame, relations_df: pd.DataFrame) -> pd.DataFrame:
+    # "username" en relations_df ya es el autor/origen (= "source"), no hace falta renombrar.
+    from_tweets = tweets_df[[c for c in _AUTHOR_COLUMNS if c in tweets_df.columns]].copy()
+    from_relations = relations_df[[c for c in _AUTHOR_COLUMNS if c in relations_df.columns]].copy()
+
+    combined = pd.concat([from_tweets, from_relations], ignore_index=True)
+    combined = combined.dropna(subset=["username"]).drop_duplicates(subset="username", keep="first")
+    return combined.set_index("username")
+
+
+def detect_communities(project_dir: Path, prefix: str, relation: str, log=print) -> tuple[Path, Path]:
+    """Crea el grafo de la relación, se queda con la componente gigante, calcula el grado
+    con pesos y la modularidad (Louvain/Blondel). Como el algoritmo de Louvain da resultados
+    distintos cada vez que se invoca, las comunidades se calculan y persisten aquí, y el resto
+    de pasos (generar grafo, clasificar tweets) las reutilizan desde estos ficheros.
+
+    Devuelve (communities_file, users_communities_file).
+    """
+    G_giant, _ = _build_giant_graph(project_dir, prefix, relation, log=log)
+
+    indegree = dict(G_giant.in_degree(weight="weight"))
+    outdegree = dict(G_giant.out_degree(weight="weight"))
+
+    communities = nx.community.louvain_communities(G_giant.to_undirected(), weight="weight")
+    log(f"Comunidades encontradas: {len(communities)}")
+    community_of = {node: str(i) for i, comm in enumerate(communities) for node in comm}
+
+    total = G_giant.number_of_nodes()
+    counts = pd.Series(community_of).value_counts()
+    communities_table = pd.DataFrame({
+        "community": counts.index,
+        "pct_nodes": (counts.values / total * 100).round(2),
+    }).sort_values("pct_nodes", ascending=False)
+    communities_file = project_dir / f"{prefix}_{relation}_communities.csv"
+    communities_table.to_csv(communities_file, index=False, encoding="utf-8")
+
+    users_table = pd.DataFrame({"user": list(G_giant.nodes())})
+    users_table["community"] = users_table["user"].map(community_of)
+    users_table["weight_indegree"] = users_table["user"].map(indegree).fillna(0).astype(int)
+    users_table["weight_outdegree"] = users_table["user"].map(outdegree).fillna(0).astype(int)
+    users_table = users_table.sort_values("weight_indegree", ascending=False)
+    users_file = project_dir / f"{prefix}_users_{relation}_communities.csv"
+    users_table.to_csv(users_file, index=False, encoding="utf-8")
+
+    log(f"Tabla de comunidades en {communities_file}")
+    log(f"Tabla de usuarios/comunidad en {users_file}")
+    return communities_file, users_file
+
+
+def generate_graph(project_dir: Path, prefix: str, relation: str, output_format: str = "gdf",
+                    include_communities: bool = True, include_locations: bool = False,
+                    log=print) -> Path:
+    """Genera el fichero de grafo (gdf/gexf) de la relación indicada con los atributos de nodo.
+
+    include_communities: añade 'community' desde {prefix}_users_{relation}_communities.csv
+    (generado antes con 'Detect communities'; falla si no existe).
+    include_locations: añade location_country/region/city desde {prefix}_loc.csv
+    (generado antes en Tools > Localización; falla si no existe).
+    Devuelve la ruta del fichero de grafo generado.
+    """
+    G_giant, relations_df = _build_giant_graph(project_dir, prefix, relation, log=log)
+
+    tweets_file = project_dir / f"{prefix}.csv"
+    if not tweets_file.exists():
+        raise FileNotFoundError(f"No existe {tweets_file}")
+    tweets_df = pd.read_csv(tweets_file, encoding="utf-8")
+
+    node_attrs = _node_attributes_table(tweets_df, relations_df)
+    node_attrs = node_attrs.reindex(list(G_giant.nodes()))
+    node_attrs["log_followers_count"] = _log10(node_attrs["followers_count"])
+    node_attrs["log_friends_count"] = _log10(node_attrs["friends_count"])
+    node_attrs["log_statuses_count"] = _log10(node_attrs["statuses_count"])
+    node_attrs["log_favourites_count"] = _log10(node_attrs["favourites_count"])
+    node_attrs["log_listed_count"] = _log10(node_attrs["listed_count"])
+    node_attrs["create_at_year"] = pd.to_datetime(node_attrs["created_at"], errors="coerce", utc=True).dt.year
+
+    if include_communities:
+        users_file = project_dir / f"{prefix}_users_{relation}_communities.csv"
+        if not users_file.exists():
+            raise FileNotFoundError(f"No existe {users_file}. Ejecuta antes 'Detect communities'.")
+        users_df = pd.read_csv(users_file, encoding="utf-8").set_index("user")
+        node_attrs["community"] = node_attrs.index.map(users_df["community"].to_dict())
+    else:
+        node_attrs["community"] = None
+
+    if include_locations:
+        loc_file = project_dir / f"{prefix}_loc.csv"
+        if not loc_file.exists():
+            raise FileNotFoundError(f"No existe {loc_file}. Genéralo antes en Tools > Localización.")
+        loc_df = pd.read_csv(loc_file, encoding="utf-8").set_index("username")
+        for col in ("location_country", "location_region", "location_city"):
+            node_attrs[col] = node_attrs.index.map(loc_df[col].to_dict() if col in loc_df.columns else {})
+        n_resolved = int(node_attrs["location_country"].notna().sum())
+        log(f"Localizaciones unidas desde {loc_file.name}: {n_resolved}/{len(node_attrs)} nodos")
+    else:
+        node_attrs["location_country"] = None
+        node_attrs["location_region"] = None
+        node_attrs["location_city"] = None
+
+    if output_format == "gexf":
+        graph_file = project_dir / f"{prefix}_{relation}.gexf"
+        _export_gexf(G_giant, node_attrs, graph_file)
+    else:
+        graph_file = project_dir / f"{prefix}_{relation}.gdf"
+        _export_gdf(G_giant, node_attrs, graph_file)
+    log(f"Grafo exportado en {graph_file}")
+
+    return graph_file
+
+
+def classify_tweets(project_dir: Path, prefix: str, relation: str, log=print) -> Path:
+    """Añade a los tweets de {prefix}.csv la comunidad de su autor, leída desde
+    {prefix}_users_{relation}_communities.csv (generado antes con 'Detect communities')."""
+    tweets_file = project_dir / f"{prefix}.csv"
+    if not tweets_file.exists():
+        raise FileNotFoundError(f"No existe {tweets_file}")
+
+    users_file = project_dir / f"{prefix}_users_{relation}_communities.csv"
+    if not users_file.exists():
+        raise FileNotFoundError(f"No existe {users_file}. Ejecuta antes 'Detect communities'.")
+
+    tweets_df = pd.read_csv(tweets_file, encoding="utf-8")
+    users_df = pd.read_csv(users_file, encoding="utf-8")
+    community_map = users_df.set_index("user")["community"].to_dict()
+    tweets_df["community"] = tweets_df["username"].map(community_map)
+
+    classified_file = project_dir / f"{prefix}_{relation}_classified.csv"
+    tweets_df.to_csv(classified_file, index=False, encoding="utf-8")
+    n_classified = int(tweets_df["community"].notna().sum())
+    log(f"Tweets clasificados: {n_classified}/{len(tweets_df)} ({n_classified / len(tweets_df) * 100:.1f}%)")
+    return classified_file
+
+
+def _to_native(value):
+    """GEXF no acepta tipos numpy (numpy.bool_, numpy.int64...); hay que convertirlos a tipos nativos."""
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+def _export_gexf(G: nx.DiGraph, node_attrs: pd.DataFrame, path: Path) -> None:
+    for node in G.nodes():
+        if node in node_attrs.index:
+            for col in _NODE_ATTR_COLUMNS:
+                value = node_attrs.loc[node, col]
+                G.nodes[node][col] = "" if pd.isna(value) else _to_native(value)
+    nx.write_gexf(G, path)
+
+
+def _gdf_value(value, col_type: str) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    if col_type == "VARCHAR":
+        return "'" + str(value).replace("'", "") + "'"
+    if col_type == "BOOLEAN":
+        return "true" if value else "false"
+    if col_type == "INT":
+        return str(int(value))
+    return str(value)
+
+
+def _export_gdf(G: nx.DiGraph, node_attrs: pd.DataFrame, path: Path) -> None:
+    node_header = "nodedef>name VARCHAR," + ",".join(f"{c} {_NODE_ATTR_TYPES[c]}" for c in _NODE_ATTR_COLUMNS)
+    edge_header = "edgedef>node1 VARCHAR,node2 VARCHAR,directed BOOLEAN,weight DOUBLE"
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(node_header + "\n")
+        for node in G.nodes():
+            row = ["'" + str(node).replace("'", "") + "'"]
+            for col in _NODE_ATTR_COLUMNS:
+                value = node_attrs.loc[node, col] if node in node_attrs.index else None
+                row.append(_gdf_value(value, _NODE_ATTR_TYPES[col]))
+            f.write(",".join(row) + "\n")
+
+        f.write(edge_header + "\n")
+        for u, v, data in G.edges(data=True):
+            u_q = "'" + str(u).replace("'", "") + "'"
+            v_q = "'" + str(v).replace("'", "") + "'"
+            f.write(f"{u_q},{v_q},true,{data.get('weight', 1)}\n")
+
+
+def _read_gdf(path: Path) -> nx.DiGraph:
+    """Lee de vuelta un fichero generado por _export_gdf (no es un parser GDF genérico)."""
+    with open(path, encoding="utf-8") as f:
+        lines = [line.rstrip("\n") for line in f]
+
+    i = 0
+    node_cols: list[str] = []
+    while i < len(lines):
+        if lines[i].startswith("nodedef>"):
+            node_cols = [c.split()[0] for c in lines[i][len("nodedef>"):].split(",")]
+            i += 1
+            break
+        i += 1
+
+    G = nx.DiGraph()
+    while i < len(lines) and not lines[i].startswith("edgedef>"):
+        values = lines[i].split(",")
+        name = values[0].strip().strip("'")
+        attrs = {col: val.strip().strip("'") for col, val in zip(node_cols[1:], values[1:])}
+        G.add_node(name, **attrs)
+        i += 1
+
+    i += 1  # salta la línea edgedef>
+    while i < len(lines):
+        if lines[i].strip():
+            parts = lines[i].split(",")
+            u, v = parts[0].strip().strip("'"), parts[1].strip().strip("'")
+            weight = float(parts[3]) if len(parts) > 3 else 1.0
+            G.add_edge(u, v, weight=weight)
+        i += 1
+
+    return G
+
+
+def load_graph_file(path: Path) -> nx.DiGraph:
+    if path.suffix.lower() == ".gexf":
+        G = nx.read_gexf(path)
+        return G if G.is_directed() else nx.DiGraph(G)
+    return _read_gdf(path)
+
+
+def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0,
+                     max_labels_per_community: int = 10, log=print):
+    """Visualiza un fichero de grafo ya generado (gdf/gexf) con layout Force Atlas 2.
+
+    Solo funciona si el grafo tiene menos de 3000 nodos y ya tiene comunidades calculadas
+    (atributo 'community' no vacío). Colorea por comunidad (solo las que superan el 2% de
+    los nodos; el resto se agrupan como 'Otros'), y pone etiqueta en el 5% de nodos con mayor
+    grado de entrada (weight indegree) de cada comunidad mostrada (limitado a
+    max_labels_per_community por comunidad, para que no sea ilegible en comunidades grandes).
+    Las etiquetas se separan automáticamente para que no se solapen (librería adjustText).
+
+    figsize: tamaño del lado de la figura en pulgadas (cuadrada).
+    Devuelve (figure, communities_shown).
+    """
+    import matplotlib.pyplot as plt
+    from adjustText import adjust_text
+    from fa2_modified import ForceAtlas2
+
+    path = project_dir / graph_filename
+    if not path.exists():
+        raise FileNotFoundError(f"No existe {path}")
+
+    G = load_graph_file(path)
+    n_nodes = G.number_of_nodes()
+    if n_nodes >= 3000:
+        raise ValueError(f"El grafo tiene {n_nodes} nodos; solo se pueden visualizar grafos con menos de 3000.")
+
+    communities = {n: G.nodes[n].get("community") for n in G.nodes()}
+    if not any(c for c in communities.values()):
+        raise ValueError("El grafo no tiene comunidades calculadas. Genera el grafo con 'Include communities' activado.")
+
+    counts = pd.Series(communities).value_counts()
+    threshold = n_nodes * 0.02
+    kept_communities = set(counts[counts > threshold].index) - {None, ""}
+    log(f"Comunidades mostradas (>2% de nodos): {len(kept_communities)} de {len(counts)}")
+
+    node_list = list(G.nodes())
+    node_community = {n: communities[n] if communities[n] in kept_communities else "Otros" for n in node_list}
+
+    log("Calculando layout Force Atlas 2...")
+    # outboundAttractionDistribution ("Dissuade Hubs" en Gephi) separa los nodos satélite
+    # de los hubs en vez de apelmazarlos todos alrededor; adjustSizes evita que los nodos
+    # se solapen entre sí, igual que "Prevent Overlap" en Gephi.
+    forceatlas2 = ForceAtlas2(
+        outboundAttractionDistribution=True, adjustSizes=True,
+        gravity=1.0, scalingRatio=2.0, verbose=False,
+    )
+    positions = forceatlas2.forceatlas2_networkx_layout(G, pos=None, iterations=200)
+
+    indegree = dict(G.in_degree(weight="weight"))
+    labels = {}
+    for community in kept_communities:
+        members = [n for n in node_list if node_community[n] == community]
+        members.sort(key=lambda n: indegree.get(n, 0), reverse=True)
+        top_n = max(1, min(max_labels_per_community, round(len(members) * 0.05)))
+        for n in members[:top_n]:
+            labels[n] = n
+
+    # tab20 alterna tono oscuro/claro del mismo color en índices consecutivos (0 y 1 son
+    # ambos azules); con tab10 los colores entre comunidades distintas se distinguen bien.
+    sorted_communities = sorted(kept_communities)
+    if len(sorted_communities) <= 10:
+        palette = plt.get_cmap("tab10")
+    else:
+        palette = plt.get_cmap("tab20")
+    community_color = {c: palette(i % palette.N) for i, c in enumerate(sorted_communities)}
+    community_color["Otros"] = (0.7, 0.7, 0.7, 1.0)
+    node_colors = [community_color[node_community[n]] for n in node_list]
+
+    # Tamaño de nodo según weight indegree (raíz cuadrada para no exagerar la diferencia
+    # entre los hubs y el resto).
+    max_indegree = max(indegree.values()) if indegree else 0
+    node_sizes = [20 + 200 * math.sqrt(indegree.get(n, 0) / max_indegree) if max_indegree else 20
+                  for n in node_list]
+
+    # Aristas curvadas y coloreadas por la comunidad del nodo origen (como el coloreado
+    # "Edge color > Source" de Gephi), en vez de un gris plano uniforme.
+    edge_colors = [community_color[node_community[u]] for u, v in G.edges()]
+
+    fig, ax = plt.subplots(figsize=(figsize, figsize))
+    nx.draw_networkx_edges(
+        G, positions, ax=ax, edge_color=edge_colors, alpha=0.25, width=0.6,
+        arrows=True, arrowsize=5, connectionstyle="arc3,rad=0.1",
+    )
+    nx.draw_networkx_nodes(G, positions, ax=ax, nodelist=node_list, node_color=node_colors, node_size=node_sizes)
+    ax.set_axis_off()
+
+    if labels:
+        label_bbox = {"facecolor": "white", "alpha": 0.75, "edgecolor": "none", "pad": 0.5}
+        texts = [
+            ax.text(positions[n][0], positions[n][1], label, fontsize=8, ha="center", va="center",
+                     bbox=label_bbox)
+            for n, label in labels.items()
+        ]
+        adjust_text(texts, ax=ax, arrowprops={"arrowstyle": "-", "color": "gray", "lw": 0.5})
+
+    return fig, sorted(kept_communities)

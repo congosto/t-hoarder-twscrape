@@ -1,0 +1,35 @@
+
+## metadatos básicos del tweet
+'id': str(tweet.id),
+'date': str(tweet.date)
+'username': tweet.user.username,
+'text': tweet.rawContent,
+'source': tweet.source,
+'lang': tweet.lang or 'und',
+## metadato sde interacción
+'reply_count': tweet.replyCount or 0,
+'retweet_count': tweet.retweetCount or 0,
+'like_count': tweet.likeCount or 0,
+'quote_count': tweet.quoteCount or 0,
+'views_count': tweet.viewCount or 0,
+'in_reply_to_user': tweet.inReplyToUser or null
+'is_quote_status': tweet.isQuoteStatus or null
+## metadatos del autor del tweet
+'user_id': str(tweet.user.id),
+'user_displayname': tweet.user.displayname,
+'followers_count': getattr(tweet.user'followersCount', 0) or 0,
+'friends_count': getattr(tweet.user, 'friendsCount', 0) or 0,
+'statuses_count': getattr(tweet.user, 'statusesCount', 0) or 0,
+'favourites_count': getattr(tweet.user, 'favouritesCount', 0) or 0,
+'listed_count': getattr(tweet.user.'listedCount', 0) or 0,
+'location': getattr(tweet.user.'location', 0) or 0,
+'create_at': getattr(tweet.user, 'create_at', 0) or 0
+'user_verified': getattr(tweet.user, 'verified', False) or False
+'is_blue_verified': getattr(tweet.user, 'blue', False) or False
+'verified_type': getattr(tweet.user, 'blueType', False) or False
+## metadatos del contenido
+'expanded_url' : getattr(tweet.entities.urls[0].expanded_url) or null
+'media': 
+## Enlace del tweet
+'url': tweet.url,
+

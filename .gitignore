@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+
+# credenciales y bases de datos locales
+accounts.db
+accounts.db.bak_deleted_*
+
+# datos recogidos (no son código)
+data/
+app/data/
+
+# logs
+*.log
+
+# configuración local de Claude Code
+.claude/settings.local.json

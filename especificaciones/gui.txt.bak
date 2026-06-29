@@ -1,0 +1,136 @@
+Prototipo visual
+
+Parte superior:
+logo de la app (logo_t-hoarder.png) nombre de la app (t-hoarder-twscraper) 
+un separador de zona
+
+una lista de botones horizontales con las siguientes funciones
+
+- Settings
+- Proyectos
+- Download
+- Tools
+- Graphs
+- Contents
+- Charts
+
+un separador de zona
+
+
+En la parte izquierda: formulario de entrada de datos según la opción
+
+- Settings
+
+  New Account | Active Accounts | Delete Account
+
+     New Account
+       Username
+       Password
+       Email
+       Email Password
+       Auth Token
+       ct0
+    Active Accounts
+       List of Active Accounts
+     Delete Account
+       username
+Projects
+  Select project| New project | Active projects | Desactive project
+  Select project
+    Project name
+  New project
+    Project name
+  Active projects
+    List of active projects
+  Desactive project
+    Project name
+
+- Download
+
+  Search | User TL |Retweets | Replies | Advanced Replies)
+
+  Search
+    Prefix (File prefix for results)
+    Query (Twitter query, supports advanced queries)
+    From (Start date of tweets YYYY-mm-dd HH:MM.SS)
+    To (End date of tweets YYYY-mm-dd HH:MM.SS)
+    Frequency (Interval min | hour | day | week | month | year)
+  User TL
+    Prefix (File prefix for results)
+    Username (Selected user)
+    From (Start date of tweets YYYY-mm-dd HH:MM.SS)
+    To (End date of tweets YYYY-mm-dd HH:MM.SS)
+    Frequency (Sampling frequency - min | hour | day | week | month | year)
+  Retweets
+    Prefix (Prefix of the file containing the original tweets)
+    Min RTs (Minimum number of RTs required to download RTs)
+   Comments
+     Prefix (Prefix of the file containing the original tweets)
+     Min Replies (Minimum number of comments required to download)
+   Advanced Comments
+     Prefix (Prefix of the file containing the original tweets)
+     Min Replies (Minimum number of comments required to download)
+     Last (Number of days since the tweet date)
+     Frequency (Interval: min | hour | day | week | month | year)
+
+- Tools:
+
+   Merge files | Clean data
+
+   Merge files
+      input files
+      output file
+
+   Clean data
+     Prefix (Prefix of the file with the original tweets)
+     Positives: (List of included words)
+     False positives: (List of excluded words)
+     output file
+
+- Graphs
+
+   Prefix (Prefix of the file with comments or RTS)
+   output Format graph:  gdf | GEXF
+   Output file with the communities
+
+Contents
+    Prefix (Prefix of the file containing the tweets)
+
+- Graphics 
+
+  graphic type Tweets | Users
+
+  Tweet Graphs
+
+    prefix (Prefix for graph files)
+    base_title (Base title of the graphs)
+    time_zone (Time zone, default "Europe/Berlin")
+    min_reach (The author will appear if the reach is greater than this amount)
+    min_RTs (The author will appear if the number of RTs is greater than this amount)
+    min_comments (Minimum number of comments to compare with RTs)
+    show_topics (TRUE|FALSE TRUE if you want to show the topics)
+    topics_file (Only if show_topics is TRUE)
+    show_events (TRUE|FALSE TRUE if you want to annotate events)
+    events_file (TRUE|FALSE FALSE if there are no annotations; if there are, the file name)
+    show_users (TRUE|FALSE TRUE if you want to create facets per user. No more than 10 users)
+    zoom FALSE (TRUE/|FALSE TRUE if zoom is desired)
+    min_date_zoom: (Zoom start date yyyy-mm-dd HH:MM:SS Only if zoom is TRUE)
+    max_date_zoom: (Zoom end date yyyy-mm-dd HH:MM:SS Only if zoom is TRUE)
+
+  User Graphs
+
+  prefix (Prefix for graph files)
+  username (Name of the profile to analyze)
+  base_title (Base title of the graphs)
+  time_zone (Time zone, default "Europe/Berlin")
+  show_topics (TRUE|FALSE) TRUE if topics are desired)
+  topics_file (Only if show_topics is TRUE)
+  show_events (TRUE|FALSE) TRUE if annotations are desired
+  events_file (TRUE|FALSE) FALSE if no annotations exist; if there are annotations, the file name
+  show_users (TRUE|FALSE TRUE if you want to create facets per user. No more than 10 users)
+
+  En la parte derecha: Contexto y resultados
+      En la parte superior Se indicará el proyecto activo y el numero de cuentas activas
+
+
+en la parte inferior : consola para ver progreso 

@@ -1,0 +1,216 @@
+Prototipo visual
+
+Parte superior:
+logo de la app (logo_t-hoarder.png) nombre de la app (t-hoarder-twscraper)
+un separador de zona
+
+una lista de botones horizontales con las siguientes funciones
+
+- Settings
+- Project
+- Download
+- Tools
+- Graphs
+- Charts
+
+En la parte izquierda (20% del espacio): formulario de entrada de datos según la opción
+
+- Settings
+
+  New Account | Active Accounts | Delete Account
+
+     New Account
+       Username
+       Password
+       Email
+       Email Password
+       Auth Token
+       ct0
+     Active Accounts
+       List of Active Accounts
+     Delete Account
+       username
+
+- Project
+
+  Select project | New project | Active projects | Desactive project
+
+  Select project
+    Project name
+  New project
+    Project name
+  Active projects
+    List of active projects
+  Desactive project
+    Project name
+    acciones:
+    - No borra el proyecto: lo mueve de data/{project} a data/desactivated/{project}, para no saturar el desplegable de proyectos activos sin perder los datos
+
+- Download
+
+  Search | User TL | Retweets | Comments | Advanced Comments
+
+  Search
+    Prefix (File prefix for results)
+    Botón "Cargar contexto": si el Prefix ya tiene una descarga previa, rellena
+      Query/Product/From/To/Frequency con lo guardado; si no tiene contexto,
+      limpia esos campos a sus valores por defecto
+    Query (Twitter query, supports advanced queries)
+    Product (Top | Latest)
+    From (Start date of tweets YYYY-mm-dd HH:MM:SS)
+    To (End date of tweets YYYY-mm-dd HH:MM:SS)
+    Frequency (Interval min | hour | day | week | month | year)
+  User TL
+    Prefix (File prefix for results)
+    Botón "Cargar contexto": igual que en Search, pero rellena/limpia
+      Users list/From/To/Frequency
+    Username(s) (uno o varios usuarios)
+    From (Start date of tweets YYYY-mm-dd HH:MM:SS)
+    To (End date of tweets YYYY-mm-dd HH:MM:SS)
+    Frequency (Sampling frequency - min | hour | day | week | month | year)
+  Retweets
+    Prefix (Prefix of the file containing the original tweets)
+    Min RTs (Minimum number of RTs required to download RTs)
+  Comments
+    Prefix (Prefix of the file containing the original tweets)
+    Min Replies (Minimum number of comments required to download)
+  Advanced Comments
+    Prefix (Prefix of the file containing the original tweets)
+    Min Replies (Minimum number of comments required to download)
+    Last (Number of days since the tweet date)
+    Frequency (Interval: min | hour | day | week | month | year)
+
+- Tools
+
+  Merge files | Clean data | Location
+
+  Merge files
+    Input files (selección múltiple)
+    Output file
+
+  Clean data
+    Prefix (Prefix of the file with the original tweets)
+    Positives (List of included words)
+    False positives (List of excluded words)
+    Output file
+
+  Location
+    Prefix (Prefix of the file with the original tweets)
+    acciones:
+    - Geocodifica de forma offline (geonamescache) la localización declarada en el perfil de cada usuario presente en {prefix}.csv
+    - Identifica país, y si es España, también la Comunidad Autónoma, y ciudad
+    resultados:
+    - {prefix}_loc.csv con columnas: username, location, country, region, city
+
+- Graphs
+
+  Detect communities | Generate graph | Classify tweets | Visualize graph
+
+  Detect communities
+    Prefix (Prefix of the file with comments or RTs)
+    Relation (RT | replies | replies_advanced)
+    acciones:
+    - Construye el grafo dirigido y ponderado de la relación elegida (RT, replies o replies_advanced) y se queda con el componente gigante
+    - Calcula el in-degree y out-degree ponderados de cada usuario
+    - Detecta comunidades (algoritmo de Louvain/Blondel). El resultado no es determinista: cada ejecución puede dar comunidades distintas, por eso se persiste en disco y no se recalcula en los siguientes pasos
+    resultados:
+    - {prefix}_{relation}_communities.csv: tabla de comunidades (community, pct_nodes), ordenada de mayor a menor tamaño
+    - {prefix}_users_{relation}_communities.csv: comunidad de cada usuario (user, community, weight_indegree, weight_outdegree), ordenada por indegree
+
+  Generate graph
+    Prefix (Prefix of the file with comments or RTs)
+    Relation (RT | replies | replies_advanced)
+    Format (gdf | gexf)
+    Include communities (checkbox, usa {prefix}_users_{relation}_communities.csv generado en Detect communities)
+    Include locations (checkbox, usa {prefix}_loc.csv generado en Tools > Location)
+    resultados:
+    - {prefix}_{relation}.gdf o {prefix}_{relation}.gexf, listo para abrir en Gephi o para Visualize graph
+
+  Classify tweets
+    Prefix (Prefix of the file with the original tweets)
+    Relation (RT | replies | replies_advanced)
+    acciones:
+    - Cruza {prefix}.csv con {prefix}_users_{relation}_communities.csv para asignar la comunidad del autor a cada tweet
+    resultados:
+    - {prefix}_{relation}_classified.csv
+
+  Visualize graph
+    Select graph (lista de ficheros .gdf/.gexf del proyecto)
+    Tamaño de la imagen (pulgadas, slider 4-20, por defecto 8)
+    Máximo de etiquetas por comunidad (slider 1-50, por defecto 10)
+    acciones:
+    - Distribución de nodos mediante ForceAtlas2 (gravity, scalingRatio, disuadir hubs, evitar solapes)
+    - Colorea cada comunidad con un color distinto (las comunidades que no llegan al 2% de los nodos se agrupan como "Otros" en gris); aristas curvas coloreadas según la comunidad del nodo origen
+    - El tamaño de cada nodo depende de su weighted indegree
+    - Etiqueta solo a los usuarios más relevantes de cada comunidad (limitado por el slider), evitando solapes entre etiquetas
+    - El grafo se muestra en el panel de resultados de la derecha, con un botón para guardar la imagen en PNG
+
+- Charts  (implementado: traducción Python de los antiguos cuadernos R
+  twscrapeR_charts.Rmd y twscrapeR_charts_profile.Rmd; funciones de dibujo en
+  scripts/nb_charts.py y nb_charts_profile.py, envoltorio en
+  scripts/charts.py, conectado a la app real en Charts > Tweets/Users)
+
+  Tweets | Users
+
+  Tweet Graphs
+    Prefix | Base title  (misma fila)
+    Time zone (desplegable: Europe/Berlin (por defecto) | America/Chicago | America/Caracas)
+    Min reach | Min RTs | Min comments  (misma fila)
+    Show topics + Topics file (misma fila; el fichero se deshabilita si Show topics no está marcado)
+    Show events + Events file (misma fila; idem)
+    Zoom (checkbox): si se marca, despliega Min date zoom / Max date zoom
+      (yyyy-mm-dd HH:MM:SS) en dos columnas; restringen el rango de todas
+      las gráficas en vez de usar todo el periodo disponible
+    Botón "Generar gráfico de Tweets": genera y muestra en el panel de
+      Resultados las gráficas de impacto (alcance, RTs e influencers, comments
+      vs RTs), palabras frecuentes, menciones a medios, topics (si aplica) y
+      comunidades (si el dataset tiene ciclo ARS completo); guarda los PNG en
+      data/{project}/{prefix}_graficas/
+    (Show users se quitó del formulario: ya no genera la gráfica "por usuario")
+
+  User Graphs
+    Prefix | Username  (misma fila)
+    Base title
+    Time zone (mismo desplegable que en Tweets)
+    Show topics + Topics file (misma fila, igual que en Tweets)
+    Show events + Events file (misma fila, igual que en Tweets)
+    Botón "Generar gráfico de Usuario": genera rutina diaria, ritmo
+      semanal/mensual, impacto (favoritos/RTs/citas/comentarios/impresiones),
+      engagement, comments vs RTs, palabras frecuentes y topics (si aplica)
+
+La parte central (60% del espacio) pasa a ser solo de resultados:
+    Botón "Borrar resultados": visible siempre que haya algo que mostrar (error,
+      gráficas, dataframe o fichero); limpia el panel entero
+    Panel de resultados: mensajes de error (en rojo), gráficas de Charts
+      (una por una, con la ruta donde se han guardado los PNG), gráfico del
+      grafo (con botón para guardar PNG), o vista previa del fichero generado
+      (tabla para CSV -ancho automático si el CSV tiene 3 columnas o menos,
+      por ejemplo {prefix}_communities.csv-, primeras 50 líneas en texto para
+      otros formatos como .gdf/.gexf)
+
+La parte derecha (20% del espacio) es de Contexto/Ayuda:
+    Cuentas activas (primero)
+    Proyecto activo
+    Si hay un proyecto activo: lista desplegable "Descargas con contexto
+      guardado", una entrada por Prefix con contexto, expandible para ver el
+      detalle (query/users, product, since, until, frequency) de Search y/o
+      User TL
+
+En la parte inferior: consola para ver el progreso (un mensaje por línea, los errores se resaltan en rojo)
+
+
+Notas de implementación:
+- Reiniciar la app tras editar cualquier módulo de scripts/ (el hot-reload de Streamlit solo afecta a app.py): usar restart_app.ps1 en la raíz del repo.
+- Charts: la lógica de graficado vive en scripts/nb_charts.py y
+  nb_charts_profile.py (matplotlib/seaborn, traducción de los antiguos cuadernos
+  R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). El
+  envoltorio que usa la app real es scripts/charts.py
+  (generate_tweet_charts / generate_user_charts).
+- El contexto de las descargas (scripts/context.py) guarda, además
+  de las fechas, la query/lista de usuarios, el product y la frequency
+  originales, para poder reconstruir el formulario completo con el botón
+  "Cargar contexto" al reutilizar un Prefix.
+- "Desactivar proyecto" (scripts/projects.py) mueve la carpeta del
+  proyecto a data/desactivated/{project} en vez de borrarla.
+- Se evaluó una sección "Contents" (Detect entities | Detect frames | Detect sentiment) para análisis de texto de los tweets. Se implementó y se probó (NER con spaCy, diccionarios propios, sentimiento con pysentimiento) pero se eliminó por completo: cada proyecto necesita su propio diccionario hecho a mano, y esa elaboración manual de diccionarios no encajaba en el flujo de la app.
+- Antivirus con análisis HTTPS (AVG y similares): twscrape necesita descargar varios scripts desde abs.twimg.com/x.com para calcular el XClientTransactionId que exige Twitter/X. Si el antivirus intercepta el tráfico HTTPS (p. ej. "Web Shield" de AVG) y su certificado de escaneo no cumple con el estándar X.509 (Basic Constraints no marcado como crítico), la descarga falla con "Couldn't get XClientTxId indices script". Solución: desactivar el análisis/escaneo HTTPS del antivirus (no afecta al resto de la protección, solo deja de inspeccionar el contenido del tráfico cifrado) o excluir x.com/twimg.com de ese análisis si el antivirus lo permite.
