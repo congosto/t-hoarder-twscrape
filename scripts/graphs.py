@@ -2,6 +2,7 @@ import math
 from pathlib import Path
 
 import networkx as nx
+import numpy as np
 import pandas as pd
 
 _NODE_ATTR_TYPES = {
@@ -307,7 +308,7 @@ def load_graph_file(path: Path) -> nx.DiGraph:
 
 
 def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0,
-                     max_labels_per_community: int = 10, iterations: int = 2000, log=print):
+                     max_labels_per_community: int = 10, iterations: int = 300, log=print):
     """Visualiza un fichero de grafo ya generado (gdf/gexf) con layout Force Atlas 2.
 
     Solo funciona si el grafo tiene menos de 3000 nodos y ya tiene comunidades calculadas
@@ -318,15 +319,12 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
     Las etiquetas se separan automáticamente para que no se solapen (librería adjustText).
 
     figsize: tamaño del lado de la figura en pulgadas (cuadrada).
-    iterations: iteraciones de ForceAtlas2. Gephi corre hasta que el usuario lo para; para
-    que las comunidades se separen bien suelen hacer falta miles de iteraciones (con pocas,
-    el grafo queda como una bola). En grafos grandes (~3000 nodos) cada 1000 iteraciones
-    cuestan en torno a 2 minutos.
+    iterations: iteraciones de ForceAtlas2. Con el modo LinLog las comunidades se separan
+    en unos cientos de iteraciones (300 por defecto, como el cuaderno R).
     Devuelve (figure, communities_shown).
     """
     import matplotlib.pyplot as plt
     from adjustText import adjust_text
-    from fa2_modified import ForceAtlas2
 
     path = project_dir / graph_filename
     if not path.exists():
@@ -349,19 +347,17 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
     node_list = list(G.nodes())
     node_community = {n: communities[n] if communities[n] in kept_communities else "Otros" for n in node_list}
 
-    log(f"Calculando layout Force Atlas 2 ({iterations} iteraciones)...")
-    # Mismos parámetros que Gephi por defecto (resetPropertiesValues de ForceAtlas2.java):
-    # dissuade hubs y prevent overlap desactivados, scaling 10.0 en grafos de menos de
-    # 100 nodos, tolerance 0.1 (grafos <5000 nodos) y Barnes-Hut solo a partir de 1000 nodos.
-    forceatlas2 = ForceAtlas2(
-        outboundAttractionDistribution=False, adjustSizes=False, linLogMode=False,
-        edgeWeightInfluence=1.0, gravity=1.0, strongGravityMode=False,
-        scalingRatio=2.0 if n_nodes >= 100 else 10.0,
-        jitterTolerance=0.1,
-        barnesHutOptimize=n_nodes >= 1000, barnesHutTheta=1.2,
-        verbose=False,
-    )
-    positions = forceatlas2.forceatlas2_networkx_layout(G, pos=None, iterations=iterations)
+    log(f"Calculando layout Force Atlas 2 ({iterations} iteraciones, modo LinLog)...")
+    # Misma receta que el cuaderno R (ForceAtlas2::layout.forceatlas2 con linlog=TRUE y
+    # gravity=2): el modo LinLog compacta cada comunidad y las separa entre sí, con lo que
+    # bastan unos cientos de iteraciones. fa2_modified no implementa LinLog (tiene un assert
+    # que lo impide), así que se usa la implementación nativa de networkx (>=3.4).
+    # errstate: el linlog de networkx divide 0/0 en la diagonal (distancia de cada nodo
+    # consigo mismo) y luego la rellena con ceros; el aviso de numpy es ruido.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        positions = nx.forceatlas2_layout(
+            G, max_iter=iterations, linlog=True, gravity=2.0, weight="weight", seed=42,
+        )
 
     indegree = dict(G.in_degree(weight="weight"))
     labels = {}

@@ -583,10 +583,10 @@ with left:
                         "Máximo de etiquetas por comunidad", min_value=1, max_value=50, value=10, key="vg_max_labels"
                     )
                     vg_iterations = st.slider(
-                        "Iteraciones de ForceAtlas2", min_value=200, max_value=5000, value=2000, step=100,
+                        "Iteraciones de ForceAtlas2", min_value=100, max_value=2000, value=300, step=50,
                         key="vg_iterations",
-                        help="Con pocas iteraciones las comunidades no se separan (el grafo queda como una bola). "
-                             "En grafos grandes (~3000 nodos) cada 1000 iteraciones tardan en torno a 2 minutos.",
+                        help="Con el modo LinLog las comunidades se separan en unos cientos de iteraciones. "
+                             "Sube el valor si el grafo queda poco desplegado.",
                     )
                     if st.button("Visualizar grafo"):
                         try:

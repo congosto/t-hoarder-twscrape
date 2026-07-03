@@ -4,7 +4,6 @@ twscrape>=0.19.0
 networkx>=3.6
 geonamescache
 matplotlib
-fa2_modified
 adjustText
 seaborn
 wordcloud
