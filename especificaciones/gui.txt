@@ -141,8 +141,8 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     Iteraciones de ForceAtlas2 (slider 100-2000, por defecto 300)
     acciones:
     - Distribución de nodos mediante ForceAtlas2 en modo LinLog con gravity 2.0 y las iteraciones del slider (la misma receta que el antiguo cuaderno R: LinLog compacta cada comunidad y las separa entre sí, con lo que bastan unos cientos de iteraciones). Implementación nativa de networkx (fa2_modified no implementa LinLog)
-    - Colorea cada comunidad con un color distinto (las comunidades que no llegan al 2% de los nodos se agrupan como "Otros" en gris); aristas curvas coloreadas según la comunidad del nodo origen
-    - El tamaño de cada nodo depende de su weighted indegree
+    - Colorea cada comunidad con un color distinto (las comunidades que no llegan al 2% de los nodos se agrupan como "Otros" en gris); aristas curvas coloreadas según la comunidad del nodo origen y con grosor según el weight de la arista (escala log)
+    - El tamaño de cada nodo depende de su weighted indegree en escala logarítmica (con escala lineal, los hubs de los grafos de RTs aplastan al resto al tamaño mínimo)
     - Etiqueta solo a los usuarios más relevantes de cada comunidad (limitado por el slider), evitando solapes entre etiquetas
     - El grafo se muestra en el panel de resultados de la derecha, con un botón para guardar la imagen en PNG
 

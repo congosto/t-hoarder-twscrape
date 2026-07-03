@@ -379,19 +379,31 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
     community_color["Otros"] = (0.7, 0.7, 0.7, 1.0)
     node_colors = [community_color[node_community[n]] for n in node_list]
 
-    # Tamaño de nodo según weight indegree (raíz cuadrada para no exagerar la diferencia
-    # entre los hubs y el resto).
+    # Tamaño de nodo según weight indegree, en escala logarítmica: en grafos de RTs el
+    # indegree es muy desigual (un par de hubs acaparan casi todo) y con escala lineal o
+    # raíz todos los nodos menos esos hubs salen del tamaño mínimo.
     max_indegree = max(indegree.values()) if indegree else 0
-    node_sizes = [20 + 200 * math.sqrt(indegree.get(n, 0) / max_indegree) if max_indegree else 20
-                  for n in node_list]
+    if max_indegree > 0:
+        log_max = math.log1p(max_indegree)
+        node_sizes = [15 + 285 * math.log1p(indegree.get(n, 0)) / log_max for n in node_list]
+    else:
+        node_sizes = [15 for _ in node_list]
 
     # Aristas curvadas y coloreadas por la comunidad del nodo origen (como el coloreado
-    # "Edge color > Source" de Gephi), en vez de un gris plano uniforme.
+    # "Edge color > Source" de Gephi), con grosor según el weight de la arista (también
+    # en escala log, por lo mismo que el tamaño de los nodos).
     edge_colors = [community_color[node_community[u]] for u, v in G.edges()]
+    edge_weights = [G[u][v].get("weight", 1.0) or 1.0 for u, v in G.edges()]
+    w_lo, w_hi = (min(edge_weights), max(edge_weights)) if edge_weights else (1.0, 1.0)
+    if w_hi > w_lo:
+        log_lo, log_hi = math.log1p(w_lo), math.log1p(w_hi)
+        edge_widths = [0.2 + 1.8 * (math.log1p(w) - log_lo) / (log_hi - log_lo) for w in edge_weights]
+    else:
+        edge_widths = 0.6
 
     fig, ax = plt.subplots(figsize=(figsize, figsize))
     nx.draw_networkx_edges(
-        G, positions, ax=ax, edge_color=edge_colors, alpha=0.25, width=0.6,
+        G, positions, ax=ax, edge_color=edge_colors, alpha=0.15, width=edge_widths,
         arrows=True, arrowsize=5, connectionstyle="arc3,rad=0.1",
     )
     nx.draw_networkx_nodes(G, positions, ax=ax, nodelist=node_list, node_color=node_colors, node_size=node_sizes)
