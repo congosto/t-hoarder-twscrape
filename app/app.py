@@ -156,6 +156,7 @@ def clear_results():
 def set_result_charts(figs, image_path):
     st.session_state.chart_figures = figs
     st.session_state.chart_figures_path = image_path
+    st.session_state.chart_carousel_idx = 0
     st.session_state.last_result_file = None
     st.session_state.last_result_file2 = None
     st.session_state.last_result_df = None
@@ -779,9 +780,21 @@ with right:
         st.error(error_msg)
     elif chart_figures:
         st.caption(f"Gráficas guardadas en: {st.session_state.get('chart_figures_path', '')}")
-        for chart_name, chart_fig in chart_figures.items():
-            st.markdown(f"**{chart_name}**")
-            st.pyplot(chart_fig, width="content")
+        # Carrusel: una gráfica cada vez, con botones para pasar de una a otra
+        chart_names = list(chart_figures.keys())
+        idx = st.session_state.get("chart_carousel_idx", 0) % len(chart_names)
+        col_prev, col_title, col_next = st.columns([1, 6, 1])
+        if col_prev.button("◀", key="chart_prev", disabled=len(chart_names) == 1):
+            idx = (idx - 1) % len(chart_names)
+            st.session_state.chart_carousel_idx = idx
+        if col_next.button("▶", key="chart_next", disabled=len(chart_names) == 1):
+            idx = (idx + 1) % len(chart_names)
+            st.session_state.chart_carousel_idx = idx
+        col_title.markdown(
+            f"<div style='text-align: center'><b>{chart_names[idx]}</b> ({idx + 1}/{len(chart_names)})</div>",
+            unsafe_allow_html=True,
+        )
+        st.pyplot(chart_figures[chart_names[idx]], width="content")
     elif result_df is not None:
         st.caption(st.session_state.get("last_result_df_title", ""))
         st.dataframe(result_df, use_container_width=True)

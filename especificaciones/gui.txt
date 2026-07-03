@@ -183,8 +183,10 @@ La parte central (60% del espacio) pasa a ser solo de resultados:
     Botón "Borrar resultados": visible siempre que haya algo que mostrar (error,
       gráficas, dataframe o fichero); limpia el panel entero
     Panel de resultados: mensajes de error (en rojo), gráficas de Charts
-      (una por una, con la ruta donde se han guardado los PNG), gráfico del
-      grafo (con botón para guardar PNG), o vista previa del fichero generado
+      (en modo carrusel: una gráfica cada vez con botones ◀/▶ para navegar,
+      el nombre y la posición "n/total" centrados, y la ruta donde se han
+      guardado los PNG; los botones se deshabilitan si solo hay una gráfica),
+      gráfico del grafo (con botón para guardar PNG), o vista previa del fichero generado
       (tabla para CSV -ancho automático si el CSV tiene 3 columnas o menos,
       por ejemplo {prefix}_communities.csv-, primeras 50 líneas en texto para
       otros formatos como .gdf/.gexf)
