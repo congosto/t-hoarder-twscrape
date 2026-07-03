@@ -341,7 +341,12 @@ def graph_view_data(project_dir: Path, graph_filename: str, max_labels_per_commu
     G = load_graph_file(path)
     n_nodes = G.number_of_nodes()
 
-    communities = {n: G.nodes[n].get("community") for n in G.nodes()}
+    # En los .gexf los atributos llegan tipados (community puede ser int); se normaliza
+    # a str para que la comunidad 0 no cuente como "sin comunidad" y ordenar no mezcle tipos.
+    communities = {}
+    for n in G.nodes():
+        c = G.nodes[n].get("community")
+        communities[n] = str(c) if c is not None and str(c).strip() != "" else None
     if not any(c for c in communities.values()):
         raise ValueError("El grafo no tiene comunidades calculadas. Genera el grafo con 'Include communities' activado.")
 
