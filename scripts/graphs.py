@@ -348,15 +348,17 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
     node_community = {n: communities[n] if communities[n] in kept_communities else "Otros" for n in node_list}
 
     log(f"Calculando layout Force Atlas 2 ({iterations} iteraciones, modo LinLog)...")
-    # Misma receta que el cuaderno R (ForceAtlas2::layout.forceatlas2 con linlog=TRUE y
-    # gravity=2): el modo LinLog compacta cada comunidad y las separa entre sí, con lo que
-    # bastan unos cientos de iteraciones. fa2_modified no implementa LinLog (tiene un assert
-    # que lo impide), así que se usa la implementación nativa de networkx (>=3.4).
+    # Receta basada en el cuaderno R (ForceAtlas2::layout.forceatlas2 con linlog=TRUE):
+    # el modo LinLog compacta cada comunidad y las separa entre sí, con lo que bastan unos
+    # cientos de iteraciones. fa2_modified no implementa LinLog (tiene un assert que lo
+    # impide), así que se usa la implementación nativa de networkx (>=3.4). gravity=5
+    # (probado sobre data/prueba/panas_RT.gdf): con 2 las comunidades quedan tan lejos que
+    # el lienzo es casi todo blanco, y con 10 se aplastan en anillos concéntricos.
     # errstate: el linlog de networkx divide 0/0 en la diagonal (distancia de cada nodo
     # consigo mismo) y luego la rellena con ceros; el aviso de numpy es ruido.
     with np.errstate(divide="ignore", invalid="ignore"):
         positions = nx.forceatlas2_layout(
-            G, max_iter=iterations, linlog=True, gravity=2.0, weight="weight", seed=42,
+            G, max_iter=iterations, linlog=True, gravity=5.0, weight="weight", seed=42,
         )
 
     indegree = dict(G.in_degree(weight="weight"))
@@ -381,13 +383,15 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
 
     # Tamaño de nodo según weight indegree, en escala logarítmica: en grafos de RTs el
     # indegree es muy desigual (un par de hubs acaparan casi todo) y con escala lineal o
-    # raíz todos los nodos menos esos hubs salen del tamaño mínimo.
+    # raíz todos los nodos menos esos hubs salen del tamaño mínimo. size_ratio (0-1) se
+    # reutiliza para el tamaño de letra de las etiquetas.
     max_indegree = max(indegree.values()) if indegree else 0
     if max_indegree > 0:
         log_max = math.log1p(max_indegree)
-        node_sizes = [15 + 285 * math.log1p(indegree.get(n, 0)) / log_max for n in node_list]
+        size_ratio = {n: math.log1p(indegree.get(n, 0)) / log_max for n in node_list}
     else:
-        node_sizes = [15 for _ in node_list]
+        size_ratio = {n: 0.0 for n in node_list}
+    node_sizes = [4 + 296 * size_ratio[n] for n in node_list]
 
     # Aristas curvadas y coloreadas por la comunidad del nodo origen (como el coloreado
     # "Edge color > Source" de Gephi), con grosor según el weight de la arista (también
@@ -411,9 +415,10 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
 
     if labels:
         label_bbox = {"facecolor": "white", "alpha": 0.75, "edgecolor": "none", "pad": 0.5}
+        # Tamaño de letra proporcional al tamaño del nodo (como label_size en el cuaderno R)
         texts = [
-            ax.text(positions[n][0], positions[n][1], label, fontsize=8, ha="center", va="center",
-                     bbox=label_bbox)
+            ax.text(positions[n][0], positions[n][1], label, fontsize=5 + 9 * size_ratio[n],
+                     ha="center", va="center", bbox=label_bbox)
             for n, label in labels.items()
         ]
         adjust_text(texts, ax=ax, arrowprops={"arrowstyle": "-", "color": "gray", "lw": 0.5})
