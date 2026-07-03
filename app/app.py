@@ -582,11 +582,18 @@ with left:
                     vg_max_labels = st.slider(
                         "Máximo de etiquetas por comunidad", min_value=1, max_value=50, value=10, key="vg_max_labels"
                     )
+                    vg_iterations = st.slider(
+                        "Iteraciones de ForceAtlas2", min_value=200, max_value=5000, value=2000, step=100,
+                        key="vg_iterations",
+                        help="Con pocas iteraciones las comunidades no se separan (el grafo queda como una bola). "
+                             "En grafos grandes (~3000 nodos) cada 1000 iteraciones tardan en torno a 2 minutos.",
+                    )
                     if st.button("Visualizar grafo"):
                         try:
                             fig, communities_shown = graphs_mod.visualize_graph(
                                 project_dir, vg_file, figsize=vg_size,
-                                max_labels_per_community=vg_max_labels, log=log,
+                                max_labels_per_community=vg_max_labels,
+                                iterations=vg_iterations, log=log,
                             )
                             log(f"Comunidades mostradas: {', '.join(communities_shown)}")
                             st.session_state.last_error = None

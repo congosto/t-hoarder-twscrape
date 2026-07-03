@@ -138,8 +138,9 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     Select graph (lista de ficheros .gdf/.gexf del proyecto)
     Tamaño de la imagen (pulgadas, slider 4-20, por defecto 8)
     Máximo de etiquetas por comunidad (slider 1-50, por defecto 10)
+    Iteraciones de ForceAtlas2 (slider 200-5000, por defecto 2000; con pocas iteraciones las comunidades no se separan)
     acciones:
-    - Distribución de nodos mediante ForceAtlas2 con los mismos parámetros por defecto que Gephi (gravity 1.0, scaling 2.0 —10.0 si el grafo tiene menos de 100 nodos—, tolerance 0.1, sin disuadir hubs ni evitar solapes)
+    - Distribución de nodos mediante ForceAtlas2 con los mismos parámetros por defecto que Gephi (gravity 1.0, scaling 2.0 —10.0 si el grafo tiene menos de 100 nodos—, tolerance 0.1, sin disuadir hubs ni evitar solapes) y el número de iteraciones del slider
     - Colorea cada comunidad con un color distinto (las comunidades que no llegan al 2% de los nodos se agrupan como "Otros" en gris); aristas curvas coloreadas según la comunidad del nodo origen
     - El tamaño de cada nodo depende de su weighted indegree
     - Etiqueta solo a los usuarios más relevantes de cada comunidad (limitado por el slider), evitando solapes entre etiquetas

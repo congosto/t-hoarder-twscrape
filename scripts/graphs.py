@@ -307,7 +307,7 @@ def load_graph_file(path: Path) -> nx.DiGraph:
 
 
 def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0,
-                     max_labels_per_community: int = 10, log=print):
+                     max_labels_per_community: int = 10, iterations: int = 2000, log=print):
     """Visualiza un fichero de grafo ya generado (gdf/gexf) con layout Force Atlas 2.
 
     Solo funciona si el grafo tiene menos de 3000 nodos y ya tiene comunidades calculadas
@@ -318,6 +318,10 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
     Las etiquetas se separan automáticamente para que no se solapen (librería adjustText).
 
     figsize: tamaño del lado de la figura en pulgadas (cuadrada).
+    iterations: iteraciones de ForceAtlas2. Gephi corre hasta que el usuario lo para; para
+    que las comunidades se separen bien suelen hacer falta miles de iteraciones (con pocas,
+    el grafo queda como una bola). En grafos grandes (~3000 nodos) cada 1000 iteraciones
+    cuestan en torno a 2 minutos.
     Devuelve (figure, communities_shown).
     """
     import matplotlib.pyplot as plt
@@ -345,7 +349,7 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
     node_list = list(G.nodes())
     node_community = {n: communities[n] if communities[n] in kept_communities else "Otros" for n in node_list}
 
-    log("Calculando layout Force Atlas 2...")
+    log(f"Calculando layout Force Atlas 2 ({iterations} iteraciones)...")
     # Mismos parámetros que Gephi por defecto (resetPropertiesValues de ForceAtlas2.java):
     # dissuade hubs y prevent overlap desactivados, scaling 10.0 en grafos de menos de
     # 100 nodos, tolerance 0.1 (grafos <5000 nodos) y Barnes-Hut solo a partir de 1000 nodos.
@@ -357,7 +361,7 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
         barnesHutOptimize=n_nodes >= 1000, barnesHutTheta=1.2,
         verbose=False,
     )
-    positions = forceatlas2.forceatlas2_networkx_layout(G, pos=None, iterations=200)
+    positions = forceatlas2.forceatlas2_networkx_layout(G, pos=None, iterations=iterations)
 
     indegree = dict(G.in_degree(weight="weight"))
     labels = {}
