@@ -346,12 +346,16 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
     node_community = {n: communities[n] if communities[n] in kept_communities else "Otros" for n in node_list}
 
     log("Calculando layout Force Atlas 2...")
-    # outboundAttractionDistribution ("Dissuade Hubs" en Gephi) separa los nodos satélite
-    # de los hubs en vez de apelmazarlos todos alrededor; adjustSizes evita que los nodos
-    # se solapen entre sí, igual que "Prevent Overlap" en Gephi.
+    # Mismos parámetros que Gephi por defecto (resetPropertiesValues de ForceAtlas2.java):
+    # dissuade hubs y prevent overlap desactivados, scaling 10.0 en grafos de menos de
+    # 100 nodos, tolerance 0.1 (grafos <5000 nodos) y Barnes-Hut solo a partir de 1000 nodos.
     forceatlas2 = ForceAtlas2(
-        outboundAttractionDistribution=True, adjustSizes=True,
-        gravity=1.0, scalingRatio=2.0, verbose=False,
+        outboundAttractionDistribution=False, adjustSizes=False, linLogMode=False,
+        edgeWeightInfluence=1.0, gravity=1.0, strongGravityMode=False,
+        scalingRatio=2.0 if n_nodes >= 100 else 10.0,
+        jitterTolerance=0.1,
+        barnesHutOptimize=n_nodes >= 1000, barnesHutTheta=1.2,
+        verbose=False,
     )
     positions = forceatlas2.forceatlas2_networkx_layout(G, pos=None, iterations=200)
 
