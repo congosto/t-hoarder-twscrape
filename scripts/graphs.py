@@ -37,8 +37,9 @@ _AUTHOR_COLUMNS = [
 
 
 def _log10(series: pd.Series) -> pd.Series:
-    values = pd.to_numeric(series, errors="coerce").fillna(0).clip(lower=0).add(1).apply(math.log10)
-    return values.round().astype(int)
+    """Parte entera del logaritmo en base 10 (0 para valores 0 o negativos)."""
+    values = pd.to_numeric(series, errors="coerce").fillna(0).clip(lower=1).apply(math.log10)
+    return values.apply(math.floor).astype(int)
 
 
 def _load_relations(project_dir: Path, prefix: str, relation: str) -> pd.DataFrame:
