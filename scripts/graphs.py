@@ -21,6 +21,14 @@ _NODE_ATTR_TYPES = {
 }
 _NODE_ATTR_COLUMNS = list(_NODE_ATTR_TYPES.keys())
 
+# Atributos y orden en que se muestran en el tooltip del visor interactivo
+_TOOLTIP_ATTRS = [
+    "create_at_year", "user_verified", "is_blue_verified", "verified_type",
+    "log_followers_count", "log_friends_count", "log_statuses_count",
+    "log_favourites_count", "log_listed_count",
+    "location_country", "location_region", "location_city",
+]
+
 _AUTHOR_COLUMNS = [
     "username", "followers_count", "friends_count", "statuses_count",
     "favourites_count", "listed_count", "location", "created_at",
@@ -378,6 +386,11 @@ def graph_view_data(project_dir: Path, graph_filename: str, max_labels_per_commu
             "color": to_hex(community_color[node_community[n]]),
             "label": str(n),
             "forceLabel": n in labeled,
+            "attrs": {
+                k: str(G.nodes[n][k])
+                for k in _TOOLTIP_ATTRS
+                if str(G.nodes[n].get(k, "")).strip() not in ("", "None", "nan")
+            },
         }
         for n in node_list
     ]
@@ -426,12 +439,38 @@ _GRAPH_VIEWER_TEMPLATE = """
     position: absolute; bottom: 8px; left: 8px; z-index: 10;
     font-size: 11px; color: #888; background: rgba(255,255,255,0.8); padding: 2px 6px;
   }
+  #controls {
+    position: absolute; top: 8px; left: 8px; z-index: 10;
+    font-size: 12px; background: rgba(255,255,255,0.92); border: 1px solid #ddd;
+    border-radius: 4px; padding: 6px 8px; display: flex; gap: 8px; align-items: center;
+    flex-wrap: wrap; max-width: 70%;
+  }
+  #controls input[type="number"] { width: 52px; }
+  #tooltip {
+    position: absolute; z-index: 20; display: none; pointer-events: none;
+    background: rgba(255,255,255,0.96); border: 1px solid #bbb; border-radius: 4px;
+    padding: 6px 9px; font-size: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    max-width: 280px;
+  }
+  #tooltip b { font-size: 13px; }
+  #tooltip table { border-collapse: collapse; margin-top: 3px; }
+  #tooltip td { padding: 0 6px 0 0; color: #444; }
+  #tooltip td:first-child { color: #888; }
 </style>
 </head>
 <body>
 <div id="sigma-container"></div>
+<div id="controls">
+  <span>Scaling <input type="number" id="c-scaling" value="10" min="1" step="1"></span>
+  <span>Gravity <input type="number" id="c-gravity" value="1" min="0" step="0.1"></span>
+  <label><input type="checkbox" id="c-linlog"> LinLog</label>
+  <label><input type="checkbox" id="c-dissuade"> Disuadir hubs</label>
+  <span>Iter <input type="number" id="c-iter" min="10" step="100"></span>
+  <button id="c-run">Recalcular</button>
+</div>
 <div id="toolbar"><button id="save-png">Descargar PNG</button></div>
 <div id="status">Calculando layout...</div>
+<div id="tooltip"></div>
 <script src="https://cdn.jsdelivr.net/npm/graphology@0.25.4/dist/graphology.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/graphology-library@0.8.0/dist/graphology-library.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sigma@2.4.0/build/sigma.min.js"></script>
@@ -446,15 +485,30 @@ DATA.edges.forEach(e => {
   }
 });
 
-// Layout ForceAtlas2 en modo LinLog (compacta cada comunidad y las separa entre sí);
-// el resto de ajustes los infiere graphology del tamaño del grafo, como hace Gephi.
+// Layout ForceAtlas2 con los parámetros clásicos de Gephi (gravity 1, scaling 10, sin
+// LinLog ni strong gravity): con ellos el hub de cada comunidad queda centrado en su halo
+// y las comunidades bien separadas (probado sobre data/prueba/panas_RT.gdf; con LinLog o
+// con la strong gravity que infiere graphology el grafo colapsa en una bola). barnesHut y
+// slowDown sí se toman de inferSettings, que los ajusta al tamaño del grafo.
 const fa2 = graphologyLibrary.layoutForceAtlas2;
-const settings = fa2.inferSettings(graph);
-settings.linLogMode = true;
-settings.edgeWeightInfluence = 1;
-const t0 = performance.now();
-fa2.assign(graph, { iterations: DATA.iterations, settings: settings, getEdgeWeight: "weight" });
-const secs = ((performance.now() - t0) / 1000).toFixed(1);
+document.getElementById("c-iter").value = DATA.iterations;
+
+function runLayout() {
+  const settings = fa2.inferSettings(graph);
+  settings.linLogMode = document.getElementById("c-linlog").checked;
+  settings.outboundAttractionDistribution = document.getElementById("c-dissuade").checked;
+  settings.strongGravityMode = false;
+  settings.gravity = parseFloat(document.getElementById("c-gravity").value) || 1;
+  settings.scalingRatio = parseFloat(document.getElementById("c-scaling").value) || 10;
+  settings.edgeWeightInfluence = 1;
+  const iterations = parseInt(document.getElementById("c-iter").value, 10) || 300;
+  const t0 = performance.now();
+  fa2.assign(graph, { iterations: iterations, settings: settings, getEdgeWeight: "weight" });
+  const secs = ((performance.now() - t0) / 1000).toFixed(1);
+  document.getElementById("status").textContent =
+    graph.order + " nodos, " + graph.size + " aristas — layout " + iterations + " iteraciones en " + secs + " s";
+}
+runLayout();
 
 const renderer = new Sigma(graph, document.getElementById("sigma-container"), {
   defaultEdgeType: "arrow",
@@ -462,8 +516,46 @@ const renderer = new Sigma(graph, document.getElementById("sigma-container"), {
   labelDensity: 1,
   labelFont: "sans-serif",
 });
-document.getElementById("status").textContent =
-  graph.order + " nodos, " + graph.size + " aristas — layout " + DATA.iterations + " iteraciones en " + secs + " s";
+
+// Recalcular continúa desde las posiciones actuales (como darle otra vez a Run en Gephi)
+document.getElementById("c-run").addEventListener("click", () => {
+  document.getElementById("status").textContent = "Calculando layout...";
+  setTimeout(() => { runLayout(); renderer.refresh(); }, 30);
+});
+
+// Tooltip con los metadatos del usuario al pasar el ratón por un nodo
+const ATTR_ORDER = __ATTR_ORDER__;
+const tooltip = document.getElementById("tooltip");
+const container = document.getElementById("sigma-container");
+let mouse = { x: 0, y: 0 };
+container.addEventListener("mousemove", e => {
+  mouse = { x: e.clientX, y: e.clientY };
+  if (tooltip.style.display === "block") placeTooltip();
+});
+function placeTooltip() {
+  const pad = 14;
+  let x = mouse.x + pad, y = mouse.y + pad;
+  const r = tooltip.getBoundingClientRect();
+  if (x + r.width > window.innerWidth - 4) x = mouse.x - r.width - pad;
+  if (y + r.height > window.innerHeight - 4) y = mouse.y - r.height - pad;
+  tooltip.style.left = x + "px";
+  tooltip.style.top = y + "px";
+}
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+renderer.on("enterNode", ({ node }) => {
+  const a = graph.getNodeAttributes(node);
+  let html = "<b>" + esc(a.label) + "</b>";
+  const attrs = a.attrs || {};
+  const rows = ATTR_ORDER.filter(k => k in attrs)
+    .map(k => "<tr><td>" + esc(k) + "</td><td>" + esc(attrs[k]) + "</td></tr>");
+  if (rows.length) html += "<table>" + rows.join("") + "</table>";
+  tooltip.innerHTML = html;
+  tooltip.style.display = "block";
+  placeTooltip();
+});
+renderer.on("leaveNode", () => { tooltip.style.display = "none"; });
 
 // Exporta la vista a PNG dibujando el grafo en un canvas 2D a alta resolución
 // (los canvas WebGL de sigma no se pueden volcar directamente).
@@ -539,4 +631,5 @@ def render_graph_html(view_data: dict, iterations: int, png_name: str) -> str:
     payload["pngName"] = png_name
     # '<\\/' evita que un '</script>' dentro de los datos rompa el bloque <script>
     data_js = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
-    return _GRAPH_VIEWER_TEMPLATE.replace("__DATA__", data_js)
+    html = _GRAPH_VIEWER_TEMPLATE.replace("__DATA__", data_js)
+    return html.replace("__ATTR_ORDER__", json.dumps(_TOOLTIP_ATTRS))
