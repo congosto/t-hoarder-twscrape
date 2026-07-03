@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as st_components
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -130,7 +131,7 @@ def set_result(file, file2=None):
     st.session_state.last_result_file2 = file2
     st.session_state.last_result_df = None
     st.session_state.last_error = None
-    st.session_state.graph_figure = None
+    st.session_state.graph_html = None
     st.session_state.chart_figures = None
 
 
@@ -140,7 +141,7 @@ def set_result_df(df, title):
     st.session_state.last_result_file = None
     st.session_state.last_result_file2 = None
     st.session_state.last_error = None
-    st.session_state.graph_figure = None
+    st.session_state.graph_html = None
     st.session_state.chart_figures = None
 
 
@@ -149,7 +150,16 @@ def clear_results():
     st.session_state.last_result_file2 = None
     st.session_state.last_result_df = None
     st.session_state.last_error = None
-    st.session_state.graph_figure = None
+    st.session_state.graph_html = None
+    st.session_state.chart_figures = None
+
+
+def set_result_graph_html(html):
+    st.session_state.graph_html = html
+    st.session_state.last_result_file = None
+    st.session_state.last_result_file2 = None
+    st.session_state.last_result_df = None
+    st.session_state.last_error = None
     st.session_state.chart_figures = None
 
 
@@ -161,7 +171,7 @@ def set_result_charts(figs, image_path):
     st.session_state.last_result_file2 = None
     st.session_state.last_result_df = None
     st.session_state.last_error = None
-    st.session_state.graph_figure = None
+    st.session_state.graph_html = None
 
 
 with left:
@@ -579,29 +589,25 @@ with left:
                     st.write("No hay ficheros de grafo (.gdf/.gexf) en este proyecto todavía.")
                 else:
                     vg_file = st.selectbox("Select graph", available_graphs, key="vg_file")
-                    vg_size = st.slider("Tamaño de la imagen (pulgadas)", min_value=4, max_value=20, value=8, key="vg_size")
                     vg_max_labels = st.slider(
                         "Máximo de etiquetas por comunidad", min_value=1, max_value=50, value=10, key="vg_max_labels"
                     )
                     vg_iterations = st.slider(
                         "Iteraciones de ForceAtlas2", min_value=100, max_value=2000, value=300, step=50,
                         key="vg_iterations",
-                        help="Con el modo LinLog las comunidades se separan en unos cientos de iteraciones. "
-                             "Sube el valor si el grafo queda poco desplegado.",
+                        help="El layout se calcula en el navegador en segundos. Con el modo LinLog "
+                             "las comunidades se separan en unos cientos de iteraciones.",
                     )
                     if st.button("Visualizar grafo"):
                         try:
-                            fig, communities_shown = graphs_mod.visualize_graph(
-                                project_dir, vg_file, figsize=vg_size,
-                                max_labels_per_community=vg_max_labels,
-                                iterations=vg_iterations, log=log,
+                            view_data, communities_shown = graphs_mod.graph_view_data(
+                                project_dir, vg_file,
+                                max_labels_per_community=vg_max_labels, log=log,
                             )
                             log(f"Comunidades mostradas: {', '.join(communities_shown)}")
-                            st.session_state.last_error = None
-                            st.session_state.last_result_file = None
-                            st.session_state.last_result_file2 = None
-                            st.session_state.graph_figure = fig
-                            st.session_state.graph_figure_filename = vg_file
+                            set_result_graph_html(graphs_mod.render_graph_html(
+                                view_data, vg_iterations, Path(vg_file).stem,
+                            ))
                         except (FileNotFoundError, ValueError) as e:
                             log_error(str(e))
 
@@ -767,11 +773,11 @@ with context_col:
 with right:
     st.markdown("### Resultados")
     error_msg = st.session_state.get("last_error")
-    graph_figure = st.session_state.get("graph_figure")
+    graph_html = st.session_state.get("graph_html")
     chart_figures = st.session_state.get("chart_figures")
     result_df = st.session_state.get("last_result_df")
     result_file = st.session_state.get("last_result_file")
-    if error_msg or chart_figures or result_df is not None or graph_figure is not None or result_file:
+    if error_msg or chart_figures or result_df is not None or graph_html or result_file:
         if st.button("Borrar resultados"):
             clear_results()
             st.rerun()
@@ -798,13 +804,9 @@ with right:
     elif result_df is not None:
         st.caption(st.session_state.get("last_result_df_title", ""))
         st.dataframe(result_df, use_container_width=True)
-    elif graph_figure is not None:
-        st.pyplot(graph_figure, width="content")
-        if st.button("Guardar PNG"):
-            graph_project_dir = projects.select_project(st.session_state.active_project)
-            png_path = graph_project_dir / f"{st.session_state.graph_figure_filename}.png"
-            graph_figure.savefig(png_path, dpi=150)
-            log(f"Imagen guardada en {png_path}")
+    elif graph_html:
+        # Visor interactivo sigma.js; el botón "Descargar PNG" va dentro del propio visor
+        st_components.html(graph_html, height=660)
     elif result_file and Path(result_file).exists():
         def _preview_file(path):
             st.caption(str(path))

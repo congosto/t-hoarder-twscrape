@@ -2,7 +2,6 @@ import math
 from pathlib import Path
 
 import networkx as nx
-import numpy as np
 import pandas as pd
 
 _NODE_ATTR_TYPES = {
@@ -307,24 +306,25 @@ def load_graph_file(path: Path) -> nx.DiGraph:
     return _read_gdf(path)
 
 
-def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0,
-                     max_labels_per_community: int = 10, iterations: int = 300, log=print):
-    """Visualiza un fichero de grafo ya generado (gdf/gexf) con layout Force Atlas 2.
+def graph_view_data(project_dir: Path, graph_filename: str, max_labels_per_community: int = 10,
+                     log=print):
+    """Prepara los datos de un fichero de grafo (gdf/gexf) para el visor interactivo.
 
-    Solo funciona si el grafo tiene menos de 3000 nodos y ya tiene comunidades calculadas
-    (atributo 'community' no vacío). Colorea por comunidad (solo las que superan el 2% de
-    los nodos; el resto se agrupan como 'Otros'), y pone etiqueta en el 5% de nodos con mayor
-    grado de entrada (weight indegree) de cada comunidad mostrada (limitado a
-    max_labels_per_community por comunidad, para que no sea ilegible en comunidades grandes).
-    Las etiquetas se separan automáticamente para que no se solapen (librería adjustText).
+    Requiere que el grafo tenga comunidades calculadas (atributo 'community' no vacío).
+    Colorea por comunidad (solo las que superan el 2% de los nodos; el resto se agrupan
+    como 'Otros'), con tamaño de nodo según weight indegree y grosor de arista según
+    weight (ambos en escala log: en grafos de RTs un par de hubs acaparan casi todo y con
+    escala lineal el resto sale al tamaño mínimo). Lleva etiqueta fija el 5% de nodos con
+    mayor weight indegree de cada comunidad (limitado a max_labels_per_community).
 
-    figsize: tamaño del lado de la figura en pulgadas (cuadrada).
-    iterations: iteraciones de ForceAtlas2. Con el modo LinLog las comunidades se separan
-    en unos cientos de iteraciones (300 por defecto, como el cuaderno R).
-    Devuelve (figure, communities_shown).
+    Devuelve (view_data, communities_shown), donde view_data es un dict serializable a
+    JSON con los nodos (posición inicial aleatoria; el layout lo calcula el navegador)
+    y las aristas.
     """
+    import random
+
     import matplotlib.pyplot as plt
-    from adjustText import adjust_text
+    from matplotlib.colors import to_hex
 
     path = project_dir / graph_filename
     if not path.exists():
@@ -332,8 +332,6 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
 
     G = load_graph_file(path)
     n_nodes = G.number_of_nodes()
-    if n_nodes >= 3000:
-        raise ValueError(f"El grafo tiene {n_nodes} nodos; solo se pueden visualizar grafos con menos de 3000.")
 
     communities = {n: G.nodes[n].get("community") for n in G.nodes()}
     if not any(c for c in communities.values()):
@@ -347,80 +345,198 @@ def visualize_graph(project_dir: Path, graph_filename: str, figsize: float = 8.0
     node_list = list(G.nodes())
     node_community = {n: communities[n] if communities[n] in kept_communities else "Otros" for n in node_list}
 
-    log(f"Calculando layout Force Atlas 2 ({iterations} iteraciones, modo LinLog)...")
-    # Receta basada en el cuaderno R (ForceAtlas2::layout.forceatlas2 con linlog=TRUE):
-    # el modo LinLog compacta cada comunidad y las separa entre sí, con lo que bastan unos
-    # cientos de iteraciones. fa2_modified no implementa LinLog (tiene un assert que lo
-    # impide), así que se usa la implementación nativa de networkx (>=3.4). gravity=5
-    # (probado sobre data/prueba/panas_RT.gdf): con 2 las comunidades quedan tan lejos que
-    # el lienzo es casi todo blanco, y con 10 se aplastan en anillos concéntricos.
-    # errstate: el linlog de networkx divide 0/0 en la diagonal (distancia de cada nodo
-    # consigo mismo) y luego la rellena con ceros; el aviso de numpy es ruido.
-    with np.errstate(divide="ignore", invalid="ignore"):
-        positions = nx.forceatlas2_layout(
-            G, max_iter=iterations, linlog=True, gravity=5.0, weight="weight", seed=42,
-        )
-
     indegree = dict(G.in_degree(weight="weight"))
-    labels = {}
+    labeled = set()
     for community in kept_communities:
         members = [n for n in node_list if node_community[n] == community]
         members.sort(key=lambda n: indegree.get(n, 0), reverse=True)
         top_n = max(1, min(max_labels_per_community, round(len(members) * 0.05)))
-        for n in members[:top_n]:
-            labels[n] = n
+        labeled.update(members[:top_n])
 
     # tab20 alterna tono oscuro/claro del mismo color en índices consecutivos (0 y 1 son
     # ambos azules); con tab10 los colores entre comunidades distintas se distinguen bien.
     sorted_communities = sorted(kept_communities)
-    if len(sorted_communities) <= 10:
-        palette = plt.get_cmap("tab10")
-    else:
-        palette = plt.get_cmap("tab20")
+    palette = plt.get_cmap("tab10" if len(sorted_communities) <= 10 else "tab20")
     community_color = {c: palette(i % palette.N) for i, c in enumerate(sorted_communities)}
     community_color["Otros"] = (0.7, 0.7, 0.7, 1.0)
-    node_colors = [community_color[node_community[n]] for n in node_list]
+    # Las aristas van del color de la comunidad del nodo origen (como "Edge color > Source"
+    # en Gephi) aclarado hacia blanco, en vez de jugar con transparencias en WebGL.
+    edge_color = {c: to_hex(tuple(0.45 * v + 0.55 for v in rgba[:3])) for c, rgba in community_color.items()}
 
-    # Tamaño de nodo según weight indegree, en escala logarítmica: en grafos de RTs el
-    # indegree es muy desigual (un par de hubs acaparan casi todo) y con escala lineal o
-    # raíz todos los nodos menos esos hubs salen del tamaño mínimo. size_ratio (0-1) se
-    # reutiliza para el tamaño de letra de las etiquetas.
     max_indegree = max(indegree.values()) if indegree else 0
-    if max_indegree > 0:
-        log_max = math.log1p(max_indegree)
-        size_ratio = {n: math.log1p(indegree.get(n, 0)) / log_max for n in node_list}
-    else:
-        size_ratio = {n: 0.0 for n in node_list}
-    node_sizes = [4 + 296 * size_ratio[n] for n in node_list]
+    log_max = math.log1p(max_indegree) if max_indegree > 0 else 1.0
+    size_ratio = {n: math.log1p(indegree.get(n, 0)) / log_max for n in node_list}
 
-    # Aristas curvadas y coloreadas por la comunidad del nodo origen (como el coloreado
-    # "Edge color > Source" de Gephi), con grosor según el weight de la arista (también
-    # en escala log, por lo mismo que el tamaño de los nodos).
-    edge_colors = [community_color[node_community[u]] for u, v in G.edges()]
-    edge_weights = [G[u][v].get("weight", 1.0) or 1.0 for u, v in G.edges()]
-    w_lo, w_hi = (min(edge_weights), max(edge_weights)) if edge_weights else (1.0, 1.0)
-    if w_hi > w_lo:
-        log_lo, log_hi = math.log1p(w_lo), math.log1p(w_hi)
-        edge_widths = [0.2 + 1.8 * (math.log1p(w) - log_lo) / (log_hi - log_lo) for w in edge_weights]
-    else:
-        edge_widths = 0.6
+    # Posiciones iniciales aleatorias reproducibles; ForceAtlas2 corre en el navegador.
+    rng = random.Random(42)
+    nodes = [
+        {
+            "key": str(n),
+            "x": rng.uniform(-500, 500),
+            "y": rng.uniform(-500, 500),
+            "size": round(2.5 + 15 * size_ratio[n], 2),
+            "color": to_hex(community_color[node_community[n]]),
+            "label": str(n),
+            "forceLabel": n in labeled,
+        }
+        for n in node_list
+    ]
 
-    fig, ax = plt.subplots(figsize=(figsize, figsize))
-    nx.draw_networkx_edges(
-        G, positions, ax=ax, edge_color=edge_colors, alpha=0.15, width=edge_widths,
-        arrows=True, arrowsize=5, connectionstyle="arc3,rad=0.1",
-    )
-    nx.draw_networkx_nodes(G, positions, ax=ax, nodelist=node_list, node_color=node_colors, node_size=node_sizes)
-    ax.set_axis_off()
+    edge_weights = {(u, v): (G[u][v].get("weight", 1.0) or 1.0) for u, v in G.edges()}
+    w_lo, w_hi = (min(edge_weights.values()), max(edge_weights.values())) if edge_weights else (1.0, 1.0)
+    log_lo, log_hi = math.log1p(w_lo), math.log1p(w_hi)
 
-    if labels:
-        label_bbox = {"facecolor": "white", "alpha": 0.75, "edgecolor": "none", "pad": 0.5}
-        # Tamaño de letra proporcional al tamaño del nodo (como label_size en el cuaderno R)
-        texts = [
-            ax.text(positions[n][0], positions[n][1], label, fontsize=5 + 9 * size_ratio[n],
-                     ha="center", va="center", bbox=label_bbox)
-            for n, label in labels.items()
-        ]
-        adjust_text(texts, ax=ax, arrowprops={"arrowstyle": "-", "color": "gray", "lw": 0.5})
+    def edge_size(w):
+        if log_hi <= log_lo:
+            return 0.5
+        return round(0.3 + 2.2 * (math.log1p(w) - log_lo) / (log_hi - log_lo), 2)
 
-    return fig, sorted(kept_communities)
+    edges = [
+        {
+            "source": str(u),
+            "target": str(v),
+            "size": edge_size(w),
+            "color": edge_color[node_community[u]],
+            "weight": w,
+        }
+        for (u, v), w in edge_weights.items()
+    ]
+
+    view_data = {"nodes": nodes, "edges": edges}
+    return view_data, sorted(kept_communities)
+
+
+# Visor interactivo: sigma.js (render WebGL) + graphology (grafo y ForceAtlas2 LinLog
+# calculado en el navegador, la misma arquitectura que Retina). Las librerías se cargan
+# de CDN, así que ver un grafo requiere conexión a internet.
+_GRAPH_VIEWER_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+  #sigma-container { width: 100%; height: 100%; background: white; }
+  #toolbar { position: absolute; top: 8px; right: 8px; z-index: 10; }
+  #toolbar button {
+    padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px;
+    background: rgba(255,255,255,0.9); cursor: pointer; font-size: 13px;
+  }
+  #status {
+    position: absolute; bottom: 8px; left: 8px; z-index: 10;
+    font-size: 11px; color: #888; background: rgba(255,255,255,0.8); padding: 2px 6px;
+  }
+</style>
+</head>
+<body>
+<div id="sigma-container"></div>
+<div id="toolbar"><button id="save-png">Descargar PNG</button></div>
+<div id="status">Calculando layout...</div>
+<script src="https://cdn.jsdelivr.net/npm/graphology@0.25.4/dist/graphology.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/graphology-library@0.8.0/dist/graphology-library.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sigma@2.4.0/build/sigma.min.js"></script>
+<script>
+const DATA = __DATA__;
+const Graph = graphology.Graph || graphology;
+const graph = new Graph({ multi: true, type: "directed" });
+DATA.nodes.forEach(n => graph.addNode(n.key, n));
+DATA.edges.forEach(e => {
+  if (graph.hasNode(e.source) && graph.hasNode(e.target)) {
+    graph.addEdge(e.source, e.target, e);
+  }
+});
+
+// Layout ForceAtlas2 en modo LinLog (compacta cada comunidad y las separa entre sí);
+// el resto de ajustes los infiere graphology del tamaño del grafo, como hace Gephi.
+const fa2 = graphologyLibrary.layoutForceAtlas2;
+const settings = fa2.inferSettings(graph);
+settings.linLogMode = true;
+settings.edgeWeightInfluence = 1;
+const t0 = performance.now();
+fa2.assign(graph, { iterations: DATA.iterations, settings: settings, getEdgeWeight: "weight" });
+const secs = ((performance.now() - t0) / 1000).toFixed(1);
+
+const renderer = new Sigma(graph, document.getElementById("sigma-container"), {
+  defaultEdgeType: "arrow",
+  labelRenderedSizeThreshold: 8,
+  labelDensity: 1,
+  labelFont: "sans-serif",
+});
+document.getElementById("status").textContent =
+  graph.order + " nodos, " + graph.size + " aristas — layout " + DATA.iterations + " iteraciones en " + secs + " s";
+
+// Exporta la vista a PNG dibujando el grafo en un canvas 2D a alta resolución
+// (los canvas WebGL de sigma no se pueden volcar directamente).
+document.getElementById("save-png").addEventListener("click", () => {
+  const W = 2400, margin = 100;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  graph.forEachNode((n, a) => {
+    minX = Math.min(minX, a.x); maxX = Math.max(maxX, a.x);
+    minY = Math.min(minY, a.y); maxY = Math.max(maxY, a.y);
+  });
+  const spanX = maxX - minX || 1, spanY = maxY - minY || 1;
+  const scale = (W - 2 * margin) / Math.max(spanX, spanY);
+  const H = Math.round(spanY * scale + 2 * margin);
+  // El eje Y se invierte: en sigma crece hacia arriba, en canvas hacia abajo.
+  const px = x => margin + (x - minX) * scale;
+  const py = y => H - margin - (y - minY) * scale;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.globalAlpha = 0.5;
+  graph.forEachEdge((e, attrs, s, t, sa, ta) => {
+    ctx.strokeStyle = attrs.color;
+    ctx.lineWidth = attrs.size * 1.2;
+    ctx.beginPath();
+    ctx.moveTo(px(sa.x), py(sa.y));
+    ctx.lineTo(px(ta.x), py(ta.y));
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+  graph.forEachNode((n, a) => {
+    ctx.fillStyle = a.color;
+    ctx.beginPath();
+    ctx.arc(px(a.x), py(a.y), a.size * 1.6, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+  graph.forEachNode((n, a) => {
+    if (!a.forceLabel) return;
+    const fontSize = 18 + a.size * 1.6;
+    ctx.font = "bold " + fontSize + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "white";
+    ctx.strokeText(a.label, px(a.x), py(a.y) - a.size * 1.6 - fontSize / 2);
+    ctx.fillStyle = "black";
+    ctx.fillText(a.label, px(a.x), py(a.y) - a.size * 1.6 - fontSize / 2);
+  });
+
+  canvas.toBlob(blob => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = DATA.pngName + ".png";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+});
+</script>
+</body>
+</html>
+"""
+
+
+def render_graph_html(view_data: dict, iterations: int, png_name: str) -> str:
+    """Genera el HTML autocontenido del visor interactivo para st.components.v1.html."""
+    import json
+
+    payload = dict(view_data)
+    payload["iterations"] = iterations
+    payload["pngName"] = png_name
+    # '<\\/' evita que un '</script>' dentro de los datos rompa el bloque <script>
+    data_js = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+    return _GRAPH_VIEWER_TEMPLATE.replace("__DATA__", data_js)
