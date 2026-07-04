@@ -53,10 +53,11 @@ st.set_page_config(page_title="t-hoarder-twscraper", layout="wide")
 
 LOGO_PATH = "../especificaciones/logo_t-hoarder.png"
 
-SECTIONS = ["Settings", "Project", "Download", "Tools", "Graphs", "Charts"]
+# Settings al final: es la sección que menos se usa una vez configuradas las cuentas
+SECTIONS = ["Project", "Download", "Tools", "Graphs", "Charts", "Settings"]
 
 if "section" not in st.session_state:
-    st.session_state.section = "Settings"
+    st.session_state.section = "Project"
 if "console" not in st.session_state:
     st.session_state.console = ["> consola lista..."]
 if "active_project" not in st.session_state:
@@ -179,6 +180,47 @@ def set_result_charts(figs, image_path):
     st.session_state.report_html = None
 
 
+def project_prefixes(project_dir):
+    """Prefixes del proyecto, del más reciente al más antiguo (fecha del contexto)."""
+    files = sorted(
+        list(project_dir.glob("*_search_context.csv")) + list(project_dir.glob("*_users_context.csv")),
+        key=lambda f: f.stat().st_mtime, reverse=True,
+    )
+    prefixes = []
+    for f in files:
+        for suffix in ("_search_context.csv", "_users_context.csv"):
+            if f.name.endswith(suffix):
+                prefix = f.name[: -len(suffix)]
+                if prefix not in prefixes:
+                    prefixes.append(prefix)
+    return prefixes
+
+
+_NEW_PREFIX_OPTION = "➕ nuevo prefix..."
+
+
+def prefix_input(label, key, allow_new=False):
+    """Entrada de Prefix como desplegable con los prefixes del proyecto activo,
+    el más reciente preseleccionado (así se trabaja por defecto con lo último).
+
+    Con allow_new (Search y User TL) el desplegable incluye la opción de crear
+    un prefix nuevo, que despliega un campo de texto. En el resto de casos el
+    prefix tiene que existir. Sin proyecto activo, campo de texto plano.
+    """
+    if not st.session_state.active_project:
+        return st.text_input(label, key=f"{key}_txt").strip()
+    options = project_prefixes(projects.select_project(st.session_state.active_project))
+    if allow_new:
+        options = options + [_NEW_PREFIX_OPTION]
+    if not options:
+        st.caption("No hay ningún prefix en este proyecto todavía.")
+        return ""
+    choice = st.selectbox(label, options, key=f"{key}_sel")
+    if choice == _NEW_PREFIX_OPTION:
+        return st.text_input("Nuevo prefix", key=f"{key}_new").strip()
+    return choice or ""
+
+
 def set_result_report(html, path):
     st.session_state.report_html = html
     st.session_state.report_path = str(path)
@@ -272,7 +314,7 @@ with left:
     elif section == "Download":
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["Search", "User TL", "Retweets", "Comments", "Advanced Comments"])
         with tab1:
-            search_prefix = st.text_input("Prefix", key="search_prefix").strip()
+            search_prefix = prefix_input("Prefix", "search_prefix", allow_new=True)
             if st.button("Cargar contexto", key="search_load_ctx"):
                 if not search_prefix:
                     log_error("escribe el Prefix antes de cargar el contexto")
@@ -325,7 +367,7 @@ with left:
                     log(f"Resultado en {output_file}")
                     set_result(output_file)
         with tab2:
-            utl_prefix = st.text_input("Prefix", key="utl_prefix").strip()
+            utl_prefix = prefix_input("Prefix", "utl_prefix", allow_new=True)
             if st.button("Cargar contexto", key="utl_load_ctx"):
                 if not utl_prefix:
                     log_error("escribe el Prefix antes de cargar el contexto")
@@ -379,7 +421,7 @@ with left:
                     log(f"Resultado en {output_file}")
                     set_result(output_file)
         with tab3:
-            rt_prefix = st.text_input("Prefix", key="rt_prefix")
+            rt_prefix = prefix_input("Prefix", "rt_prefix")
             rt_min = st.number_input("Min RTs", min_value=0, value=1, key="rt_min")
             if st.button("Lanzar descarga RTs"):
                 if not st.session_state.active_project:
@@ -398,7 +440,7 @@ with left:
                     except FileNotFoundError:
                         log_error(f"no existe {rt_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
         with tab4:
-            cm_prefix = st.text_input("Prefix", key="cm_prefix")
+            cm_prefix = prefix_input("Prefix", "cm_prefix")
             cm_min = st.number_input("Min Replies", min_value=0, value=1, key="cm_min")
             if st.button("Lanzar descarga comentarios"):
                 if not st.session_state.active_project:
@@ -417,7 +459,7 @@ with left:
                     except FileNotFoundError:
                         log_error(f"no existe {cm_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
         with tab5:
-            acm_prefix = st.text_input("Prefix", key="acm_prefix")
+            acm_prefix = prefix_input("Prefix", "acm_prefix")
             acm_min = st.number_input("Min Replies", min_value=0, value=1, key="acm_min")
             acm_last = st.number_input("Last (días)", min_value=0, value=1, key="acm_last")
             acm_freq = frequency_input("acm")
@@ -472,7 +514,7 @@ with left:
             if not st.session_state.active_project:
                 st.write("Selecciona o crea un proyecto en 'Project' antes de limpiar datos.")
             else:
-                clean_prefix = st.text_input("Prefix (prefijo del fichero con los tweets originales)", key="clean_prefix")
+                clean_prefix = prefix_input("Prefix (prefijo del fichero con los tweets originales)", "clean_prefix")
                 clean_langs_text = st.text_input(
                     "Languages (idiomas a conservar, separados por comas, ej. es,ca; vacío = no filtra)",
                     key="clean_langs_text",
@@ -510,10 +552,10 @@ with left:
             if not st.session_state.active_project:
                 st.write("Selecciona o crea un proyecto en 'Project' antes de extraer localizaciones.")
             else:
-                loc_prefix = st.text_input(
+                loc_prefix = prefix_input(
                     "Prefix (prefijo del fichero con los tweets originales; genera {prefix}_loc.csv)",
-                    key="loc_prefix",
-                ).strip()
+                    "loc_prefix",
+                )
                 if st.button("Extraer localización"):
                     if not loc_prefix:
                         log_error("escribe el Prefix")
@@ -537,7 +579,7 @@ with left:
                 ["Detect communities", "Generate graph", "Classify tweets", "Visualize graph"]
             )
             with tab1:
-                dc_prefix = st.text_input("Prefix", key="dc_prefix").strip()
+                dc_prefix = prefix_input("Prefix", "dc_prefix")
                 dc_relation = st.selectbox(
                     "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="dc_relation"
                 )
@@ -553,7 +595,7 @@ with left:
                         except FileNotFoundError as e:
                             log_error(str(e))
             with tab2:
-                gg_prefix = st.text_input("Prefix", key="gg_prefix").strip()
+                gg_prefix = prefix_input("Prefix", "gg_prefix")
                 gg_relation = st.selectbox(
                     "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="gg_relation"
                 )
@@ -581,7 +623,7 @@ with left:
                         except FileNotFoundError as e:
                             log_error(str(e))
             with tab3:
-                ct_prefix = st.text_input("Prefix", key="ct_prefix").strip()
+                ct_prefix = prefix_input("Prefix", "ct_prefix")
                 ct_relation = st.selectbox(
                     "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="ct_relation"
                 )
@@ -635,7 +677,7 @@ with left:
             else:
                 col_prefix, col_title = st.columns(2)
                 with col_prefix:
-                    tg_prefix = st.text_input("Prefix", key="tg_prefix").strip()
+                    tg_prefix = prefix_input("Prefix", "tg_prefix")
                 with col_title:
                     tg_title = st.text_input("Base title", key="tg_title")
 
@@ -725,7 +767,7 @@ with left:
             else:
                 col_prefix, col_username = st.columns(2)
                 with col_prefix:
-                    ug_prefix = st.text_input("Prefix", key="ug_prefix").strip()
+                    ug_prefix = prefix_input("Prefix", "ug_prefix")
                 with col_username:
                     ug_username = st.text_input("Username", key="ug_username").strip()
 

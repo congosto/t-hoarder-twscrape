@@ -6,12 +6,23 @@ un separador de zona
 
 una lista de botones horizontales con las siguientes funciones
 
-- Settings
 - Project
 - Download
 - Tools
 - Graphs
 - Charts
+- Settings
+
+(Settings va la última: es la que menos se usa una vez configuradas las
+cuentas. Al arrancar, la sección seleccionada por defecto es Project.)
+
+Entradas de Prefix (común a todas las secciones): con un proyecto activo,
+el Prefix es un desplegable con los prefixes existentes en el proyecto,
+ordenados del más reciente al más antiguo (fecha del fichero de contexto),
+con el más reciente preseleccionado — así se trabaja por defecto con lo
+último. En Search y User TL el desplegable incluye además la opción
+"➕ nuevo prefix...", que despliega un campo de texto para escribirlo; en el
+resto de secciones el prefix tiene que existir.
 
 En la parte izquierda (20% del espacio): formulario de entrada de datos según la opción
 
