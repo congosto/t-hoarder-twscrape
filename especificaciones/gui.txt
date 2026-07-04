@@ -206,7 +206,8 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
       (misma gráfica coloreada por el atributo source, con leyenda solo de
       las fuentes), ritmo semanal/mensual, impacto
       (favoritos/RTs/citas/comentarios/impresiones), engagement,
-      comments vs RTs, palabras frecuentes y topics (si aplica)
+      comments vs RTs, palabras frecuentes (sin y con amplificación de
+      retweets) y topics (si aplica)
     - "Generar informe HTML de Usuario": igual que el informe de Tweets pero
       con las gráficas de usuario; se guarda en
       data/{project}/{prefix}_{username}_informe_usuario.html

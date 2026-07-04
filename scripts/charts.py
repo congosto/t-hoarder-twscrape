@@ -314,6 +314,11 @@ def generate_user_charts(
         _charts.draw_word_frequency(tweets, min_date, max_date, False, base_title, str(project_dir), prefix),
         f"{prefix}_word_cloud.png",
     )
+    add(
+        "Palabras mas frecuentes (con amplificacion)",
+        _charts.draw_word_frequency(tweets, min_date, max_date, True, base_title),
+        f"{prefix}_word_cloud_RTs.png",
+    )
 
     if topics is not None:
         add(
