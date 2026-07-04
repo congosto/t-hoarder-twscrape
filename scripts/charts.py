@@ -323,3 +323,98 @@ def generate_user_charts(
         )
 
     return figs, image_path
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# Informes HTML (autocontenidos: las graficas van embebidas en base64)
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+_REPORT_CSS = """
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f4f2; color: #333; margin: 0; }
+  .container { max-width: 1000px; margin: 0 auto; padding: 16px 16px 40px; }
+  header { border-bottom: 3px solid #4682b4; margin-bottom: 8px; padding: 20px 0 12px; }
+  h1 { color: #2c2c2c; margin: 0 0 4px; font-size: 26px; }
+  .meta { color: #777; font-size: 14px; }
+  nav { background: white; border: 1px solid #e3e0dc; border-radius: 8px; padding: 10px 16px; margin: 16px 0; }
+  nav a { color: #4682b4; text-decoration: none; margin-right: 14px; font-size: 14px; display: inline-block; }
+  nav a:hover { text-decoration: underline; }
+  section { background: white; border: 1px solid #e3e0dc; border-radius: 8px; padding: 16px; margin: 16px 0; }
+  h2 { color: #4682b4; font-size: 17px; margin: 0 0 10px; }
+  img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  footer { color: #999; font-size: 12px; text-align: center; margin-top: 20px; }
+"""
+
+
+def build_html_report(figs: dict, title: str, subtitle: str = "") -> str:
+    """Compone un informe HTML autocontenido con las graficas de figs.
+
+    Cada figura se embebe como PNG en base64 (el informe es un unico fichero,
+    facil de compartir), con un indice de enlaces al principio.
+    """
+    import base64
+    import io
+    from datetime import datetime
+    from html import escape
+
+    nav, sections = [], []
+    for i, (name, fig) in enumerate(figs.items()):
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", bbox_inches="tight", dpi=110)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        nav.append(f'<a href="#g{i}">{escape(name)}</a>')
+        sections.append(
+            f'<section id="g{i}"><h2>{escape(name)}</h2>'
+            f'<img src="data:image/png;base64,{b64}" alt="{escape(name)}"></section>'
+        )
+
+    fecha = datetime.now().strftime("%d-%m-%Y %H:%M")
+    meta = f"{escape(subtitle)} &middot; " if subtitle else ""
+    return (
+        "<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>"
+        f"<title>{escape(title)}</title><style>{_REPORT_CSS}</style></head><body>"
+        "<div class='container'>"
+        f"<header><h1>{escape(title)}</h1>"
+        f"<div class='meta'>{meta}Generado el {fecha}</div></header>"
+        f"<nav>{''.join(nav)}</nav>"
+        f"{''.join(sections)}"
+        "<footer>Generado con t-hoarder_twscrape</footer>"
+        "</div></body></html>"
+    )
+
+
+def generate_tweet_report(project_dir: Path, prefix: str, base_title: str, *args, log=print, **kwargs):
+    """Genera las graficas de tweets y las empaqueta en un informe HTML.
+
+    Mismos parametros que generate_tweet_charts. Devuelve (html, out_path);
+    el informe se guarda en {prefix}_informe_tweets.html dentro del proyecto.
+    """
+    import matplotlib.pyplot as plt
+
+    figs, _ = generate_tweet_charts(project_dir, prefix, base_title, *args, log=log, **kwargs)
+    html = build_html_report(figs, title=f"{base_title}: informe de tweets", subtitle=f"Dataset {prefix}")
+    out_path = Path(project_dir) / f"{prefix}_informe_tweets.html"
+    out_path.write_text(html, encoding="utf-8")
+    for fig in figs.values():
+        plt.close(fig)
+    log(f"Informe HTML guardado en {out_path}")
+    return html, out_path
+
+
+def generate_user_report(project_dir: Path, prefix: str, username: str, base_title: str, *args, log=print, **kwargs):
+    """Genera las graficas de un usuario y las empaqueta en un informe HTML.
+
+    Mismos parametros que generate_user_charts. Devuelve (html, out_path);
+    el informe se guarda en {prefix}_{username}_informe_usuario.html.
+    """
+    import matplotlib.pyplot as plt
+
+    figs, _ = generate_user_charts(project_dir, prefix, username, base_title, *args, log=log, **kwargs)
+    html = build_html_report(figs, title=f"{base_title}: informe de usuario", subtitle=f"Dataset {prefix} — @{username}")
+    out_path = Path(project_dir) / f"{prefix}_{username}_informe_usuario.html"
+    out_path.write_text(html, encoding="utf-8")
+    for fig in figs.values():
+        plt.close(fig)
+    log(f"Informe HTML guardado en {out_path}")
+    return html, out_path

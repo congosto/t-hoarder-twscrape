@@ -133,6 +133,7 @@ def set_result(file, file2=None):
     st.session_state.last_error = None
     st.session_state.graph_html = None
     st.session_state.chart_figures = None
+    st.session_state.report_html = None
 
 
 def set_result_df(df, title):
@@ -143,6 +144,7 @@ def set_result_df(df, title):
     st.session_state.last_error = None
     st.session_state.graph_html = None
     st.session_state.chart_figures = None
+    st.session_state.report_html = None
 
 
 def clear_results():
@@ -152,6 +154,7 @@ def clear_results():
     st.session_state.last_error = None
     st.session_state.graph_html = None
     st.session_state.chart_figures = None
+    st.session_state.report_html = None
 
 
 def set_result_graph_html(html):
@@ -161,6 +164,7 @@ def set_result_graph_html(html):
     st.session_state.last_result_df = None
     st.session_state.last_error = None
     st.session_state.chart_figures = None
+    st.session_state.report_html = None
 
 
 def set_result_charts(figs, image_path):
@@ -172,6 +176,18 @@ def set_result_charts(figs, image_path):
     st.session_state.last_result_df = None
     st.session_state.last_error = None
     st.session_state.graph_html = None
+    st.session_state.report_html = None
+
+
+def set_result_report(html, path):
+    st.session_state.report_html = html
+    st.session_state.report_path = str(path)
+    st.session_state.last_result_file = None
+    st.session_state.last_result_file2 = None
+    st.session_state.last_result_df = None
+    st.session_state.last_error = None
+    st.session_state.graph_html = None
+    st.session_state.chart_figures = None
 
 
 with left:
@@ -665,7 +681,10 @@ with left:
                             "Max date zoom (yyyy-mm-dd HH:MM:SS)", key="tg_zoom_max"
                         )
 
-                if st.button("Generar gráfico de Tweets"):
+                col_btn_charts, col_btn_report = st.columns(2)
+                tg_do_charts = col_btn_charts.button("Generar gráfico de Tweets")
+                tg_do_report = col_btn_report.button("Generar informe HTML de Tweets")
+                if tg_do_charts or tg_do_report:
                     if not tg_prefix:
                         log_error("escribe el Prefix")
                     elif tg_zoom and (not tg_zoom_min.strip() or not tg_zoom_max.strip()):
@@ -675,18 +694,29 @@ with left:
                             import charts as charts_mod
 
                             project_dir = projects.select_project(st.session_state.active_project)
-                            with st.spinner("Generando gráficas..."):
-                                figs, image_path = charts_mod.generate_tweet_charts(
-                                    project_dir, tg_prefix, tg_title or tg_prefix, tg_tz,
-                                    min_reach=tg_reach, min_RTs=tg_rts,
-                                    show_topics=tg_topics, topics_file=tg_topics_file,
-                                    show_events=tg_events, events_file=tg_events_file,
-                                    min_date_zoom=tg_zoom_min if tg_zoom else None,
-                                    max_date_zoom=tg_zoom_max if tg_zoom else None,
-                                    log=log,
-                                )
-                            log(f"Tweet Graph generado: {len(figs)} gráficas en {image_path}")
-                            set_result_charts(figs, image_path)
+                            chart_args = dict(
+                                min_reach=tg_reach, min_RTs=tg_rts,
+                                show_topics=tg_topics, topics_file=tg_topics_file,
+                                show_events=tg_events, events_file=tg_events_file,
+                                min_date_zoom=tg_zoom_min if tg_zoom else None,
+                                max_date_zoom=tg_zoom_max if tg_zoom else None,
+                                log=log,
+                            )
+                            if tg_do_charts:
+                                with st.spinner("Generando gráficas..."):
+                                    figs, image_path = charts_mod.generate_tweet_charts(
+                                        project_dir, tg_prefix, tg_title or tg_prefix, tg_tz,
+                                        **chart_args,
+                                    )
+                                log(f"Tweet Graph generado: {len(figs)} gráficas en {image_path}")
+                                set_result_charts(figs, image_path)
+                            else:
+                                with st.spinner("Generando informe HTML..."):
+                                    report_html, report_path = charts_mod.generate_tweet_report(
+                                        project_dir, tg_prefix, tg_title or tg_prefix, tg_tz,
+                                        **chart_args,
+                                    )
+                                set_result_report(report_html, report_path)
                         except (FileNotFoundError, ValueError) as e:
                             log_error(str(e))
         else:
@@ -722,7 +752,10 @@ with left:
                         label_visibility="collapsed", placeholder="Events file (si show_events)",
                     )
 
-                if st.button("Generar gráfico de Usuario"):
+                col_btn_charts, col_btn_report = st.columns(2)
+                ug_do_charts = col_btn_charts.button("Generar gráfico de Usuario")
+                ug_do_report = col_btn_report.button("Generar informe HTML de Usuario")
+                if ug_do_charts or ug_do_report:
                     if not ug_prefix or not ug_username:
                         log_error("escribe el Prefix y el Username")
                     else:
@@ -730,15 +763,26 @@ with left:
                             import charts as charts_mod
 
                             project_dir = projects.select_project(st.session_state.active_project)
-                            with st.spinner("Generando gráficas..."):
-                                figs, image_path = charts_mod.generate_user_charts(
-                                    project_dir, ug_prefix, ug_username, ug_title or ug_username, ug_tz,
-                                    show_topics=ug_topics, topics_file=ug_topics_file,
-                                    show_events=ug_events, events_file=ug_events_file,
-                                    log=log,
-                                )
-                            log(f"User Graph generado: {len(figs)} gráficas en {image_path}")
-                            set_result_charts(figs, image_path)
+                            chart_args = dict(
+                                show_topics=ug_topics, topics_file=ug_topics_file,
+                                show_events=ug_events, events_file=ug_events_file,
+                                log=log,
+                            )
+                            if ug_do_charts:
+                                with st.spinner("Generando gráficas..."):
+                                    figs, image_path = charts_mod.generate_user_charts(
+                                        project_dir, ug_prefix, ug_username, ug_title or ug_username, ug_tz,
+                                        **chart_args,
+                                    )
+                                log(f"User Graph generado: {len(figs)} gráficas en {image_path}")
+                                set_result_charts(figs, image_path)
+                            else:
+                                with st.spinner("Generando informe HTML..."):
+                                    report_html, report_path = charts_mod.generate_user_report(
+                                        project_dir, ug_prefix, ug_username, ug_title or ug_username, ug_tz,
+                                        **chart_args,
+                                    )
+                                set_result_report(report_html, report_path)
                         except (FileNotFoundError, ValueError) as e:
                             log_error(str(e))
 
@@ -774,15 +818,24 @@ with right:
     error_msg = st.session_state.get("last_error")
     graph_html = st.session_state.get("graph_html")
     chart_figures = st.session_state.get("chart_figures")
+    report_html = st.session_state.get("report_html")
     result_df = st.session_state.get("last_result_df")
     result_file = st.session_state.get("last_result_file")
-    if error_msg or chart_figures or result_df is not None or graph_html or result_file:
+    if error_msg or chart_figures or result_df is not None or graph_html or report_html or result_file:
         if st.button("Borrar resultados"):
             clear_results()
             st.rerun()
 
     if error_msg:
         st.error(error_msg)
+    elif report_html:
+        report_path = st.session_state.get("report_path", "")
+        st.caption(f"Informe guardado en: {report_path}")
+        st.download_button(
+            "Descargar informe HTML", data=report_html,
+            file_name=Path(report_path).name or "informe.html", mime="text/html",
+        )
+        st_components.html(report_html, height=800, scrolling=True)
     elif chart_figures:
         st.caption(f"Gráficas guardadas en: {st.session_state.get('chart_figures_path', '')}")
         # Carrusel: una gráfica cada vez, con botones para pasar de una a otra

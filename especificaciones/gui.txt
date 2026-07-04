@@ -180,11 +180,18 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     Zoom (checkbox): si se marca, despliega Min date zoom / Max date zoom
       (yyyy-mm-dd HH:MM:SS) en dos columnas; restringen el rango de todas
       las gráficas en vez de usar todo el periodo disponible
-    Botón "Generar gráfico de Tweets": genera y muestra en el panel de
+    Dos botones en la misma fila:
+    - "Generar gráfico de Tweets": genera y muestra en el panel de
       Resultados las gráficas de impacto (alcance, RTs e influencers, comments
       vs RTs), palabras frecuentes, menciones a medios, topics (si aplica) y
       comunidades (si el dataset tiene ciclo ARS completo); guarda los PNG en
       data/{project}/{prefix}_graficas/
+    - "Generar informe HTML de Tweets": genera las mismas gráficas y las
+      empaqueta en un informe HTML autocontenido (imágenes embebidas en
+      base64, un único fichero compartible) con cabecera (título, dataset,
+      fecha), índice con enlaces y una sección por gráfica; se guarda en
+      data/{project}/{prefix}_informe_tweets.html, se muestra embebido en el
+      panel de resultados con un botón para descargarlo
     (Show users se quitó del formulario: ya no genera la gráfica "por usuario")
 
   User Graphs
@@ -193,12 +200,16 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     Time zone (mismo desplegable que en Tweets)
     Show topics + Topics file (misma fila, igual que en Tweets)
     Show events + Events file (misma fila, igual que en Tweets)
-    Botón "Generar gráfico de Usuario": genera rutina diaria (con leyenda
+    Dos botones en la misma fila:
+    - "Generar gráfico de Usuario": genera rutina diaria (con leyenda
       del tamaño de los puntos = num. de tweets), rutina diaria por fuente
       (misma gráfica coloreada por el atributo source, con leyenda solo de
       las fuentes), ritmo semanal/mensual, impacto
       (favoritos/RTs/citas/comentarios/impresiones), engagement,
       comments vs RTs, palabras frecuentes y topics (si aplica)
+    - "Generar informe HTML de Usuario": igual que el informe de Tweets pero
+      con las gráficas de usuario; se guarda en
+      data/{project}/{prefix}_{username}_informe_usuario.html
 
 La parte central (60% del espacio) pasa a ser solo de resultados:
     Botón "Borrar resultados": visible siempre que haya algo que mostrar (error,
