@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from charts_tweets import COLOR_TEXTO, ENG_FMT, _repel, color_tweets
-from utils_charts import apply_date_axis, my_theme, style_twin_axis
+from utils_charts import apply_date_axis, my_theme, my_theme_colored_title, style_twin_axis
 
 _WEEKDAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 _MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -192,7 +192,12 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
             ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
             ax.text(e["date"], max_tweets, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
 
-    my_theme(ax, title=f"{base_title}: Tweets per day vs {indicator}")
+    my_theme_colored_title(ax, [
+        (f"{base_title}: ", None),
+        ("Tweets", color_tweets),
+        (" per day vs ", None),
+        (indicator, impact_color),
+    ])
     style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(impact_color)

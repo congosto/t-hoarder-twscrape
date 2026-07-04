@@ -15,7 +15,7 @@ import pandas as pd
 from matplotlib.ticker import EngFormatter
 from wordcloud import WordCloud
 
-from utils_charts import apply_date_axis, expand_time, my_theme, style_twin_axis
+from utils_charts import apply_date_axis, expand_time, my_theme, my_theme_colored_title, style_twin_axis
 
 try:
     from adjustText import adjust_text
@@ -137,9 +137,12 @@ def draw_tweets_vs_reach_influencers(df, ini_date, end_date, min_reach, base_tit
     ax.yaxis.set_major_formatter(ENG_FMT)
     apply_date_axis(ax, ini_date, end_date)
 
-    title = f"{base_title}: Tweets per {slot_time} vs Reach influencers"
-    subtitle = f"Reach influencers >= {ENG_FMT(min_reach)}"
-    my_theme(ax, title=title, subtitle=subtitle)
+    my_theme_colored_title(ax, [
+        (f"{base_title}: ", None),
+        ("Tweets", color_tweets),
+        (f" per {slot_time} vs ", None),
+        ("Reach influencers", color_reach),
+    ], subtitle=f"Reach influencers >= {ENG_FMT(min_reach)}")
     style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(color_reach)
@@ -204,8 +207,12 @@ def draw_tweets_vs_reach(df, ini_date, end_date, base_title, slot_time="1h"):
     ax.yaxis.set_major_formatter(ENG_FMT)
     apply_date_axis(ax, ini_date, end_date)
 
-    title = f"{base_title}: Tweets per {slot_time} vs Reach"
-    my_theme(ax, title=title)
+    my_theme_colored_title(ax, [
+        (f"{base_title}: ", None),
+        ("Tweets", color_tweets),
+        (f" per {slot_time} vs ", None),
+        ("Reach", color_reach),
+    ])
     style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(color_reach)
@@ -305,9 +312,12 @@ def draw_tweets_vs_RTs_influencers(df, ini_date, end_date, min_RTs, base_title, 
     ax.yaxis.set_major_formatter(ENG_FMT)
     apply_date_axis(ax, ini_date, end_date)
 
-    title = f"{base_title}: Tweets per {slot_time} vs RTs influencers"
-    subtitle = f"RTs influencers >= {ENG_FMT(min_RTs)}"
-    my_theme(ax, title=title, subtitle=subtitle)
+    my_theme_colored_title(ax, [
+        (f"{base_title}: ", None),
+        ("Tweets", color_tweets),
+        (f" per {slot_time} vs ", None),
+        ("RTs influencers", color_RT),
+    ], subtitle=f"RTs influencers >= {ENG_FMT(min_RTs)}")
     style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(color_RT)
@@ -366,8 +376,12 @@ def draw_tweets_vs_RTs(df, ini_date, end_date, base_title, slot_time="1h"):
     ax.yaxis.set_major_formatter(ENG_FMT)
     apply_date_axis(ax, ini_date, end_date)
 
-    title = f"{base_title}: Tweets per {slot_time} vs RTs"
-    my_theme(ax, title=title)
+    my_theme_colored_title(ax, [
+        (f"{base_title}: ", None),
+        ("Tweets", color_tweets),
+        (f" per {slot_time} vs ", None),
+        ("RTs", color_RT),
+    ])
     style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(color_RT)

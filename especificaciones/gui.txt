@@ -228,7 +228,10 @@ Notas de implementación:
   R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). Estilo
   común vía my_theme/style_twin_axis en utils_charts.py: sin grid, títulos
   de 17pt en todas las gráficas, subtítulo bajo el título y los dos ejes
-  con labels del mismo tamaño. El
+  con labels del mismo tamaño. En las gráficas de dos ejes, cada entidad
+  del título va coloreada con el color de su eje (my_theme_colored_title,
+  equivalente al ggtext/element_markdown de R): p.ej. "Tweets" en azul y
+  "Reach"/"RTs"/indicador en el color del eje derecho. El
   envoltorio que usa la app real es scripts/charts.py
   (generate_tweet_charts / generate_user_charts). En las gráficas con
   etiquetas de usuarios (influencers, comments vs RTs) se etiquetan solo

@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+import matplotlib.transforms as mtransforms
 
 BASE_COLOR = "#5a5856"
 
@@ -35,6 +36,37 @@ def my_theme(ax, title=None, subtitle=None, base_color=BASE_COLOR, base_size=13)
     if subtitle:
         ax.text(0, 1.02, subtitle, transform=ax.transAxes, color=base_color,
                  fontsize=base_size + 1, ha="left", va="bottom")
+    return ax
+
+
+def my_theme_colored_title(ax, segments, subtitle=None, base_color=BASE_COLOR, base_size=13):
+    """my_theme con el titulo compuesto por tramos de colores.
+
+    Equivalente al ggtext/element_markdown de R: en las graficas de dos ejes,
+    cada entidad del titulo va del color de su eje. segments es una lista de
+    (texto, color); color None usa base_color.
+
+    matplotlib no soporta varios colores en un titulo, asi que se dibuja cada
+    tramo como un texto independiente encadenado por su anchura (medida con el
+    renderer, en pulgadas para que sobreviva a cambios de dpi al guardar), y
+    ademas se pone el titulo completo invisible (alpha=0) para que
+    tight_layout reserve el hueco exacto.
+    """
+    my_theme(ax, subtitle=subtitle, base_color=base_color, base_size=base_size)
+    fig = ax.figure
+    pad = 30 if subtitle else 12
+    ax.set_title("".join(t for t, _ in segments), fontsize=base_size + 4,
+                 fontweight="bold", loc="left", pad=pad, alpha=0)
+
+    fig.canvas.draw()  # asegura que el renderer existe para medir anchuras
+    renderer = fig.canvas.get_renderer()
+    trans = mtransforms.offset_copy(ax.transAxes, fig, y=pad / 72, units="inches")
+    for text, color in segments:
+        artist = ax.text(0, 1.0, text, transform=trans, color=color or base_color,
+                         fontsize=base_size + 4, fontweight="bold",
+                         ha="left", va="baseline")
+        width = artist.get_window_extent(renderer).width
+        trans = mtransforms.offset_copy(trans, fig, x=width / fig.dpi, units="inches")
     return ax
 
 
