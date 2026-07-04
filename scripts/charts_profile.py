@@ -55,7 +55,9 @@ def daily_routine(df, ini_date, end_date, time_zone, base_title, events=None):
             ax.text(-1, e["date"], e.get("event_plain", e.get("event", "")), fontsize=8,
                      color="grey", va="center", ha="right")
 
-    my_theme(ax, title=f"{base_title}: daily routine", subtitle=f"Time zone: {time_zone}")
+    # subtítulo y título elevados para dejar la franja de la leyenda libre
+    my_theme(ax, title=f"{base_title}: daily routine", subtitle=f"Time zone: {time_zone}",
+             subtitle_y=1.055, title_pad=48)
     fig.tight_layout()
     return fig
 
@@ -115,8 +117,9 @@ def daily_routine_by_source(df, ini_date, end_date, time_zone, base_title, event
             ax.text(-1, e["date"], e.get("event_plain", e.get("event", "")), fontsize=8,
                      color="grey", va="center", ha="right")
 
+    # subtítulo y título elevados para dejar la franja de la leyenda libre
     my_theme(ax, title=f"{base_title}: daily routine by source",
-             subtitle=f"Time zone: {time_zone}")
+             subtitle=f"Time zone: {time_zone}", subtitle_y=1.055, title_pad=48)
     fig.tight_layout()
     return fig
 

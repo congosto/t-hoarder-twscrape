@@ -11,7 +11,8 @@ import matplotlib.transforms as mtransforms
 BASE_COLOR = "#5a5856"
 
 
-def my_theme(ax, title=None, subtitle=None, base_color=BASE_COLOR, base_size=13):
+def my_theme(ax, title=None, subtitle=None, base_color=BASE_COLOR, base_size=13,
+             subtitle_y=1.02, title_pad=None):
     """Aplica una plantilla de estilo parecida a la usada en R (theme_bw + ajustes).
 
     Equivalente a my_theme() en utils_charts.R. Se aplica directamente sobre
@@ -20,6 +21,10 @@ def my_theme(ax, title=None, subtitle=None, base_color=BASE_COLOR, base_size=13)
     sns.set_style, que activaba el grid en todos los ejes creados despues,
     incluidos los twinx). Para el eje gemelo de la derecha usar
     style_twin_axis().
+
+    subtitle_y/title_pad: subir el subtitulo (y el titulo con el) deja una
+    franja libre justo encima del dibujo para una leyenda superior
+    (legend_top), como el orden titulo/subtitulo/leyenda/panel de ggplot.
     """
     ax.grid(False)
     for spine in ax.spines.values():
@@ -31,10 +36,12 @@ def my_theme(ax, title=None, subtitle=None, base_color=BASE_COLOR, base_size=13)
     ax.yaxis.label.set_size(base_size + 1)
     if title:
         # con subtitulo el titulo necesita mas pad para no solaparse con el
+        if title_pad is None:
+            title_pad = 30 if subtitle else 12
         ax.set_title(title, color=base_color, fontsize=base_size + 4,
-                     fontweight="bold", loc="left", pad=30 if subtitle else 12)
+                     fontweight="bold", loc="left", pad=title_pad)
     if subtitle:
-        ax.text(0, 1.02, subtitle, transform=ax.transAxes, color=base_color,
+        ax.text(0, subtitle_y, subtitle, transform=ax.transAxes, color=base_color,
                  fontsize=base_size + 1, ha="left", va="bottom")
     return ax
 
