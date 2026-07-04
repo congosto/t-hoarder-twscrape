@@ -9,17 +9,18 @@ Las especificaciones de producto (lo que debe hacer la app) viven en `especifica
 - `especificaciones/gui.txt` — comportamiento y diseño de la interfaz (Streamlit).
 - `especificaciones/metadatos.txt` — metadatos de tweets/usuarios.
 - `especificaciones/metadatos_rt.txt` — metadatos específicos de retweets.
-- `especificaciones/contents.txt` — especificación de contenidos.
 - `especificaciones/grafos.txt` — especificación de grafos/redes.
 
-Cada archivo tiene una copia `.bak` junto a él como histórico manual de la versión anterior (no hay control de versiones git en este directorio).
+(No existe `contents.txt`: esa funcionalidad se implementó y se desechó deliberadamente, ver nota en `gui.txt`.)
+
+El repo está versionado con git. Los `.bak` que quedan junto a algunos `.txt` son históricos de antes de tener git — ya no hace falta crear nuevos, el historial de cambios vive en los commits.
 
 ## Estructura del repo
 
 - `app/` — app Streamlit en producción (`app.py`, `requirements.txt`, `data/`).
-- `scripts/` — módulos Python de scraping/lógica (accounts, context, download, projects, scraping, utils, graphs, charts, nb_charts, nb_charts_profile, utils_charts), importados por `app/app.py` añadiendo `scripts/` a `sys.path`.
+- `scripts/` — módulos Python de scraping/lógica (accounts, context, download, projects, scraping, utils, graphs, charts, charts_tweets, charts_profile, utils_charts), importados por `app/app.py` añadiendo `scripts/` a `sys.path`.
 - `data/` — datos recogidos (csv, cachés).
 
 ## Notas de trabajo
 
-- Cuando el usuario aporte una especificación nueva o actualizada de GUI/metadatos en el chat, guárdala en el archivo `.txt` correspondiente dentro de `especificaciones/`, moviendo la versión anterior a `.bak`.
+- Cuando el usuario aporte una especificación nueva o actualizada de GUI/metadatos en el chat, guárdala en el archivo `.txt` correspondiente dentro de `especificaciones/` y haz commit del cambio (ya no hace falta `.bak`, lo cubre git).

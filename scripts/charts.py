@@ -1,13 +1,13 @@
 """
 Generacion de graficas de tweets para la app real (Charts > Tweets).
-Envoltorio sobre nb_charts.py (equivalente a twscrapeR_charts.Rmd).
+Envoltorio sobre charts_tweets.py y charts_profile.py.
 """
 from pathlib import Path
 
 import pandas as pd
 
-import nb_charts as _charts
-import nb_charts_profile as _charts_profile
+import charts_tweets as _charts
+import charts_profile as _charts_profile
 from utils_charts import savefig
 
 

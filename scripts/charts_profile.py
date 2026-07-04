@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from nb_charts import COLOR_TEXTO, ENG_FMT, _repel, color_tweets
+from charts_tweets import COLOR_TEXTO, ENG_FMT, _repel, color_tweets
 from utils_charts import apply_date_axis, my_theme
 
 _WEEKDAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]

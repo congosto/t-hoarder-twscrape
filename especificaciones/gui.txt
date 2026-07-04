@@ -163,7 +163,7 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
 
 - Charts  (implementado: traducción Python de los antiguos cuadernos R
   twscrapeR_charts.Rmd y twscrapeR_charts_profile.Rmd; funciones de dibujo en
-  scripts/nb_charts.py y nb_charts_profile.py, envoltorio en
+  scripts/charts_tweets.py y charts_profile.py, envoltorio en
   scripts/charts.py, conectado a la app real en Charts > Tweets/Users)
 
   Tweets | Users
@@ -220,8 +220,8 @@ En la parte inferior: consola para ver el progreso (un mensaje por línea, los e
 
 Notas de implementación:
 - Reiniciar la app tras editar cualquier módulo de scripts/ (el hot-reload de Streamlit solo afecta a app.py): usar restart_app.ps1 en la raíz del repo.
-- Charts: la lógica de graficado vive en scripts/nb_charts.py y
-  nb_charts_profile.py (matplotlib/seaborn, traducción de los antiguos cuadernos
+- Charts: la lógica de graficado vive en scripts/charts_tweets.py y
+  charts_profile.py (matplotlib/seaborn, traducción de los antiguos cuadernos
   R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). El
   envoltorio que usa la app real es scripts/charts.py
   (generate_tweet_charts / generate_user_charts).
