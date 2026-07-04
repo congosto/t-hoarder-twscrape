@@ -385,7 +385,20 @@ def build_html_report(figs: dict, title: str, subtitle: str = "") -> str:
         f"<nav>{''.join(nav)}</nav>"
         f"{''.join(sections)}"
         "<footer>Generado con t-hoarder_twscrape</footer>"
-        "</div></body></html>"
+        "</div>"
+        # los enlaces del indice se desplazan por JavaScript: dentro del iframe
+        # srcdoc de Streamlit, un href="#ancla" se resuelve contra la URL de la
+        # app (localhost:8501#ancla) y carga la app embebida en el panel
+        "<script>"
+        "document.querySelectorAll('nav a').forEach(function (a) {"
+        "  a.addEventListener('click', function (e) {"
+        "    e.preventDefault();"
+        "    var target = document.getElementById(a.getAttribute('href').slice(1));"
+        "    if (target) target.scrollIntoView({ behavior: 'smooth' });"
+        "  });"
+        "});"
+        "</script>"
+        "</body></html>"
     )
 
 
