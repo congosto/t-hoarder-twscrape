@@ -6,7 +6,6 @@ from datetime import timedelta
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 BASE_COLOR = "#5a5856"
 
@@ -16,9 +15,11 @@ def my_theme(ax, title=None, subtitle=None, base_color=BASE_COLOR, base_size=13)
 
     Equivalente a my_theme() en utils_charts.R. Se aplica directamente sobre
     un Axes en lugar de devolver un objeto theme, ya que es el equivalente
-    natural en matplotlib.
+    natural en matplotlib. Sin grid y sin efectos globales (antes usaba
+    sns.set_style, que activaba el grid en todos los ejes creados despues,
+    incluidos los twinx). Para el eje gemelo de la derecha usar
+    style_twin_axis().
     """
-    sns.set_style("whitegrid", {"axes.edgecolor": base_color})
     ax.grid(False)
     for spine in ax.spines.values():
         spine.set_edgecolor(base_color)
@@ -28,12 +29,25 @@ def my_theme(ax, title=None, subtitle=None, base_color=BASE_COLOR, base_size=13)
     ax.xaxis.label.set_size(base_size + 1)
     ax.yaxis.label.set_size(base_size + 1)
     if title:
+        # con subtitulo el titulo necesita mas pad para no solaparse con el
         ax.set_title(title, color=base_color, fontsize=base_size + 4,
-                     fontweight="bold", loc="left", pad=12)
+                     fontweight="bold", loc="left", pad=30 if subtitle else 12)
     if subtitle:
         ax.text(0, 1.02, subtitle, transform=ax.transAxes, color=base_color,
                  fontsize=base_size + 1, ha="left", va="bottom")
     return ax
+
+
+def style_twin_axis(ax2, base_color=BASE_COLOR, base_size=13):
+    """Aplica a un eje gemelo (twinx) el mismo estilo que my_theme: sin grid
+    y con el label del mismo tamano que el del eje izquierdo."""
+    ax2.grid(False)
+    for spine in ax2.spines.values():
+        spine.set_edgecolor(base_color)
+    ax2.tick_params(colors=base_color, labelsize=base_size - 2)
+    ax2.yaxis.label.set_color(base_color)
+    ax2.yaxis.label.set_size(base_size + 1)
+    return ax2
 
 
 def time_scale(ini_date, end_date):

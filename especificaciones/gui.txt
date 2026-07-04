@@ -222,8 +222,11 @@ En la parte inferior: consola para ver el progreso (un mensaje por línea, los e
 Notas de implementación:
 - Reiniciar la app tras editar cualquier módulo de scripts/ (el hot-reload de Streamlit solo afecta a app.py): usar restart_app.ps1 en la raíz del repo.
 - Charts: la lógica de graficado vive en scripts/charts_tweets.py y
-  charts_profile.py (matplotlib/seaborn, traducción de los antiguos cuadernos
-  R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). El
+  charts_profile.py (matplotlib, traducción de los antiguos cuadernos
+  R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). Estilo
+  común vía my_theme/style_twin_axis en utils_charts.py: sin grid, títulos
+  de 17pt en todas las gráficas, subtítulo bajo el título y los dos ejes
+  con labels del mismo tamaño. El
   envoltorio que usa la app real es scripts/charts.py
   (generate_tweet_charts / generate_user_charts). En las gráficas con
   etiquetas de usuarios (influencers, comments vs RTs) se etiquetan solo

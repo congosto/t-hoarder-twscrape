@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from charts_tweets import COLOR_TEXTO, ENG_FMT, _repel, color_tweets
-from utils_charts import apply_date_axis, my_theme
+from utils_charts import apply_date_axis, my_theme, style_twin_axis
 
 _WEEKDAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 _MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -48,12 +48,7 @@ def daily_routine(df, ini_date, end_date, time_zone, base_title, events=None):
             ax.text(-1, e["date"], e.get("event_plain", e.get("event", "")), fontsize=8,
                      color="grey", va="center", ha="right")
 
-    ax.set_title(f"{base_title}: daily routine", color=COLOR_TEXTO, fontsize=16,
-                 fontweight="bold", loc="left")
-    ax.text(0, 1.02, f"Time zone: {time_zone}", transform=ax.transAxes,
-             color=COLOR_TEXTO, fontsize=11)
-    my_theme(ax)
-    ax.grid(True, alpha=0.3)
+    my_theme(ax, title=f"{base_title}: daily routine", subtitle=f"Time zone: {time_zone}")
     fig.tight_layout()
     return fig
 
@@ -86,10 +81,7 @@ def rhythm_week(df, ini_date, end_date, time_zone, base_title):
     ax.set_xlabel("Hour")
     fig.colorbar(im, ax=ax, label="N. tweets")
 
-    ax.set_title(f"{base_title}: weekly rhythm", color=COLOR_TEXTO, fontsize=16,
-                 fontweight="bold", loc="left")
-    ax.text(0, 1.05, f"Time zone: {time_zone}", transform=ax.transAxes,
-             color=COLOR_TEXTO, fontsize=11)
+    my_theme(ax, title=f"{base_title}: weekly rhythm", subtitle=f"Time zone: {time_zone}")
     fig.tight_layout()
     return fig
 
@@ -123,10 +115,7 @@ def rhythm_month(df, ini_date, end_date, time_zone, base_title):
     ax.set_xlabel("Year")
     fig.colorbar(im, ax=ax, label="N. tweets")
 
-    ax.set_title(f"{base_title}: monthly rhythm", color=COLOR_TEXTO, fontsize=16,
-                 fontweight="bold", loc="left")
-    ax.text(0, 1.05, f"Time zone: {time_zone}", transform=ax.transAxes,
-             color=COLOR_TEXTO, fontsize=11)
+    my_theme(ax, title=f"{base_title}: monthly rhythm", subtitle=f"Time zone: {time_zone}")
     fig.tight_layout()
     return fig
 
@@ -171,12 +160,15 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
     ax.step(grouped["day"], grouped["num_tweets"], color=color_tweets, where="post")
     ax.scatter(grouped["day"], grouped["impact"] / ajuste, color=impact_color, alpha=0.8)
 
+    # una sola llamada para que adjust_text separe ambas anotaciones si los
+    # maximos coinciden (en llamadas separadas no se ven entre si y se solapan)
     row_max_tweets = grouped.loc[grouped["num_tweets"].idxmax()]
     row_max_impact = grouped.loc[grouped["impact"].idxmax()]
-    _repel(ax, [row_max_tweets["day"]], [row_max_tweets["num_tweets"]],
-           [f"{row_max_tweets['day'].date()}\nMax. tweets = {row_max_tweets['num_tweets']:,.0f}"])
-    _repel(ax, [row_max_impact["day"]], [row_max_impact["impact"] / ajuste],
-           [f"{row_max_impact['day'].date()}\nMax. {indicator} = {row_max_impact['impact']:,.0f}"])
+    _repel(ax, [row_max_tweets["day"], row_max_impact["day"]],
+           [row_max_tweets["num_tweets"], row_max_impact["impact"] / ajuste],
+           [f"{row_max_tweets['day'].date()}\nMax. tweets = {row_max_tweets['num_tweets']:,.0f}",
+            f"{row_max_impact['day'].date()}\nMax. {indicator} = {row_max_impact['impact']:,.0f}"],
+           min_sep_px=None)
 
     ax.text(ini_date + (end_date - ini_date) * 0.06, limit_y * 1.4,
             f"mean tweets = {mean_tweets:,.1f}\nmean {indicator} = {mean_impact:,.1f}",
@@ -199,6 +191,7 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
             ax.text(e["date"], max_tweets, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
 
     my_theme(ax, title=f"{base_title}: Tweets per day vs {indicator}")
+    style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(impact_color)
     fig.tight_layout()

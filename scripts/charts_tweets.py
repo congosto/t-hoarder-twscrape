@@ -3,7 +3,7 @@ Funciones de graficas para tweets.
 Equivalente Python de utils/charts.R (solo las funciones usadas por
 twscrapeR_charts.ipynb / twscrapeR_charts.Rmd).
 
-Dependencias: pandas, numpy, matplotlib, seaborn, wordcloud, nltk
+Dependencias: pandas, numpy, matplotlib, wordcloud, nltk
 (opcional: adjustText, para separar mejor las etiquetas de texto).
 """
 import re
@@ -15,7 +15,7 @@ import pandas as pd
 from matplotlib.ticker import EngFormatter
 from wordcloud import WordCloud
 
-from utils_charts import apply_date_axis, expand_time, my_theme
+from utils_charts import apply_date_axis, expand_time, my_theme, style_twin_axis
 
 try:
     from adjustText import adjust_text
@@ -32,7 +32,7 @@ COLOR_TEXTO = "#5a5856"
 ENG_FMT = EngFormatter(sep="")
 
 
-def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, max_texts=20, **kwargs):
+def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, max_texts=20, min_sep_px=22.0, **kwargs):
     """Coloca etiquetas de texto intentando que no se solapen.
 
     Equivalente aproximado a geom_text_repel()/geom_label_repel(). Si la
@@ -45,10 +45,12 @@ def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, max_texts=20, **kwargs
     dataset grande) el calculo de solapes agota la RAM. Ademas, emulando el
     max.overlaps de ggrepel, se descartan las etiquetas cuyo punto caiga a
     menos de min_sep_px de otra ya aceptada (si no, un pico viral con
-    decenas de influencers a la vez sale como un monton ilegible).
+    decenas de influencers a la vez sale como un monton ilegible);
+    min_sep_px=None desactiva ese descarte (para etiquetas que deben salir
+    siempre, como las anotaciones de maximos).
     """
     points = sorted(zip(xs, ys, labels), key=lambda p: p[1], reverse=True)
-    if len(points) > 1:
+    if min_sep_px is not None and len(points) > 1:
         try:
             # los limites del eje se autoescalan de forma perezosa (al dibujar); sin esto
             # la transformacion a pixeles usa los limites por defecto 0-1 y no descarta nada
@@ -58,7 +60,6 @@ def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, max_texts=20, **kwargs
         except Exception:
             display = None
         if display is not None:
-            min_sep_px = 22.0
             kept, kept_xy = [], []
             for point, xy in zip(points, display):
                 if all((xy[0] - kx) ** 2 + (xy[1] - ky) ** 2 >= min_sep_px ** 2 for kx, ky in kept_xy):
@@ -139,6 +140,7 @@ def draw_tweets_vs_reach_influencers(df, ini_date, end_date, min_reach, base_tit
     title = f"{base_title}: Tweets per {slot_time} vs Reach influencers"
     subtitle = f"Reach influencers >= {ENG_FMT(min_reach)}"
     my_theme(ax, title=title, subtitle=subtitle)
+    style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(color_reach)
     fig.tight_layout()
@@ -176,12 +178,15 @@ def draw_tweets_vs_reach(df, ini_date, end_date, base_title, slot_time="1h"):
     ax.scatter(tweets_vs_reach["date_slot"], tweets_vs_reach["reach"] / ajuste,
                color=color_reach, alpha=0.8)
 
+    # una sola llamada para que adjust_text separe ambas anotaciones si los
+    # maximos coinciden (en llamadas separadas no se ven entre si y se solapan)
     row_max_tweets = tweets_vs_reach.loc[tweets_vs_reach["num_tweets"].idxmax()]
     row_max_reach = tweets_vs_reach.loc[tweets_vs_reach["reach"].idxmax()]
-    _repel(ax, [row_max_tweets["date_slot"]], [row_max_tweets["num_tweets"]],
-           [f"{row_max_tweets['date_slot']}\nMax. tweets = {row_max_tweets['num_tweets']:,.0f}"])
-    _repel(ax, [row_max_reach["date_slot"]], [row_max_reach["reach"] / ajuste],
-           [f"{row_max_reach['date_slot']}\nMax. reach = {row_max_reach['reach']:,.0f}"])
+    _repel(ax, [row_max_tweets["date_slot"], row_max_reach["date_slot"]],
+           [row_max_tweets["num_tweets"], row_max_reach["reach"] / ajuste],
+           [f"{row_max_tweets['date_slot']}\nMax. tweets = {row_max_tweets['num_tweets']:,.0f}",
+            f"{row_max_reach['date_slot']}\nMax. reach = {row_max_reach['reach']:,.0f}"],
+           min_sep_px=None)
 
     ax.text(ini_date + (end_date - ini_date) * 0.06, limit_y * 1.4,
             f"mean tweets = {mean_tweets:,.1f}\nmean reach = {mean_reach:,.1f}",
@@ -199,6 +204,7 @@ def draw_tweets_vs_reach(df, ini_date, end_date, base_title, slot_time="1h"):
 
     title = f"{base_title}: Tweets per {slot_time} vs Reach"
     my_theme(ax, title=title)
+    style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(color_reach)
     fig.tight_layout()
@@ -221,7 +227,7 @@ def draw_tweets_vs_reach_by_username(df, ini_date, end_date, base_title, slot_ti
 
     fig, axes = plt.subplots(nrows, ncols, figsize=(10, 3.5 * nrows), squeeze=False)
     fig.suptitle(f"{base_title}: Tweets per {slot_time} vs Reach", color=COLOR_TEXTO,
-                 fontsize=15, fontweight="bold", x=0.02, ha="left")
+                 fontsize=17, fontweight="bold", x=0.02, ha="left")
 
     for i, username in enumerate(usernames):
         ax = axes[i // ncols][i % ncols]
@@ -246,6 +252,7 @@ def draw_tweets_vs_reach_by_username(df, ini_date, end_date, base_title, slot_ti
         ax.yaxis.set_major_formatter(ENG_FMT)
         ax2.yaxis.set_major_formatter(ENG_FMT)
         my_theme(ax)
+        style_twin_axis(ax2)
 
     for j in range(n, nrows * ncols):
         axes[j // ncols][j % ncols].axis("off")
@@ -299,6 +306,7 @@ def draw_tweets_vs_RTs_influencers(df, ini_date, end_date, min_RTs, base_title, 
     title = f"{base_title}: Tweets per {slot_time} vs RTs influencers"
     subtitle = f"RTs influencers >= {ENG_FMT(min_RTs)}"
     my_theme(ax, title=title, subtitle=subtitle)
+    style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(color_RT)
     fig.tight_layout()
@@ -330,12 +338,15 @@ def draw_tweets_vs_RTs(df, ini_date, end_date, base_title, slot_time="1h"):
     ax.step(tweets_vs_rt["date_slot"], tweets_vs_rt["num_tweets"], color=color_tweets, where="post")
     ax.scatter(tweets_vs_rt["date_slot"], tweets_vs_rt["num_RTs"] / ajuste, color=color_RT, alpha=0.8)
 
+    # una sola llamada para que adjust_text separe ambas anotaciones si los
+    # maximos coinciden (en llamadas separadas no se ven entre si y se solapan)
     row_max_tweets = tweets_vs_rt.loc[tweets_vs_rt["num_tweets"].idxmax()]
     row_max_RT = tweets_vs_rt.loc[tweets_vs_rt["num_RTs"].idxmax()]
-    _repel(ax, [row_max_tweets["date_slot"]], [row_max_tweets["num_tweets"]],
-           [f"{row_max_tweets['date_slot']}\nMax. tweets = {row_max_tweets['num_tweets']:,.0f}"])
-    _repel(ax, [row_max_RT["date_slot"]], [row_max_RT["num_RTs"] / ajuste],
-           [f"{row_max_RT['date_slot']}\nMax. RTs = {row_max_RT['num_RTs']:,.0f}"])
+    _repel(ax, [row_max_tweets["date_slot"], row_max_RT["date_slot"]],
+           [row_max_tweets["num_tweets"], row_max_RT["num_RTs"] / ajuste],
+           [f"{row_max_tweets['date_slot']}\nMax. tweets = {row_max_tweets['num_tweets']:,.0f}",
+            f"{row_max_RT['date_slot']}\nMax. RTs = {row_max_RT['num_RTs']:,.0f}"],
+           min_sep_px=None)
 
     ax.text(ini_date + (end_date - ini_date) * 0.06, limit_y * 1.4,
             f"mean tweets = {mean_tweets:,.1f}\nmean RTs = {mean_RTs:,.1f}",
@@ -353,6 +364,7 @@ def draw_tweets_vs_RTs(df, ini_date, end_date, base_title, slot_time="1h"):
 
     title = f"{base_title}: Tweets per {slot_time} vs RTs"
     my_theme(ax, title=title)
+    style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(color_RT)
     fig.tight_layout()
@@ -374,6 +386,22 @@ def draw_comments_vs_RTs(df, ini_date, end_date, min_comments, base_title):
     sub["possible_controversy"] = (sub["num_comments"] > sub["num_RTs"]).astype(int)
     sub = sub[sub["num_comments"] >= min_comments]
 
+    title = f"{base_title}: Comments vs. RTs"
+    subtitle = f"Comments >= {ENG_FMT(min_comments)}"
+
+    # sin tweets sobre el umbral, los limites de los ejes serian NaN: se
+    # devuelve la grafica vacia con un aviso en vez de reventar
+    if sub.empty:
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.text(0.5, 0.5, f"No tweets with comments >= {ENG_FMT(min_comments)}",
+                ha="center", va="center", color=COLOR_TEXTO, fontsize=12,
+                transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        my_theme(ax, title=title, subtitle=subtitle)
+        fig.tight_layout()
+        return fig
+
     max_comments = sub["num_comments"].max()
     max_RTs = sub["num_RTs"].max()
     size_x = max(max_comments, max_RTs)
@@ -393,8 +421,6 @@ def draw_comments_vs_RTs(df, ini_date, end_date, min_comments, base_title):
     ax.set_xlabel("Num. RTs")
     ax.set_ylabel("Num. comments")
 
-    title = f"{base_title}: Comments vs. RTs"
-    subtitle = f"Comments >= {ENG_FMT(min_comments)}"
     my_theme(ax, title=title, subtitle=subtitle)
     fig.tight_layout()
     return fig
@@ -471,11 +497,9 @@ def draw_word_frequency(df, ini_date, end_date, RTs, base_title, data_path=None,
     fig, ax = plt.subplots(figsize=(10, 7))
     ax.imshow(wc, interpolation="bilinear")
     ax.axis("off")
-    subtitle = "(Adding retweet amplification)" if RTs else ""
-    ax.set_title(f"{base_title}: most frequent words", color=COLOR_TEXTO,
-                 fontsize=16, fontweight="bold", loc="left")
-    if subtitle:
-        ax.text(0, 1.04, subtitle, transform=ax.transAxes, color=COLOR_TEXTO, fontsize=11)
+    subtitle = "(Adding retweet amplification)" if RTs else None
+    # my_theme para que el titulo tenga el mismo tamano que el resto de graficas
+    my_theme(ax, title=f"{base_title}: most frequent words", subtitle=subtitle)
     fig.tight_layout()
     return fig
 
@@ -609,7 +633,7 @@ def words_frequency_by_community(df, communities, base_title):
     nrows = int(np.ceil(n / ncols))
     fig, axes = plt.subplots(nrows, ncols, figsize=(10, 4 * nrows), squeeze=False)
     fig.suptitle(f"{base_title}: Most frequent words by group", color=COLOR_TEXTO,
-                 fontsize=15, fontweight="bold", x=0.02, ha="left")
+                 fontsize=17, fontweight="bold", x=0.02, ha="left")
 
     for i, (_, comm) in enumerate(communities.iterrows()):
         ax = axes[i // ncols][i % ncols]
