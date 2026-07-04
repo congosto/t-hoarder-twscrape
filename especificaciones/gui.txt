@@ -171,7 +171,8 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
   Tweet Graphs
     Prefix | Base title  (misma fila)
     Time zone (desplegable: Europe/Berlin (por defecto) | America/Chicago | America/Caracas)
-    Min reach | Min RTs | Min comments  (misma fila)
+    Texto "Show influencers with values equal or higher" y debajo,
+    Min reach | Min RTs | Min comments  (misma fila; por defecto 10000, 1000 y 100)
     Show topics + Topics file (misma fila; el fichero se deshabilita si Show topics no está marcado)
     Show events + Events file (misma fila; idem)
     Zoom (checkbox): si se marca, despliega Min date zoom / Max date zoom

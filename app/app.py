@@ -627,13 +627,14 @@ with left:
                     "Time zone", ["Europe/Berlin", "America/Chicago", "America/Caracas"], key="tg_tz"
                 )
 
+                st.markdown("Show influencers with values equal or higher")
                 col_reach, col_rts, col_comments = st.columns(3)
                 with col_reach:
-                    tg_reach = st.number_input("Min reach", min_value=0, key="tg_reach")
+                    tg_reach = st.number_input("Min reach", min_value=0, value=10000, key="tg_reach")
                 with col_rts:
-                    tg_rts = st.number_input("Min RTs", min_value=0, key="tg_rts")
+                    tg_rts = st.number_input("Min RTs", min_value=0, value=1000, key="tg_rts")
                 with col_comments:
-                    tg_comments = st.number_input("Min comments", min_value=0, key="tg_comments")
+                    tg_comments = st.number_input("Min comments", min_value=0, value=100, key="tg_comments")
 
                 col_topics_chk, col_topics_file = st.columns([1, 2])
                 with col_topics_chk:
