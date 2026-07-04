@@ -46,8 +46,10 @@ def daily_routine(df, ini_date, end_date, time_zone, base_title, events=None):
     handles, labels = scatter.legend_elements(
         prop="sizes", num=4, func=lambda s: (s - 10) / 8, color=color_tweets, alpha=0.5,
     )
-    ax.legend(handles, labels, title="N. tweets", loc="upper left",
-              bbox_to_anchor=(1.01, 1), fontsize=9, title_fontsize=9)
+    # leyenda horizontal en la parte superior, a la derecha (el subtitulo va a la izquierda)
+    ax.legend(handles, labels, title="N. tweets", loc="lower right",
+              bbox_to_anchor=(1, 1.0), ncol=len(labels), frameon=False,
+              fontsize=9, title_fontsize=9)
 
     if events is not None and not events.empty:
         ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
@@ -93,9 +95,10 @@ def daily_routine_by_source(df, ini_date, end_date, time_zone, base_title, event
     ax.set_xticks(range(0, 24))
     ax.yaxis.set_major_formatter(mdates.DateFormatter("%d-%b-%Y"))
 
-    # en la leyenda solo aparece source, con marcadores de tamano uniforme
-    legend = ax.legend(title="Source", loc="upper left", bbox_to_anchor=(1.01, 1),
-                       fontsize=9, title_fontsize=9)
+    # en la leyenda solo aparecen las fuentes (sin rotulo), con marcadores de tamano
+    # uniforme; horizontal en la parte superior, a la derecha (el subtitulo va a la izquierda)
+    legend = ax.legend(loc="lower right", bbox_to_anchor=(1, 1.0),
+                       ncol=len(sources), frameon=False, fontsize=9)
     for handle in getattr(legend, "legend_handles", None) or legend.legendHandles:
         handle.set_sizes([40])
         handle.set_alpha(1)
