@@ -227,8 +227,9 @@ Notas de implementación:
   envoltorio que usa la app real es scripts/charts.py
   (generate_tweet_charts / generate_user_charts). En las gráficas con
   etiquetas de usuarios (influencers, comments vs RTs) se etiquetan solo
-  los 50 puntos más prominentes como máximo: adjustText es O(n²) y con
-  miles de etiquetas agota la memoria.
+  los puntos más prominentes: máximo 20, descartando además los que caigan
+  a menos de ~22 px de otro ya etiquetado (emula el max.overlaps de
+  ggrepel; adjustText es O(n²) y con miles de etiquetas agota la memoria).
 - El contexto de las descargas (scripts/context.py) guarda, además
   de las fechas, la query/lista de usuarios, el product y la frequency
   originales, para poder reconstruir el formulario completo con el botón

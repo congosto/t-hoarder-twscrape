@@ -32,7 +32,7 @@ COLOR_TEXTO = "#5a5856"
 ENG_FMT = EngFormatter(sep="")
 
 
-def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, max_texts=50, **kwargs):
+def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, max_texts=20, **kwargs):
     """Coloca etiquetas de texto intentando que no se solapen.
 
     Equivalente aproximado a geom_text_repel()/geom_label_repel(). Si la
