@@ -170,9 +170,11 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
             f"{row_max_impact['day'].date()}\nMax. {indicator} = {row_max_impact['impact']:,.0f}"],
            min_sep_px=None)
 
-    ax.text(ini_date + (end_date - ini_date) * 0.06, limit_y * 1.4,
+    # recuadro de medias siempre a la misma altura (95% del tope del eje) y
+    # anclado por su borde superior para que no se salga de la grafica
+    ax.text(ini_date + (end_date - ini_date) * 0.06, max_tweets * 1.5 * 0.95,
             f"mean tweets = {mean_tweets:,.1f}\nmean {indicator} = {mean_impact:,.1f}",
-            color=COLOR_TEXTO, fontsize=9,
+            color=COLOR_TEXTO, fontsize=9, va="top",
             bbox=dict(boxstyle="round", fc="white", ec=COLOR_TEXTO))
 
     ax.set_ylim(0, max_tweets * 1.5)

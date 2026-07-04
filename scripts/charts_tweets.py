@@ -188,9 +188,11 @@ def draw_tweets_vs_reach(df, ini_date, end_date, base_title, slot_time="1h"):
             f"{row_max_reach['date_slot']}\nMax. reach = {row_max_reach['reach']:,.0f}"],
            min_sep_px=None)
 
-    ax.text(ini_date + (end_date - ini_date) * 0.06, limit_y * 1.4,
+    # recuadro de medias siempre a la misma altura (95% del tope del eje) y
+    # anclado por su borde superior para que no se salga de la grafica
+    ax.text(ini_date + (end_date - ini_date) * 0.06, limit_y * 1.8 * 0.95,
             f"mean tweets = {mean_tweets:,.1f}\nmean reach = {mean_reach:,.1f}",
-            color=COLOR_TEXTO, fontsize=9,
+            color=COLOR_TEXTO, fontsize=9, va="top",
             bbox=dict(boxstyle="round", fc="white", ec=COLOR_TEXTO))
 
     ax.set_ylim(0, limit_y * 1.8)
@@ -348,9 +350,11 @@ def draw_tweets_vs_RTs(df, ini_date, end_date, base_title, slot_time="1h"):
             f"{row_max_RT['date_slot']}\nMax. RTs = {row_max_RT['num_RTs']:,.0f}"],
            min_sep_px=None)
 
-    ax.text(ini_date + (end_date - ini_date) * 0.06, limit_y * 1.4,
+    # recuadro de medias siempre a la misma altura (95% del tope del eje) y
+    # anclado por su borde superior para que no se salga de la grafica
+    ax.text(ini_date + (end_date - ini_date) * 0.06, limit_y * 1.5 * 0.95,
             f"mean tweets = {mean_tweets:,.1f}\nmean RTs = {mean_RTs:,.1f}",
-            color=COLOR_TEXTO, fontsize=9,
+            color=COLOR_TEXTO, fontsize=9, va="top",
             bbox=dict(boxstyle="round", fc="white", ec=COLOR_TEXTO))
 
     ax.set_ylim(0, limit_y * 1.5)
