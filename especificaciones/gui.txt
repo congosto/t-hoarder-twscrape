@@ -46,6 +46,10 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
 
   Select project | New project | Active projects | Desactive project
 
+  (Las listas de proyectos van ordenadas por actividad, del más reciente al
+  más antiguo: cuenta el mtime más nuevo entre el directorio del proyecto y
+  sus ficheros, así el último proyecto con descargas sale el primero.)
+
   Select project
     Project name
   New project

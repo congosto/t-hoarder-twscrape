@@ -28,19 +28,32 @@ def new_project(name: str) -> Path:
     return project_dir
 
 
+def _last_activity(path: Path) -> float:
+    """Fecha de actividad de un proyecto: el mtime más reciente entre el
+    directorio y sus ficheros de primer nivel (así descargar datos cuenta
+    como actividad, no solo crear el proyecto)."""
+    times = [path.stat().st_mtime]
+    try:
+        times.extend(f.stat().st_mtime for f in path.iterdir())
+    except OSError:
+        pass
+    return max(times)
+
+
 def list_active_projects() -> list[str]:
+    """Proyectos activos, del de actividad más reciente al más antiguo."""
     if not DATA_DIR.exists():
         return []
-    return sorted(
-        p.name for p in DATA_DIR.iterdir()
-        if p.is_dir() and p.name != "desactivated"
-    )
+    dirs = [p for p in DATA_DIR.iterdir() if p.is_dir() and p.name != "desactivated"]
+    return [p.name for p in sorted(dirs, key=_last_activity, reverse=True)]
 
 
 def list_inactive_projects() -> list[str]:
+    """Proyectos desactivados, del de actividad más reciente al más antiguo."""
     if not INACTIVE_DIR.exists():
         return []
-    return sorted(p.name for p in INACTIVE_DIR.iterdir() if p.is_dir())
+    dirs = [p for p in INACTIVE_DIR.iterdir() if p.is_dir()]
+    return [p.name for p in sorted(dirs, key=_last_activity, reverse=True)]
 
 
 def select_project(name: str) -> Path:
