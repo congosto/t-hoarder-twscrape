@@ -1,20 +1,33 @@
 cómo organizar la parte de grafos:
 
+Nota general (auditoría jul-2026): los handles de usuario se normalizan en todo
+el flujo (sin @, sin espacios, en minúsculas — en X son case-insensitive; sin
+esto @Usuario y usuario eran dos nodos distintos).
+
 - Detect communities
   params
   - prefix
   - relation RT| replies_advanced
+  - opcionales (API, sin GUI de momento): seed (42), resolution (1.0),
+    min_component_size (None = solo componente gigante; con N conserva todas
+    las componentes de >= N nodos, para no perder botfarms aisladas),
+    compute_betweenness + betweenness_k (columna betweenness opcional)
   acciones:
-  - crear un grafo 
+  - crear un grafo
   - seleccionar la componente gigante y desechar los nodos que no estén en ella
+    (o todas las componentes >= min_component_size si se indica)
   - Calcular el grado con pesos
   - calcular la modularidad con el algoritmo de Blondel, V. D., Guillaume, J. L., Lambiotte, R., & Lefebvre, E. (2008). Fast unfolding of communities in large networks. Journal of Statistical Mechanics: Theory and Experiment, 2008(10), P10008.
-    el algoritmo cada vez que se le invoca da distintos resultados, para mantener la coherencia las comunidades se calculan en este paso
+    con semilla fija (seed=42): mismo resultado en cada ejecución; los pesos de
+    aristas recíprocas A<->B se SUMAN antes de Louvain (to_undirected se quedaba
+    con uno de los dos). Las comunidades se numeran por tamaño: la 0 es la mayor.
+    Las comunidades se calculan y persisten en este paso y el resto los reutiliza.
   resultados:
     - Tabla de comunidades  {prefix}_{relation}_communities.csv
-        community, % de nodes (ordenada descndentemente por % de node) 
+        community, % de nodes (ordenada descndentemente por % de node)
     - users/community {prefix}_users_{relation}_communities.csv
-        user, community, weight indegree, weight outdegree (ordenada descendentemente por weight indegree)
+        user, community, weight indegree, weight outdegree, pagerank
+        (y betweenness si se pidió), ordenada descendentemente por weight indegree
 - Generate graph: 
   params
   - prefix

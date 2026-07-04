@@ -156,21 +156,32 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     acciones:
     - Muestra el grafo en un visor interactivo embebido en el panel de resultados
       (sigma.js + graphology sobre WebGL, la misma arquitectura que Retina;
-      las librerías se cargan de CDN, así que visualizar requiere conexión a internet):
+      las librerías se cargan de CDN — o incrustadas desde scripts/vendor/ si
+      existen los 3 bundles JS, y entonces el visor funciona offline):
       zoom/pan con el ratón
     - Tooltip al pasar el ratón por un nodo: nombre de usuario y sus atributos, por
       este orden (los vacíos se omiten): create_at_year, user_verified,
       is_blue_verified, verified_type, log_followers_count, log_friends_count,
       log_statuses_count, log_favourites_count, log_listed_count, location_country,
       location_region, location_city
-    - El layout ForceAtlas2 se calcula en el navegador en segundos, con los parámetros
-      clásicos de Gephi por defecto: gravity 1, scaling 10, sin LinLog ni strong gravity
-      (probado sobre panas_RT.gdf: así el hub queda centrado en su halo y las comunidades
-      bien separadas; con LinLog o strong gravity el grafo colapsa en una bola).
-      Sin límite de nodos (el antiguo límite de 3000 era del layout en Python)
-    - Controles de layout dentro del visor, estilo Gephi: Scaling, Gravity, LinLog,
-      Disuadir hubs e Iteraciones, con botón Recalcular que continúa desde las
-      posiciones actuales (como volver a darle a Run en Gephi)
+    - El layout ForceAtlas2 corre en el navegador POR TANDAS en
+      requestAnimationFrame: el grafo se ve desplegarse en vivo (como en Gephi),
+      nunca congela la página, y el botón ▶/⏸ lo para y relanza continuando
+      desde las posiciones actuales. Parámetros clásicos de Gephi por defecto
+      (gravity 1, scaling 10, sin LinLog ni strong gravity), ajustables:
+      Scaling, Gravity, LinLog, Disuadir hubs, Iteraciones. Sin límite de nodos
+    - Leyenda de comunidades (abajo izda, con % y recuento) clicable para
+      ocultar/mostrar cada comunidad; filtro por weight indegree mínimo;
+      botón Noverlap para despegar nodos solapados
+    - Resaltado de vecindario al pasar el ratón; click en un nodo abre un panel
+      con sus métricas (comunidad, weight indegree, conexiones, atributos) y
+      enlace a su perfil en x.com; buscador de usuario con zoom al nodo
+    - Estadísticas en la barra de estado: densidad, reciprocidad y modularidad
+    - Botón PNG: exporta a alta resolución respetando los filtros activos, con
+      leyenda de comunidades incluida y los nodos grandes dibujados debajo de
+      los pequeños (un hub no queda tapado)
+    - Botón GEXF: exporta el grafo con posiciones y colores para seguir
+      trabajándolo en Gephi
     - Colorea cada comunidad con un color distinto (las comunidades que no llegan al 2% de los nodos se agrupan como "Otros" en gris); aristas coloreadas según la comunidad del nodo origen (aclaradas hacia blanco) y con grosor según el weight de la arista (escala log)
     - El tamaño de cada nodo depende de su weighted indegree en escala logarítmica (con escala lineal, los hubs de los grafos de RTs aplastan al resto al tamaño mínimo)
     - Etiqueta fija solo para los usuarios más relevantes de cada comunidad (limitado por el slider); el resto de nodos muestran su nombre al pasar el ratón o al hacer zoom
