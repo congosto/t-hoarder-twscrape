@@ -628,13 +628,11 @@ with left:
                 )
 
                 st.markdown("Show influencers with values equal or higher")
-                col_reach, col_rts, col_comments = st.columns(3)
+                col_reach, col_rts = st.columns(2)
                 with col_reach:
                     tg_reach = st.number_input("Min reach", min_value=0, value=10000, key="tg_reach")
                 with col_rts:
                     tg_rts = st.number_input("Min RTs", min_value=0, value=1000, key="tg_rts")
-                with col_comments:
-                    tg_comments = st.number_input("Min comments", min_value=0, value=100, key="tg_comments")
 
                 col_topics_chk, col_topics_file = st.columns([1, 2])
                 with col_topics_chk:
@@ -680,7 +678,7 @@ with left:
                             with st.spinner("Generando gráficas..."):
                                 figs, image_path = charts_mod.generate_tweet_charts(
                                     project_dir, tg_prefix, tg_title or tg_prefix, tg_tz,
-                                    min_reach=tg_reach, min_RTs=tg_rts, min_comments=tg_comments,
+                                    min_reach=tg_reach, min_RTs=tg_rts,
                                     show_topics=tg_topics, topics_file=tg_topics_file,
                                     show_events=tg_events, events_file=tg_events_file,
                                     min_date_zoom=tg_zoom_min if tg_zoom else None,

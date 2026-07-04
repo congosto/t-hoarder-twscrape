@@ -47,7 +47,6 @@ def generate_tweet_charts(
     time_zone: str = "Europe/Berlin",
     min_reach: int = 0,
     min_RTs: int = 0,
-    min_comments: int = 0,
     show_topics: bool = False,
     topics_file: str = "",
     show_events: bool = False,
@@ -134,7 +133,7 @@ def generate_tweet_charts(
     )
     add(
         "Comentarios vs. RTs",
-        _charts.draw_comments_vs_RTs(tweets, min_date, max_date, min_comments, base_title),
+        _charts.draw_comments_vs_RTs(tweets, min_date, max_date, base_title),
         f"{prefix}_comments_vs_RTs.png",
     )
     add(
@@ -302,7 +301,7 @@ def generate_user_charts(
     )
     add(
         "Comentarios vs. RTs",
-        _charts.draw_comments_vs_RTs(tweets, min_date, max_date, 0, base_title),
+        _charts.draw_comments_vs_RTs(tweets, min_date, max_date, base_title),
         f"{prefix}_comments_vs_RTs.png",
     )
     add(

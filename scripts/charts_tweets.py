@@ -382,7 +382,11 @@ def draw_tweets_vs_RTs(df, ini_date, end_date, base_title, slot_time="1h"):
 # scatterplot comments vs RTs
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-def draw_comments_vs_RTs(df, ini_date, end_date, min_comments, base_title):
+def draw_comments_vs_RTs(df, ini_date, end_date, base_title):
+    # umbral fijo, no parametrizado (como en el cuaderno R): por debajo de 30
+    # comentarios la grafica se inunda de puntos y etiquetas sin interes
+    min_comments = 30
+
     df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)]
     sub = df.copy()
     sub["num_comments"] = sub["reply_count"]
@@ -396,7 +400,7 @@ def draw_comments_vs_RTs(df, ini_date, end_date, min_comments, base_title):
     # sin tweets sobre el umbral, los limites de los ejes serian NaN: se
     # devuelve la grafica vacia con un aviso en vez de reventar
     if sub.empty:
-        fig, ax = plt.subplots(figsize=(7, 5))
+        fig, ax = plt.subplots(figsize=(10, 6))
         ax.text(0.5, 0.5, f"No tweets with comments >= {ENG_FMT(min_comments)}",
                 ha="center", va="center", color=COLOR_TEXTO, fontsize=12,
                 transform=ax.transAxes)
@@ -410,9 +414,12 @@ def draw_comments_vs_RTs(df, ini_date, end_date, min_comments, base_title):
     max_RTs = sub["num_RTs"].max()
     size_x = max(max_comments, max_RTs)
 
-    fig, ax = plt.subplots(figsize=(7, 5))
-    ax.fill_between([0, max_comments * 1.4], [0, max_comments * 1.4],
-                     color=color_comments, alpha=0.25)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    # triangulo de la zona polemica (comments > RTs), como el geom_polygon del
+    # cuaderno R: vertices (0,0), (0,max*1.4), (max*1.4,max*1.4). fill_between
+    # rellenaba por debajo de la diagonal (la zona equivocada).
+    ax.fill([0, 0, max_comments * 1.4], [0, max_comments * 1.4, max_comments * 1.4],
+            color=color_comments, alpha=0.25, linewidth=0)
     ax.scatter(sub["num_RTs"], sub["num_comments"], color=color_RT)
     _repel(ax, sub["num_RTs"], sub["num_comments"], sub["username"])
 
