@@ -8,6 +8,7 @@ Dependencias: pandas, numpy, matplotlib, seaborn, wordcloud, nltk
 """
 import re
 
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -41,11 +42,32 @@ def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, max_texts=50, **kwargs
     Si hay mas de max_texts etiquetas solo se colocan las de mayor valor y
     (las mas prominentes): adjust_text es O(n^2) en memoria y tiempo, y con
     miles de etiquetas (p.ej. muchos influencers sobre el umbral en un
-    dataset grande) el calculo de solapes agota la RAM.
+    dataset grande) el calculo de solapes agota la RAM. Ademas, emulando el
+    max.overlaps de ggrepel, se descartan las etiquetas cuyo punto caiga a
+    menos de min_sep_px de otra ya aceptada (si no, un pico viral con
+    decenas de influencers a la vez sale como un monton ilegible).
     """
-    points = list(zip(xs, ys, labels))
-    if len(points) > max_texts:
-        points = sorted(points, key=lambda p: p[1], reverse=True)[:max_texts]
+    points = sorted(zip(xs, ys, labels), key=lambda p: p[1], reverse=True)
+    if len(points) > 1:
+        try:
+            # los limites del eje se autoescalan de forma perezosa (al dibujar); sin esto
+            # la transformacion a pixeles usa los limites por defecto 0-1 y no descarta nada
+            ax.autoscale_view()
+            display = ax.transData.transform([(mdates.date2num(x) if hasattr(x, "toordinal") else x, y)
+                                              for x, y, _ in points])
+        except Exception:
+            display = None
+        if display is not None:
+            min_sep_px = 22.0
+            kept, kept_xy = [], []
+            for point, xy in zip(points, display):
+                if all((xy[0] - kx) ** 2 + (xy[1] - ky) ** 2 >= min_sep_px ** 2 for kx, ky in kept_xy):
+                    kept.append(point)
+                    kept_xy.append(xy)
+                if len(kept) >= max_texts:
+                    break
+            points = kept
+    points = points[:max_texts]
     texts = []
     for x, y, label in points:
         texts.append(ax.annotate(
