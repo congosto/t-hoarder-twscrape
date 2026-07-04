@@ -260,6 +260,11 @@ def generate_user_charts(
         f"{prefix}_daily_routine_total.png",
     )
     add(
+        "Rutina diaria por fuente",
+        _charts_profile.daily_routine_by_source(tweets, min_date, max_date, time_zone, base_title, events),
+        f"{prefix}_daily_routine_by_source.png",
+    )
+    add(
         "Ritmo semanal",
         _charts_profile.rhythm_week(tweets, min_date, max_date, time_zone, base_title),
         f"{prefix}_rhythm_week_total.png",

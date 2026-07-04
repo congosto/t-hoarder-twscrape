@@ -35,11 +35,19 @@ def daily_routine(df, ini_date, end_date, time_zone, base_title, events=None):
     )
 
     fig, ax = plt.subplots(figsize=(9, 7))
-    ax.scatter(grouped["hour_tweet"], grouped["day"], s=grouped["num_tweets"] * 8 + 10,
-               color=color_tweets, alpha=0.5)
+    scatter = ax.scatter(grouped["hour_tweet"], grouped["day"], s=grouped["num_tweets"] * 8 + 10,
+                         color=color_tweets, alpha=0.5)
     ax.set_xlim(0, 23)
     ax.set_xticks(range(0, 24))
     ax.yaxis.set_major_formatter(mdates.DateFormatter("%d-%b-%Y"))
+
+    # leyenda de tamanos: los tamanos de punto se convierten de vuelta a
+    # num. de tweets con la inversa de s = n * 8 + 10
+    handles, labels = scatter.legend_elements(
+        prop="sizes", num=4, func=lambda s: (s - 10) / 8, color=color_tweets, alpha=0.5,
+    )
+    ax.legend(handles, labels, title="N. tweets", loc="upper left",
+              bbox_to_anchor=(1.01, 1), fontsize=9, title_fontsize=9)
 
     if events is not None and not events.empty:
         ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
@@ -49,6 +57,58 @@ def daily_routine(df, ini_date, end_date, time_zone, base_title, events=None):
                      color="grey", va="center", ha="right")
 
     my_theme(ax, title=f"{base_title}: daily routine", subtitle=f"Time zone: {time_zone}")
+    fig.tight_layout()
+    return fig
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# daily_routine_by_source
+#
+# Como daily_routine, pero coloreada por la fuente de publicacion
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+def daily_routine_by_source(df, ini_date, end_date, time_zone, base_title, events=None):
+    df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)].copy()
+    df["day"] = df["date_slot"].dt.floor("D")
+    df["hour_tweet"] = df["date"].dt.hour
+    df["source"] = df["source"].fillna("unknown") if "source" in df.columns else "unknown"
+
+    grouped = (
+        df.groupby(["day", "hour_tweet", "source"])
+        .size()
+        .reset_index(name="num_tweets")
+    )
+
+    # fuentes ordenadas por volumen para que la leyenda liste primero las importantes
+    sources = grouped.groupby("source")["num_tweets"].sum().sort_values(ascending=False).index
+    palette = plt.get_cmap("tab10")
+
+    fig, ax = plt.subplots(figsize=(9, 7))
+    for i, source in enumerate(sources):
+        g = grouped[grouped["source"] == source]
+        ax.scatter(g["hour_tweet"], g["day"], s=g["num_tweets"] * 8 + 10,
+                   color=palette(i % palette.N), alpha=0.5, label=source)
+    ax.set_xlim(0, 23)
+    ax.set_xticks(range(0, 24))
+    ax.yaxis.set_major_formatter(mdates.DateFormatter("%d-%b-%Y"))
+
+    # en la leyenda solo aparece source, con marcadores de tamano uniforme
+    legend = ax.legend(title="Source", loc="upper left", bbox_to_anchor=(1.01, 1),
+                       fontsize=9, title_fontsize=9)
+    for handle in getattr(legend, "legend_handles", None) or legend.legendHandles:
+        handle.set_sizes([40])
+        handle.set_alpha(1)
+
+    if events is not None and not events.empty:
+        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
+        for _, e in ev.iterrows():
+            ax.axhline(e["date"], linestyle="--", color="grey")
+            ax.text(-1, e["date"], e.get("event_plain", e.get("event", "")), fontsize=8,
+                     color="grey", va="center", ha="right")
+
+    my_theme(ax, title=f"{base_title}: daily routine by source",
+             subtitle=f"Time zone: {time_zone}")
     fig.tight_layout()
     return fig
 
