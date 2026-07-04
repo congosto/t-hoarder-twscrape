@@ -70,6 +70,24 @@ def my_theme_colored_title(ax, segments, subtitle=None, base_color=BASE_COLOR, b
     return ax
 
 
+def legend_top(ax, handles=None, labels=None, title=None, fontsize=9):
+    """Leyenda horizontal sobre el area de dibujo, alineada a la derecha
+    (equivalente a legend.position='top' de ggplot; la izquierda la ocupa el
+    subtitulo de my_theme).
+
+    matplotlib solo coloca leyendas automaticamente dentro de los ejes
+    (loc='upper right', 'best', ...); fuera hay que anclarlas a mano con
+    bbox_to_anchor (el fig.legend(loc='outside ...') moderno exige constrained
+    layout, incompatible con nuestros titulos compuestos), asi que la receta
+    se centraliza aqui.
+    """
+    if handles is None:
+        handles, labels = ax.get_legend_handles_labels()
+    return ax.legend(handles, labels, title=title, loc="lower right",
+                     bbox_to_anchor=(1, 1.0), ncol=max(len(labels), 1),
+                     frameon=False, fontsize=fontsize, title_fontsize=fontsize)
+
+
 def style_twin_axis(ax2, base_color=BASE_COLOR, base_size=13):
     """Aplica a un eje gemelo (twinx) el mismo estilo que my_theme: sin grid
     y con el label del mismo tamano que el del eje izquierdo."""
