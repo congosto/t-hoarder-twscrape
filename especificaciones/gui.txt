@@ -225,7 +225,10 @@ Notas de implementación:
   charts_profile.py (matplotlib/seaborn, traducción de los antiguos cuadernos
   R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). El
   envoltorio que usa la app real es scripts/charts.py
-  (generate_tweet_charts / generate_user_charts).
+  (generate_tweet_charts / generate_user_charts). En las gráficas con
+  etiquetas de usuarios (influencers, comments vs RTs) se etiquetan solo
+  los 50 puntos más prominentes como máximo: adjustText es O(n²) y con
+  miles de etiquetas agota la memoria.
 - El contexto de las descargas (scripts/context.py) guarda, además
   de las fechas, la query/lista de usuarios, el product y la frequency
   originales, para poder reconstruir el formulario completo con el botón

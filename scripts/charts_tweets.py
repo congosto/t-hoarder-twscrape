@@ -31,15 +31,23 @@ COLOR_TEXTO = "#5a5856"
 ENG_FMT = EngFormatter(sep="")
 
 
-def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, **kwargs):
+def _repel(ax, xs, ys, labels, color=COLOR_TEXTO, size=9, max_texts=50, **kwargs):
     """Coloca etiquetas de texto intentando que no se solapen.
 
     Equivalente aproximado a geom_text_repel()/geom_label_repel(). Si la
     libreria adjustText esta disponible se usa para separar las etiquetas;
     si no, se colocan con un pequeno desplazamiento vertical.
+
+    Si hay mas de max_texts etiquetas solo se colocan las de mayor valor y
+    (las mas prominentes): adjust_text es O(n^2) en memoria y tiempo, y con
+    miles de etiquetas (p.ej. muchos influencers sobre el umbral en un
+    dataset grande) el calculo de solapes agota la RAM.
     """
+    points = list(zip(xs, ys, labels))
+    if len(points) > max_texts:
+        points = sorted(points, key=lambda p: p[1], reverse=True)[:max_texts]
     texts = []
-    for x, y, label in zip(xs, ys, labels):
+    for x, y, label in points:
         texts.append(ax.annotate(
             label, (x, y), color=color, fontsize=size,
             ha=kwargs.get("ha", "center"), va=kwargs.get("va", "bottom"),
