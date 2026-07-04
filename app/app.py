@@ -83,6 +83,9 @@ for col, name in zip(nav_cols, SECTIONS):
         if st.button(name, key=f"nav_{name}", use_container_width=True,
                      type="primary" if is_active else "secondary"):
             st.session_state.section = name
+            # sin este rerun, en la pasada del clic los botones ya se pintaron
+            # con la sección anterior y el resaltado rojo se queda en la vieja
+            st.rerun()
 
 st.divider()
 
