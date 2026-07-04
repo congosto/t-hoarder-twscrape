@@ -79,15 +79,25 @@ def daily_routine_by_source(df, ini_date, end_date, time_zone, base_title, event
         .reset_index(name="num_tweets")
     )
 
-    # fuentes ordenadas por volumen para que la leyenda liste primero las importantes
-    sources = grouped.groupby("source")["num_tweets"].sum().sort_values(ascending=False).index
+    # solo las 3 fuentes más frecuentes: hay usuarios con decenas de fuentes
+    # (apps de terceros) y la leyenda destrozaba la gráfica; el resto se
+    # agrupa como "otras" en gris para no perder los tweets del dibujo
+    totals = grouped.groupby("source")["num_tweets"].sum().sort_values(ascending=False)
+    top_sources = list(totals.head(3).index)
+    if len(totals) > len(top_sources):
+        grouped["source"] = grouped["source"].where(grouped["source"].isin(top_sources), "otras")
+        grouped = grouped.groupby(["day", "hour_tweet", "source"], as_index=False)["num_tweets"].sum()
+
     palette = plt.get_cmap("tab10")
+    colors = {s: palette(i) for i, s in enumerate(top_sources)}
+    colors["otras"] = (0.6, 0.6, 0.6, 1.0)
+    sources = top_sources + (["otras"] if (grouped["source"] == "otras").any() else [])
 
     fig, ax = plt.subplots(figsize=(9, 7))
-    for i, source in enumerate(sources):
+    for source in sources:
         g = grouped[grouped["source"] == source]
         ax.scatter(g["hour_tweet"], g["day"], s=g["num_tweets"] * 8 + 10,
-                   color=palette(i % palette.N), alpha=0.5, label=source)
+                   color=colors[source], alpha=0.5, label=source)
     ax.set_xlim(0, 23)
     ax.set_xticks(range(0, 24))
     ax.yaxis.set_major_formatter(mdates.DateFormatter("%d-%b-%Y"))
