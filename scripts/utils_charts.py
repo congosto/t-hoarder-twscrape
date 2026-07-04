@@ -77,10 +77,10 @@ def my_theme_colored_title(ax, segments, subtitle=None, base_color=BASE_COLOR, b
     return ax
 
 
-def legend_top(ax, handles=None, labels=None, title=None, fontsize=9):
+def legend_top(ax, handles=None, labels=None, title=None, fontsize=9, base_color=BASE_COLOR):
     """Leyenda horizontal sobre el area de dibujo, alineada a la derecha
     (equivalente a legend.position='top' de ggplot; la izquierda la ocupa el
-    subtitulo de my_theme).
+    subtitulo de my_theme). Textos del mismo color que el resto del tema.
 
     matplotlib solo coloca leyendas automaticamente dentro de los ejes
     (loc='upper right', 'best', ...); fuera hay que anclarlas a mano con
@@ -90,9 +90,14 @@ def legend_top(ax, handles=None, labels=None, title=None, fontsize=9):
     """
     if handles is None:
         handles, labels = ax.get_legend_handles_labels()
-    return ax.legend(handles, labels, title=title, loc="lower right",
-                     bbox_to_anchor=(1, 1.0), ncol=max(len(labels), 1),
-                     frameon=False, fontsize=fontsize, title_fontsize=fontsize)
+    legend = ax.legend(handles, labels, title=title, loc="lower right",
+                       bbox_to_anchor=(1, 1.0), ncol=max(len(labels), 1),
+                       frameon=False, fontsize=fontsize, title_fontsize=fontsize)
+    for text in legend.get_texts():
+        text.set_color(base_color)
+    if legend.get_title() is not None:
+        legend.get_title().set_color(base_color)
+    return legend
 
 
 def style_twin_axis(ax2, base_color=BASE_COLOR, base_size=13):
