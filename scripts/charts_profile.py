@@ -169,7 +169,11 @@ def rhythm_month(df, ini_date, end_date, time_zone, base_title):
     df["month"] = df["date"].dt.strftime("%b")
     df["year"] = df["date"].dt.strftime("%y")
 
-    years = sorted(df["year"].unique())
+    # rango de años continuo: los años sin tweets en el dataset (p.ej. porque
+    # Twitter no los devuelve) entran como columnas en blanco, si no el eje
+    # queda con saltos (08 pegado a 11) y distorsiona la lectura temporal
+    years_int = df["year"].astype(int)
+    years = [f"{y:02d}" for y in range(years_int.min(), years_int.max() + 1)]
     pivot = (
         df.groupby(["month", "year"]).size().reset_index(name="num_tweets")
         .pivot(index="month", columns="year", values="num_tweets")
