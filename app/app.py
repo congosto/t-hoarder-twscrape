@@ -361,7 +361,7 @@ with left:
                     st.rerun()
 
             search_query = st.text_input("Query", key="search_query")
-            search_product = st.selectbox("Product", ["Top", "Latest"], key="search_product")
+            search_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="search_product")
             search_from = st.text_input("From (YYYY-mm-dd HH:MM:SS)", key="search_from")
             search_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="search_to")
             search_freq = frequency_input("search")

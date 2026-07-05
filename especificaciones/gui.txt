@@ -74,7 +74,7 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
       Query/Product/From/To/Frequency con lo guardado; si no tiene contexto,
       limpia esos campos a sus valores por defecto
     Query (Twitter query, supports advanced queries)
-    Product (Top | Latest)
+    Product (Top | Latest, radio horizontal; por defecto Top)
     From (Start date of tweets YYYY-mm-dd HH:MM:SS)
     To (End date of tweets YYYY-mm-dd HH:MM:SS)
     Frequency (Interval min | hour | day | week | month | year)
