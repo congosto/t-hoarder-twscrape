@@ -78,9 +78,10 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
   User TL
     Prefix (File prefix for results)
     Botón "Cargar contexto": igual que en Search, pero rellena/limpia
-      Users list/From/To/Frequency
+      Users list/From/Product/To/Frequency
     Username(s) (uno o varios usuarios)
     From (Start date of tweets YYYY-mm-dd HH:MM:SS)
+    Product (Top | Latest, radio horizontal; por defecto Top)
     To (End date of tweets YYYY-mm-dd HH:MM:SS)
     Frequency (Sampling frequency - min | hour | day | week | month | year)
   Retweets

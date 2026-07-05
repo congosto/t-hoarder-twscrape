@@ -386,6 +386,7 @@ with left:
                         st.session_state.utl_users_text = saved["list_users"]
                         st.session_state.utl_from = saved["since"]
                         st.session_state.utl_to = saved["until"]
+                        st.session_state.utl_product = saved["product"] if saved.get("product") in ("Top", "Latest") else "Top"
                         freq_parts = saved["frequency"].split() if saved["frequency"] else []
                         st.session_state.utl_freq_n = int(freq_parts[0]) if len(freq_parts) == 2 else 1
                         st.session_state.utl_freq_unit = freq_parts[1] if len(freq_parts) == 2 else "hour"
@@ -394,6 +395,7 @@ with left:
                         st.session_state.utl_users_text = ""
                         st.session_state.utl_from = ""
                         st.session_state.utl_to = ""
+                        st.session_state.utl_product = "Top"
                         st.session_state.utl_freq_n = 1
                         st.session_state.utl_freq_unit = "hour"
                         log(f"No hay contexto guardado para el prefix '{utl_prefix}'")
@@ -403,6 +405,7 @@ with left:
                 "Users list (Comma-separated list of users, without @)", key="utl_users_text"
             )
             utl_from = st.text_input("From (YYYY-mm-dd HH:MM:SS)", key="utl_from")
+            utl_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="utl_product")
             utl_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="utl_to")
             utl_freq = frequency_input("utl")
             if st.button("Lanzar descarga TL"):
@@ -419,7 +422,8 @@ with left:
                     output_file = download.historical_timeline(
                         data_path=DATA_PATH, dataset=st.session_state.active_project,
                         prefix=utl_prefix, list_users=users_list,
-                        since=utl_from, until=utl_to, frequency=utl_freq, log=log,
+                        since=utl_from, until=utl_to, frequency=utl_freq,
+                        product=utl_product, log=log,
                     )
                     log(f"Resultado en {output_file}")
                     set_result(output_file)
