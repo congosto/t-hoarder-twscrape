@@ -177,7 +177,8 @@ def rhythm_month(df, ini_date, end_date, time_zone, base_title):
         .fillna(0)
     )
 
-    fig, ax = plt.subplots(figsize=(max(6, len(years) * 1.2), 6))
+    # misma altura que el ritmo semanal (10x5), con ancho segun los anos del rango
+    fig, ax = plt.subplots(figsize=(max(10, len(years) * 1.2), 5))
     im = ax.imshow(pivot.values, cmap="Blues", aspect="auto")
     ax.set_xticks(range(len(years)))
     ax.set_xticklabels(years)
