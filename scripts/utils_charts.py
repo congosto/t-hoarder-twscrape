@@ -126,7 +126,8 @@ def time_scale(ini_date, end_date):
     num_hours = num_days * 24
 
     if num_years >= 10:
-        return mdates.YearLocator()
+        # con mas de 15 anos, un tick por ano sale apelotonado: cada 2 anos
+        return mdates.YearLocator(base=2 if num_years > 15 else 1)
     if num_months >= 12:
         interval = int((num_months + 12) / 12)
         return mdates.MonthLocator(interval=interval)
