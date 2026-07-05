@@ -696,7 +696,7 @@ with left:
             else:
                 col_prefix, col_title = st.columns(2)
                 with col_prefix:
-                    tg_prefix = prefix_input("Prefix", "tg_prefix")
+                    tg_prefix = prefix_input("Prefix", "tg_prefix", kinds=("search",))
                 with col_title:
                     tg_title = st.text_input("Base title", key="tg_title")
 
@@ -786,7 +786,7 @@ with left:
             else:
                 col_prefix, col_username = st.columns(2)
                 with col_prefix:
-                    ug_prefix = prefix_input("Prefix", "ug_prefix")
+                    ug_prefix = prefix_input("Prefix", "ug_prefix", kinds=("users",))
                 with col_username:
                     ug_username = st.text_input("Username", key="ug_username").strip()
 
