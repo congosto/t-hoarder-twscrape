@@ -22,7 +22,9 @@ ordenados del más reciente al más antiguo (fecha del fichero de contexto),
 con el más reciente preseleccionado — así se trabaja por defecto con lo
 último. En Search y User TL el desplegable incluye además la opción
 "➕ nuevo prefix...", que despliega un campo de texto para escribirlo; en el
-resto de secciones el prefix tiene que existir.
+resto de secciones el prefix tiene que existir. Search lista solo los prefixes
+de historical_search y User TL solo los de historical_timeline (cada uno los
+suyos); el resto de secciones listan ambos.
 
 En la parte izquierda (20% del espacio): formulario de entrada de datos según la opción
 

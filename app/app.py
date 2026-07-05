@@ -183,15 +183,26 @@ def set_result_charts(figs, image_path):
     st.session_state.report_html = None
 
 
-def project_prefixes(project_dir):
-    """Prefixes del proyecto, del más reciente al más antiguo (fecha del contexto)."""
+# tipo de contexto -> sufijo del fichero que lo guarda
+_PREFIX_KIND_SUFFIXES = {
+    "search": "_search_context.csv",
+    "users": "_users_context.csv",
+}
+
+
+def project_prefixes(project_dir, kinds=("search", "users")):
+    """Prefixes del proyecto, del más reciente al más antiguo (fecha del contexto).
+
+    kinds filtra por origen: 'search' (historical_search) y/o 'users'
+    (historical_timeline)."""
+    suffixes = [_PREFIX_KIND_SUFFIXES[k] for k in kinds]
     files = sorted(
-        list(project_dir.glob("*_search_context.csv")) + list(project_dir.glob("*_users_context.csv")),
+        (f for suffix in suffixes for f in project_dir.glob(f"*{suffix}")),
         key=lambda f: f.stat().st_mtime, reverse=True,
     )
     prefixes = []
     for f in files:
-        for suffix in ("_search_context.csv", "_users_context.csv"):
+        for suffix in suffixes:
             if f.name.endswith(suffix):
                 prefix = f.name[: -len(suffix)]
                 if prefix not in prefixes:
@@ -202,17 +213,18 @@ def project_prefixes(project_dir):
 _NEW_PREFIX_OPTION = "➕ nuevo prefix..."
 
 
-def prefix_input(label, key, allow_new=False):
+def prefix_input(label, key, allow_new=False, kinds=("search", "users")):
     """Entrada de Prefix como desplegable con los prefixes del proyecto activo,
     el más reciente preseleccionado (así se trabaja por defecto con lo último).
 
     Con allow_new (Search y User TL) el desplegable incluye la opción de crear
     un prefix nuevo, que despliega un campo de texto. En el resto de casos el
     prefix tiene que existir. Sin proyecto activo, campo de texto plano.
+    kinds limita el origen de los prefixes listados (ver project_prefixes).
     """
     if not st.session_state.active_project:
         return st.text_input(label, key=f"{key}_txt").strip()
-    options = project_prefixes(projects.select_project(st.session_state.active_project))
+    options = project_prefixes(projects.select_project(st.session_state.active_project), kinds=kinds)
     if allow_new:
         options = options + [_NEW_PREFIX_OPTION]
     if not options:
@@ -317,7 +329,7 @@ with left:
     elif section == "Download":
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["Search", "User TL", "Retweets", "Comments", "Advanced Comments"])
         with tab1:
-            search_prefix = prefix_input("Prefix", "search_prefix", allow_new=True)
+            search_prefix = prefix_input("Prefix", "search_prefix", allow_new=True, kinds=("search",))
             if st.button("Cargar contexto", key="search_load_ctx"):
                 if not search_prefix:
                     log_error("escribe el Prefix antes de cargar el contexto")
@@ -370,7 +382,7 @@ with left:
                     log(f"Resultado en {output_file}")
                     set_result(output_file)
         with tab2:
-            utl_prefix = prefix_input("Prefix", "utl_prefix", allow_new=True)
+            utl_prefix = prefix_input("Prefix", "utl_prefix", allow_new=True, kinds=("users",))
             if st.button("Cargar contexto", key="utl_load_ctx"):
                 if not utl_prefix:
                     log_error("escribe el Prefix antes de cargar el contexto")
