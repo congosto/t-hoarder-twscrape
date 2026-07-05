@@ -177,8 +177,11 @@ def rhythm_month(df, ini_date, end_date, time_zone, base_title):
         .fillna(0)
     )
 
-    # misma altura que el ritmo semanal (10x5), con ancho segun los anos del rango
-    fig, ax = plt.subplots(figsize=(max(10, len(years) * 1.2), 5))
+    # mismo tamano que el ritmo semanal: la app escala las imagenes al ancho del
+    # panel, asi que para que se VEAN igual de altas deben tener la misma
+    # proporcion (un ancho adaptable a los anos hacia que el mensual se viera
+    # mas bajo). 10x5 da columnas de sobra: el semanal pinta 24 (horas).
+    fig, ax = plt.subplots(figsize=(10, 5))
     im = ax.imshow(pivot.values, cmap="Blues", aspect="auto")
     ax.set_xticks(range(len(years)))
     ax.set_xticklabels(years)
