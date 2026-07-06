@@ -238,9 +238,11 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
       como "otras" en gris — hay usuarios con decenas de fuentes y la
       leyenda destrozaba la gráfica), ritmo semanal/mensual, impacto
       (favoritos/RTs/citas/comentarios/impresiones), Tweets by language
-      (línea de tweets diarios por idioma: máximo 3 idiomas con color
-      propio y el resto como "otro" en gris, leyenda dentro de la gráfica
-      arriba a la derecha), engagement,
+      (acumulado de tweets por idioma al estilo de la gráfica de medios:
+      máximo 3 idiomas con color propio y el resto como "otro" en gris,
+      con etiqueta "idioma (total)" al final de cada línea — separadas
+      verticalmente si los totales se pegan — y el eje extendido a la
+      derecha para que quepan), engagement,
       comments vs RTs, palabras frecuentes (sin y con amplificación de
       retweets) y topics (si aplica)
     - "Generar informe HTML de Usuario": igual que el informe de Tweets pero

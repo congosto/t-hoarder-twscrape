@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from charts_tweets import COLOR_TEXTO, ENG_FMT, _repel, color_tweets
+from utils_charts import expand_time
 from utils_charts import apply_date_axis, legend_top, my_theme, my_theme_colored_title, style_twin_axis
 
 _WEEKDAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -289,48 +290,49 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
 #
 # tweets_by_language
 #
-# Linea de tweets diarios por idioma (top 3 + "otro")
+# Acumulado de tweets por idioma (top 3 + "otro"), estilo media_acumulate:
+# etiqueta con el idioma y el total al final de cada línea
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 def tweets_by_language(df, ini_date, end_date, base_title, events=None):
     df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)].copy()
     df["lang"] = df["lang"].fillna("und") if "lang" in df.columns else "und"
 
-    # granularidad adaptada al rango: con años de historia y pocos tweets/día la
-    # línea diaria baja a cero entre tweet y tweet y los miles de picos 0-1-0
-    # apretados parecen barras verticales; por semana/mes salen líneas de verdad
-    num_days = (end_date - ini_date).total_seconds() / 86400
-    if num_days > 730:
-        freq, unit = "MS", "month"
-    elif num_days > 120:
-        freq, unit = "W", "week"
-    else:
-        freq, unit = "D", "day"
-
     # los 3 idiomas más frecuentes con color propio; el resto, "otro" en gris
     top_langs = list(df["lang"].value_counts().head(3).index)
     df["lang_group"] = df["lang"].where(df["lang"].isin(top_langs), "otro")
-    by_lang = (
-        df.groupby([pd.Grouper(key="date", freq=freq), "lang_group"]).size().unstack(fill_value=0)
-        .reindex(pd.date_range(ini_date.floor("D"), end_date.floor("D"), freq=freq), fill_value=0)
+    cum = (
+        df.groupby([pd.Grouper(key="date", freq="D"), "lang_group"]).size().unstack(fill_value=0)
+        .reindex(pd.date_range(ini_date.floor("D"), end_date.floor("D"), freq="D"), fill_value=0)
+        .cumsum()
     )
-    lang_order = top_langs + (["otro"] if "otro" in by_lang.columns else [])
+    lang_order = top_langs + (["otro"] if "otro" in cum.columns else [])
     palette = plt.get_cmap("tab10")
     lang_colors = {lang: palette(i) for i, lang in enumerate(top_langs)}
     lang_colors["otro"] = (0.65, 0.65, 0.65, 1.0)
 
-    limit_y = by_lang.values.max() if len(by_lang) else 1
+    limit_y = cum.values.max() if len(cum) else 1
 
     fig, ax = plt.subplots(figsize=(9, 5))
     for lang in lang_order:
-        ax.plot(by_lang.index, by_lang[lang].values,
-                color=lang_colors[lang], linewidth=1.2, alpha=0.85, label=lang)
+        ax.plot(cum.index, cum[lang].values, color=lang_colors[lang],
+                linewidth=2, alpha=0.85)
 
-    # leyenda dentro de la gráfica, arriba a la derecha
-    legend = ax.legend(loc="upper right", bbox_to_anchor=(0.99, 0.97),
-                       fontsize=9, framealpha=0.9, edgecolor=COLOR_TEXTO)
-    for text in legend.get_texts():
-        text.set_color(COLOR_TEXTO)
+    # etiquetas al final de cada línea, separadas verticalmente un mínimo para
+    # que los idiomas minoritarios (totales casi iguales) no se pisen
+    min_sep = limit_y * 0.045
+    label_y = {}
+    prev = None
+    for lang in sorted(lang_order, key=lambda l: cum[l].iloc[-1]):
+        y = cum[lang].iloc[-1]
+        if prev is not None and y - prev < min_sep:
+            y = prev + min_sep
+        label_y[lang] = y
+        prev = y
+    for lang in lang_order:
+        ax.annotate(f"{lang} ({cum[lang].iloc[-1]:,.0f})", (cum.index[-1], label_y[lang]),
+                    color=lang_colors[lang], fontsize=9,
+                    xytext=(5, 0), textcoords="offset points", va="center")
 
     if events is not None and not events.empty:
         ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
@@ -339,9 +341,10 @@ def tweets_by_language(df, ini_date, end_date, base_title, events=None):
             ax.text(e["date"], limit_y, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
 
     ax.set_ylim(0, limit_y * 1.15)
-    ax.set_ylabel(f"Num. Original tweets per {unit}")
+    ax.set_ylabel("Accumulated tweets")
     ax.yaxis.set_major_formatter(ENG_FMT)
-    apply_date_axis(ax, ini_date, end_date)
+    # eje extendido a la derecha para que quepan las etiquetas de los idiomas
+    apply_date_axis(ax, ini_date, end_date + expand_time(ini_date, end_date, 15))
 
     my_theme(ax, title=f"{base_title}: Tweets by language")
     fig.tight_layout()
