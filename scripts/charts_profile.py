@@ -294,15 +294,25 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 def tweets_by_language(df, ini_date, end_date, base_title, events=None):
     df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)].copy()
-    df["day"] = df["date"].dt.floor("D")
     df["lang"] = df["lang"].fillna("und") if "lang" in df.columns else "und"
+
+    # granularidad adaptada al rango: con años de historia y pocos tweets/día la
+    # línea diaria baja a cero entre tweet y tweet y los miles de picos 0-1-0
+    # apretados parecen barras verticales; por semana/mes salen líneas de verdad
+    num_days = (end_date - ini_date).total_seconds() / 86400
+    if num_days > 730:
+        freq, unit = "MS", "month"
+    elif num_days > 120:
+        freq, unit = "W", "week"
+    else:
+        freq, unit = "D", "day"
 
     # los 3 idiomas más frecuentes con color propio; el resto, "otro" en gris
     top_langs = list(df["lang"].value_counts().head(3).index)
     df["lang_group"] = df["lang"].where(df["lang"].isin(top_langs), "otro")
     by_lang = (
-        df.groupby(["day", "lang_group"]).size().unstack(fill_value=0)
-        .reindex(pd.date_range(ini_date.floor("D"), end_date.floor("D"), freq="D"), fill_value=0)
+        df.groupby([pd.Grouper(key="date", freq=freq), "lang_group"]).size().unstack(fill_value=0)
+        .reindex(pd.date_range(ini_date.floor("D"), end_date.floor("D"), freq=freq), fill_value=0)
     )
     lang_order = top_langs + (["otro"] if "otro" in by_lang.columns else [])
     palette = plt.get_cmap("tab10")
@@ -329,7 +339,7 @@ def tweets_by_language(df, ini_date, end_date, base_title, events=None):
             ax.text(e["date"], limit_y, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
 
     ax.set_ylim(0, limit_y * 1.15)
-    ax.set_ylabel("Num. Original tweets per day")
+    ax.set_ylabel(f"Num. Original tweets per {unit}")
     ax.yaxis.set_major_formatter(ENG_FMT)
     apply_date_axis(ax, ini_date, end_date)
 
