@@ -72,12 +72,40 @@ def _log10(series: pd.Series) -> pd.Series:
     return values.apply(math.floor).astype(int)
 
 
-def _load_relations(project_dir: Path, prefix: str, relation: str) -> pd.DataFrame:
+def _original_tweet_urls(project_dir: Path, prefix: str) -> set | None:
+    """URLs de los tweets originales de {prefix}.csv, o None si no se pueden leer
+    (no existe el fichero o no tiene columna 'url')."""
+    tweets_file = project_dir / f"{prefix}.csv"
+    if not tweets_file.exists():
+        return None
+    try:
+        urls = pd.read_csv(tweets_file, encoding="utf-8", usecols=["url"])["url"]
+    except ValueError:
+        return None
+    return set(urls.dropna().astype(str))
+
+
+def _load_relations(project_dir: Path, prefix: str, relation: str,
+                    filter_orphan_rts: bool = True, log=print) -> pd.DataFrame:
     if relation == "RT":
         path = project_dir / f"{prefix}_RTs.csv"
         if not path.exists():
             raise FileNotFoundError(f"No existe {path}. Descarga primero los Retweets.")
         df = pd.read_csv(path, encoding="utf-8")
+        # Descarta RTs huérfanos: los que retuitean (url_rt) un tweet original que
+        # ya no está en {prefix}.csv, p.ej. porque el dataset se limpió por idioma o
+        # palabras después de bajar los RTs. Equivale al right_join con los tweets
+        # originales del cuaderno R: sin esto, el grafo incluye relaciones que ya no
+        # existen en el dataset limpio.
+        if filter_orphan_rts and "url_rt" in df.columns:
+            valid = _original_tweet_urls(project_dir, prefix)
+            if valid:
+                before = len(df)
+                df = df[df["url_rt"].astype(str).isin(valid)]
+                dropped = before - len(df)
+                if dropped:
+                    log(f"RTs huérfanos descartados (su tweet original ya no está en "
+                        f"{prefix}.csv): {dropped} de {before}")
         df["source"] = df["username"]
         df["target"] = df["user_retweeted"]
     elif relation == "replies_advanced":
@@ -111,7 +139,8 @@ def _load_relations(project_dir: Path, prefix: str, relation: str) -> pd.DataFra
 
 
 def _build_giant_graph(project_dir: Path, prefix: str, relation: str, log=print,
-                       min_component_size: int | None = None) -> tuple[nx.DiGraph, pd.DataFrame]:
+                       min_component_size: int | None = None,
+                       filter_orphan_rts: bool = True) -> tuple[nx.DiGraph, pd.DataFrame]:
     """Construye el grafo dirigido de la relación indicada.
 
     Por defecto (min_component_size=None) se queda solo con la componente conexa
@@ -120,8 +149,12 @@ def _build_giant_graph(project_dir: Path, prefix: str, relation: str, log=print,
     botfarm que solo se retuitea entre sí forma su propia componente aislada
     y con el filtro "solo la gigante" queda completamente invisible — para
     detectar coordinación/astroturfing conviene poder incluirla.
+
+    filter_orphan_rts (solo relación RT): descarta los RTs cuyo tweet original ya
+    no está en {prefix}.csv (ver _load_relations).
     """
-    relations_df = _load_relations(project_dir, prefix, relation)
+    relations_df = _load_relations(project_dir, prefix, relation,
+                                   filter_orphan_rts=filter_orphan_rts, log=log)
     log(f"Relaciones cargadas: {len(relations_df)}")
 
     edges = relations_df.groupby(["source", "target"]).size().reset_index(name="weight")
@@ -208,7 +241,8 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
                        seed: int = 42, resolution: float = 1.0,
                        min_component_size: int | None = None,
                        compute_betweenness: bool = False,
-                       betweenness_k: int | None = 500) -> tuple[Path, Path]:
+                       betweenness_k: int | None = 500,
+                       filter_orphan_rts: bool = True) -> tuple[Path, Path]:
     """Crea el grafo de la relación, calcula el grado con pesos y la modularidad
     (Louvain/Blondel) con semilla fija — mismo resultado en cada ejecución. Las
     comunidades se persisten aquí y el resto de pasos (generar grafo, clasificar
@@ -224,10 +258,15 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
     None) a la tabla de usuarios. Identifica nodos "puente" entre comunidades
     que el indegree/PageRank no detectan; coste O(V*E) exacto, por eso es opcional.
 
+    filter_orphan_rts (solo relación RT): descarta los RTs cuyo tweet original ya
+    no está en {prefix}.csv (ver _load_relations); para que las comunidades no se
+    calculen sobre relaciones que ya no existen tras limpiar el dataset.
+
     Devuelve (communities_file, users_communities_file).
     """
     G_giant, _ = _build_giant_graph(project_dir, prefix, relation, log=log,
-                                    min_component_size=min_component_size)
+                                    min_component_size=min_component_size,
+                                    filter_orphan_rts=filter_orphan_rts)
 
     indegree = dict(G_giant.in_degree(weight="weight"))
     outdegree = dict(G_giant.out_degree(weight="weight"))
@@ -280,7 +319,8 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
 
 def generate_graph(project_dir: Path, prefix: str, relation: str, output_format: str = "gdf",
                    include_communities: bool = True, include_locations: bool = False,
-                   min_component_size: int | None = None, log=print) -> Path:
+                   min_component_size: int | None = None, filter_orphan_rts: bool = True,
+                   log=print) -> Path:
     """Genera el fichero de grafo (gdf/gexf) de la relación indicada con los atributos de nodo.
 
     include_communities: añade 'community' desde {prefix}_users_{relation}_communities.csv
@@ -290,12 +330,16 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     min_component_size: debe coincidir con el usado en 'Detect communities' para
     ese mismo prefix/relation (ver _build_giant_graph) — si no, algunos nodos no
     tendrán comunidad asignada porque no estaban en el grafo con el que se calculó.
+    filter_orphan_rts (solo relación RT): descarta los RTs cuyo tweet original ya no
+    está en {prefix}.csv (ver _load_relations). Debe coincidir con el usado en
+    'Detect communities', por lo mismo que min_component_size.
     Devuelve la ruta del fichero de grafo generado.
     """
     if output_format not in ("gdf", "gexf"):
         raise ValueError(f"output_format debe ser 'gdf' o 'gexf', no '{output_format}'")
     G_giant, relations_df = _build_giant_graph(project_dir, prefix, relation, log=log,
-                                               min_component_size=min_component_size)
+                                               min_component_size=min_component_size,
+                                               filter_orphan_rts=filter_orphan_rts)
 
     tweets_file = project_dir / f"{prefix}.csv"
     if not tweets_file.exists():

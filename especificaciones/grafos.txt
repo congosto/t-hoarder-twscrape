@@ -4,6 +4,17 @@ Nota general (auditoría jul-2026): los handles de usuario se normalizan en todo
 el flujo (sin @, sin espacios, en minúsculas — en X son case-insensitive; sin
 esto @Usuario y usuario eran dos nodos distintos).
 
+RTs huérfanos: al construir el grafo de la relación RT (tanto en Detect
+communities como en Generate graph) se descartan automáticamente los RTs cuyo
+tweet original (url_rt) ya no está entre las urls de {prefix}.csv. Es el
+semi-join con los tweets originales del cuaderno R: si se limpia el dataset
+(Tools > Clean, sobrescribiendo {prefix}.csv) después de haber bajado los RTs,
+el fichero de RTs sigue conteniendo relaciones hacia tweets que ya no están, y
+sin este filtro el grafo y las comunidades incluirían relaciones que ya no
+existen. Es un no-op si el dataset no se ha recortado. Se puede desactivar por
+API (filter_orphan_rts=False); si no existe {prefix}.csv o no tiene columna url,
+no se filtra.
+
 - Detect communities
   params
   - prefix
