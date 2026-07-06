@@ -250,12 +250,20 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
     lang_colors["otro"] = (0.65, 0.65, 0.65, 1.0)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    bottom = np.zeros(len(by_lang))
-    for lang in lang_order:
-        values = by_lang[lang].values
-        ax.bar(by_lang.index, values, bottom=bottom, width=1.0,
-               color=lang_colors[lang], label=lang)
-        bottom += values
+    if len(by_lang) <= 120:
+        bottom = np.zeros(len(by_lang))
+        for lang in lang_order:
+            values = by_lang[lang].values
+            ax.bar(by_lang.index, values, bottom=bottom, width=1.0,
+                   color=lang_colors[lang], label=lang)
+            bottom += values
+    else:
+        # con miles de dias, miles de rectangulos por idioma hacian lentas las 5
+        # graficas de impacto; a esa densidad cada barra mide <1 px, asi que un
+        # area apilada escalonada (4 poligonos) se ve igual y tarda nada
+        ax.stackplot(by_lang.index, [by_lang[lang].values for lang in lang_order],
+                     colors=[lang_colors[lang] for lang in lang_order],
+                     labels=lang_order, step="post")
     ax.scatter(grouped["day"], grouped["impact"] / ajuste, color=impact_color, alpha=0.8)
 
     # una sola llamada para que adjust_text separe ambas anotaciones si los

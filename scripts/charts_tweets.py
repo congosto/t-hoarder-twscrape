@@ -464,8 +464,16 @@ _MENTION_RE = re.compile(r"@\w+")
 _WORD_RE = re.compile(r"[a-zA-ZáéíóúñÁÉÍÓÚÑàèìòùçÀÈÌÒÙÇ]{2,}")
 
 
+_STOPWORDS_CACHE = None
+
+
 def _stopwords():
-    """Stopwords en, es, ca, equivalente a stop_words + tm::stopwords()."""
+    """Stopwords en, es, ca, equivalente a stop_words + tm::stopwords().
+    Cacheadas a nivel de módulo: cargar el corpus de nltk en cada gráfica
+    encarecía visiblemente los wordclouds."""
+    global _STOPWORDS_CACHE
+    if _STOPWORDS_CACHE is not None:
+        return _STOPWORDS_CACHE
     import nltk
     try:
         from nltk.corpus import stopwords
@@ -480,7 +488,8 @@ def _stopwords():
         "unes", "i", "o", "que", "no", "en", "amb", "per", "es", "se", "al",
         "als", "com", "ja", "molt", "pero", "si", "aquest", "aquesta", "te",
     }
-    return words | catalan
+    _STOPWORDS_CACHE = words | catalan
+    return _STOPWORDS_CACHE
 
 
 def _tokenize(text):
@@ -495,12 +504,17 @@ def word_frequency_table(df, ini_date, end_date, RTs):
     df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)]
     stop_words = _stopwords()
     counts = {}
-    for _, row in df.iterrows():
-        rt = row.get("retweet_count", 0) or 0
-        for word in _tokenize(str(row.get("text", "")) or ""):
+    # zip sobre las dos columnas en vez de df.iterrows(): iterrows materializa
+    # una Series por fila (30+ columnas) y dominaba el tiempo de los wordclouds
+    texts = df["text"].fillna("") if "text" in df.columns else []
+    rts = (pd.to_numeric(df["retweet_count"], errors="coerce").fillna(0)
+           if "retweet_count" in df.columns else pd.Series(0, index=df.index))
+    for text, rt in zip(texts, rts):
+        weight = 1 + int(rt) if RTs else 1
+        for word in _tokenize(str(text)):
             if word in stop_words:
                 continue
-            counts[word] = counts.get(word, 0) + (1 + rt if RTs else 1)
+            counts[word] = counts.get(word, 0) + weight
     freq = (
         pd.DataFrame(sorted(counts.items(), key=lambda kv: -kv[1]), columns=["word", "freq"])
         .head(1000)
