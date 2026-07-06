@@ -104,8 +104,8 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
                 df = df[df["url_rt"].astype(str).isin(valid)]
                 dropped = before - len(df)
                 if dropped:
-                    log(f"RTs huérfanos descartados (su tweet original ya no está en "
-                        f"{prefix}.csv): {dropped} de {before}")
+                    log(f"RTs descartados porque el tweet retuiteado ya no está en el "
+                        f"dataset {prefix}.csv: {dropped} de {before}")
         df["source"] = df["username"]
         df["target"] = df["user_retweeted"]
     elif relation == "replies_advanced":
