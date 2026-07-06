@@ -235,35 +235,8 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
     ajuste = max_impact / max_tweets
     limit_y = max_tweets
 
-    # Tweets como barras apiladas por idioma: los 3 idiomas más frecuentes con
-    # color propio y el resto agrupados como "otro" en gris
-    df["lang"] = df["lang"].fillna("und") if "lang" in df.columns else "und"
-    top_langs = list(df["lang"].value_counts().head(3).index)
-    df["lang_group"] = df["lang"].where(df["lang"].isin(top_langs), "otro")
-    by_lang = (
-        df.groupby(["day", "lang_group"]).size().unstack(fill_value=0)
-        .reindex(pd.date_range(ini_date.floor("D"), end_date.floor("D"), freq="D"), fill_value=0)
-    )
-    lang_order = top_langs + (["otro"] if "otro" in by_lang.columns else [])
-    lang_palette = plt.get_cmap("tab10")
-    lang_colors = {lang: lang_palette(i) for i, lang in enumerate(top_langs)}
-    lang_colors["otro"] = (0.65, 0.65, 0.65, 1.0)
-
     fig, ax = plt.subplots(figsize=(9, 5))
-    if len(by_lang) <= 120:
-        bottom = np.zeros(len(by_lang))
-        for lang in lang_order:
-            values = by_lang[lang].values
-            ax.bar(by_lang.index, values, bottom=bottom, width=1.0,
-                   color=lang_colors[lang], label=lang)
-            bottom += values
-    else:
-        # con miles de dias, miles de rectangulos por idioma hacian lentas las 5
-        # graficas de impacto; a esa densidad cada barra mide <1 px, asi que un
-        # area apilada escalonada (4 poligonos) se ve igual y tarda nada
-        ax.stackplot(by_lang.index, [by_lang[lang].values for lang in lang_order],
-                     colors=[lang_colors[lang] for lang in lang_order],
-                     labels=lang_order, step="post")
+    ax.step(grouped["day"], grouped["num_tweets"], color=color_tweets, where="post")
     ax.scatter(grouped["day"], grouped["impact"] / ajuste, color=impact_color, alpha=0.8)
 
     # una sola llamada para que adjust_text separe ambas anotaciones si los
@@ -283,12 +256,6 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
             color=COLOR_TEXTO, fontsize=9, va="top",
             bbox=dict(boxstyle="round", fc="white", ec=COLOR_TEXTO))
 
-    # leyenda de idiomas dentro de la gráfica, a la derecha, a la misma altura
-    # que el recuadro de medias
-    lang_legend = ax.legend(loc="upper right", bbox_to_anchor=(0.99, 0.97),
-                            fontsize=9, framealpha=0.9, edgecolor=COLOR_TEXTO)
-    for text in lang_legend.get_texts():
-        text.set_color(COLOR_TEXTO)
 
     ax.set_ylim(0, max_tweets * 1.5)
     ax.set_ylabel("Num. Original tweets per day")
@@ -314,6 +281,59 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
     style_twin_axis(ax2)
     ax.yaxis.label.set_color(color_tweets)
     ax2.yaxis.label.set_color(impact_color)
+    fig.tight_layout()
+    return fig
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# tweets_by_language
+#
+# Linea de tweets diarios por idioma (top 3 + "otro")
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+def tweets_by_language(df, ini_date, end_date, base_title, events=None):
+    df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)].copy()
+    df["day"] = df["date"].dt.floor("D")
+    df["lang"] = df["lang"].fillna("und") if "lang" in df.columns else "und"
+
+    # los 3 idiomas más frecuentes con color propio; el resto, "otro" en gris
+    top_langs = list(df["lang"].value_counts().head(3).index)
+    df["lang_group"] = df["lang"].where(df["lang"].isin(top_langs), "otro")
+    by_lang = (
+        df.groupby(["day", "lang_group"]).size().unstack(fill_value=0)
+        .reindex(pd.date_range(ini_date.floor("D"), end_date.floor("D"), freq="D"), fill_value=0)
+    )
+    lang_order = top_langs + (["otro"] if "otro" in by_lang.columns else [])
+    palette = plt.get_cmap("tab10")
+    lang_colors = {lang: palette(i) for i, lang in enumerate(top_langs)}
+    lang_colors["otro"] = (0.65, 0.65, 0.65, 1.0)
+
+    limit_y = by_lang.values.max() if len(by_lang) else 1
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for lang in lang_order:
+        ax.step(by_lang.index, by_lang[lang].values, where="post",
+                color=lang_colors[lang], linewidth=1.2, alpha=0.85, label=lang)
+
+    # leyenda dentro de la gráfica, arriba a la derecha
+    legend = ax.legend(loc="upper right", bbox_to_anchor=(0.99, 0.97),
+                       fontsize=9, framealpha=0.9, edgecolor=COLOR_TEXTO)
+    for text in legend.get_texts():
+        text.set_color(COLOR_TEXTO)
+
+    if events is not None and not events.empty:
+        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
+        for _, e in ev.iterrows():
+            ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
+            ax.text(e["date"], limit_y, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
+
+    ax.set_ylim(0, limit_y * 1.15)
+    ax.set_ylabel("Num. Original tweets per day")
+    ax.yaxis.set_major_formatter(ENG_FMT)
+    apply_date_axis(ax, ini_date, end_date)
+
+    my_theme(ax, title=f"{base_title}: Tweets by language")
     fig.tight_layout()
     return fig
 
