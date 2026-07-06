@@ -235,8 +235,27 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
     ajuste = max_impact / max_tweets
     limit_y = max_tweets
 
+    # Tweets como barras apiladas por idioma: los 3 idiomas más frecuentes con
+    # color propio y el resto agrupados como "otro" en gris
+    df["lang"] = df["lang"].fillna("und") if "lang" in df.columns else "und"
+    top_langs = list(df["lang"].value_counts().head(3).index)
+    df["lang_group"] = df["lang"].where(df["lang"].isin(top_langs), "otro")
+    by_lang = (
+        df.groupby(["day", "lang_group"]).size().unstack(fill_value=0)
+        .reindex(pd.date_range(ini_date.floor("D"), end_date.floor("D"), freq="D"), fill_value=0)
+    )
+    lang_order = top_langs + (["otro"] if "otro" in by_lang.columns else [])
+    lang_palette = plt.get_cmap("tab10")
+    lang_colors = {lang: lang_palette(i) for i, lang in enumerate(top_langs)}
+    lang_colors["otro"] = (0.65, 0.65, 0.65, 1.0)
+
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.step(grouped["day"], grouped["num_tweets"], color=color_tweets, where="post")
+    bottom = np.zeros(len(by_lang))
+    for lang in lang_order:
+        values = by_lang[lang].values
+        ax.bar(by_lang.index, values, bottom=bottom, width=1.0,
+               color=lang_colors[lang], label=lang)
+        bottom += values
     ax.scatter(grouped["day"], grouped["impact"] / ajuste, color=impact_color, alpha=0.8)
 
     # una sola llamada para que adjust_text separe ambas anotaciones si los
@@ -255,6 +274,13 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
             f"mean tweets = {mean_tweets:,.1f}\nmean {indicator} = {mean_impact:,.1f}",
             color=COLOR_TEXTO, fontsize=9, va="top",
             bbox=dict(boxstyle="round", fc="white", ec=COLOR_TEXTO))
+
+    # leyenda de idiomas dentro de la gráfica, a la derecha, a la misma altura
+    # que el recuadro de medias
+    lang_legend = ax.legend(loc="upper right", bbox_to_anchor=(0.99, 0.97),
+                            fontsize=9, framealpha=0.9, edgecolor=COLOR_TEXTO)
+    for text in lang_legend.get_texts():
+        text.set_color(COLOR_TEXTO)
 
     ax.set_ylim(0, max_tweets * 1.5)
     ax.set_ylabel("Num. Original tweets per day")
