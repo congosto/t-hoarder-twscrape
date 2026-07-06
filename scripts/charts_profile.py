@@ -313,7 +313,7 @@ def tweets_by_language(df, ini_date, end_date, base_title, events=None):
 
     fig, ax = plt.subplots(figsize=(9, 5))
     for lang in lang_order:
-        ax.step(by_lang.index, by_lang[lang].values, where="post",
+        ax.plot(by_lang.index, by_lang[lang].values,
                 color=lang_colors[lang], linewidth=1.2, alpha=0.85, label=lang)
 
     # leyenda dentro de la gráfica, arriba a la derecha
