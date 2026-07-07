@@ -30,6 +30,23 @@ listan solo los datasets de historical_search; User TL y Charts > Users solo
 los de historical_timeline; el resto de secciones (RTs, Comments, Tools,
 Graphs) listan ambos.
 
+Contexto (log): cada dataset tiene un log de contexto append-only según su
+origen — {dataset}_search_context.csv (historical_search) o
+{dataset}_users_context.csv (historical_timeline). Dentro se anotan las
+operaciones según se producen, una fila por operación con una columna
+'operation' y la unión de campos:
+  download_tweets: last_date, since, until, query, product, frequency
+  download_users:  last_date, order, username, since, until, product, frequency
+  end_download:    date, total_tweets
+  merge_datasets:  date, merged_from, n_datasets, total_tweets
+  clean_dataset:   date, cleaned_from, langs, positives, false_positives,
+                   total_before, total_after
+Un dataset combinado o limpio hereda el log de su origen (sigue siendo search o
+users). Como es append-only, mergear/limpiar no pierde la historia ni necesita
+backups de contexto: solo añade una fila. La existencia del log es lo que hace
+que el dataset aparezca en las listas. (Los cursores de reanudación de RTs/replies
+—last_tweet_id— van en ficheros aparte {dataset}_RTs_context.csv / _replies_context.csv.)
+
 En la parte izquierda (20% del espacio): formulario de entrada de datos según la opción
 
 - Settings
@@ -116,9 +133,9 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     - Si el dataset destino ya existe (típicamente porque es uno de los que se
       unen), su versión anterior se guarda como {dest}_prev_<fecha>.csv antes
       de sobrescribirla, para no perderla
-    - Crea {dest}_merge_context.csv con la procedencia (de qué datasets viene,
-      nº de tweets, fecha); ese contexto hace además que el dataset combinado
-      aparezca en las listas de datasets (Graphs, Charts, RTs, etc.)
+    - Los datasets a unir deben ser del mismo tipo (todos search o todos users);
+      el combinado hereda ese tipo. Añade una operación merge_datasets al log de
+      contexto del destino (que hace además que aparezca en las listas de datasets)
 
   Clean dataset
     Dataset (prefix of the file with the original tweets; solo lista los
@@ -132,12 +149,12 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
       positivas, comparación insensible a mayúsculas y acentos) y lo guarda
       como {dest}.csv
     - Si el dataset destino ya existe (típicamente porque es el mismo que el
-      origen, limpieza in situ), antes de sobrescribir guarda su versión
-      anterior como {dest}_prev_<fecha>.csv y respalda su contexto anterior
-      (ficheros *_context.csv → *_context.csv.bak, para que no se listen)
-    - Crea {dest}_clean_context.csv con la procedencia (de qué dataset viene y
-      con qué criterios); ese contexto hace además que el dataset limpio
-      aparezca en las listas de datasets
+      origen, limpieza in situ), antes de sobrescribir guarda la versión anterior
+      de los tweets como {dest}_prev_<fecha>.csv (el contexto no se respalda: es
+      un log append-only y conserva la historia)
+    - El dataset limpio hereda el tipo (search/users) de su origen. Añade una
+      operación clean_dataset al log de contexto del destino (que hace además que
+      aparezca en las listas de datasets)
 
   Location
     Dataset (dataset con los tweets originales)

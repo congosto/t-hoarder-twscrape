@@ -183,20 +183,30 @@ def set_result_charts(figs, image_path):
     st.session_state.report_html = None
 
 
-# tipo de contexto -> sufijo del fichero que lo guarda
+# tipo de dataset -> sufijo del log de contexto (un dataset combinado/limpio
+# hereda el log de su origen, así que sigue siendo search o users)
 _PREFIX_KIND_SUFFIXES = {
     "search": "_search_context.csv",
     "users": "_users_context.csv",
-    "merge": "_merge_context.csv",
 }
-_ALL_KINDS = ("search", "users", "merge")
+_ALL_KINDS = ("search", "users")
+
+
+def _ensure_migrated(project_dir):
+    """Migra el contexto del proyecto al formato log una vez por sesión."""
+    migrated = st.session_state.setdefault("_migrated_projects", set())
+    key = str(project_dir)
+    if key not in migrated:
+        context.migrate_project(project_dir)
+        migrated.add(key)
 
 
 def project_prefixes(project_dir, kinds=_ALL_KINDS):
     """Datasets del proyecto, del más reciente al más antiguo (fecha del contexto).
 
-    kinds filtra por origen: 'search' (historical_search), 'users'
-    (historical_timeline) y/o 'merge' (datasets combinados en Tools)."""
+    kinds filtra por origen: 'search' (historical_search) y/o 'users'
+    (historical_timeline). Un dataset combinado/limpio hereda el tipo de su origen."""
+    _ensure_migrated(project_dir)
     suffixes = [_PREFIX_KIND_SUFFIXES[k] for k in kinds]
     files = sorted(
         (f for suffix in suffixes for f in project_dir.glob(f"*{suffix}")),
@@ -728,7 +738,7 @@ with left:
             else:
                 col_prefix, col_title = st.columns(2)
                 with col_prefix:
-                    tg_prefix = prefix_input("Dataset", "tg_prefix", kinds=("search", "merge"))
+                    tg_prefix = prefix_input("Dataset", "tg_prefix", kinds=("search",))
                 with col_title:
                     tg_title = st.text_input("Base title", key="tg_title")
 
@@ -818,7 +828,7 @@ with left:
             else:
                 col_prefix, col_username = st.columns(2)
                 with col_prefix:
-                    ug_prefix = prefix_input("Dataset", "ug_prefix", kinds=("users", "merge"))
+                    ug_prefix = prefix_input("Dataset", "ug_prefix", kinds=("users",))
                 with col_username:
                     ug_username = st.text_input("Username", key="ug_username").strip()
 

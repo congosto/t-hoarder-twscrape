@@ -104,7 +104,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
                 _write_csv(df, output_file, append)
                 append = True
 
-            context.put_context_search(
+            context.log_download_tweets(
                 output, prefix, max_date, original_since, original_until,
                 query=query, product=product, frequency=frequency,
             )
@@ -112,10 +112,13 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
                 log(f"Esperando {sleep_time} segundos antes de la próxima iteración...")
                 time.sleep(sleep_time)
 
+        total = 0
         if output_file.exists():
             df = pd.read_csv(output_file, encoding="utf-8")
             df = clean_tweets(df, original_since, original_until)
             df.to_csv(output_file, index=False, encoding="utf-8")
+            total = len(df)
+        context.log_end_download(output, prefix, "search", total)
 
         log("Descarga 'Historical Search' completada")
         return output_file
@@ -166,7 +169,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                     _write_csv(df, output_file, append)
                     append = True
 
-                context.put_context_user(
+                context.log_download_users(
                     output, prefix, max_date, order, user, original_since, original_until,
                     product=product, frequency=frequency,
                 )
@@ -174,10 +177,13 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                     log(f"Esperando {sleep_time} segundos antes de la próxima iteración...")
                     time.sleep(sleep_time)
 
+        total = 0
         if output_file.exists():
             df = pd.read_csv(output_file, encoding="utf-8")
             df = clean_tweets(df, original_since, original_until)
             df.to_csv(output_file, index=False, encoding="utf-8")
+            total = len(df)
+        context.log_end_download(output, prefix, "users", total)
 
         log("Descarga 'Historical Timeline' completada")
         return output_file

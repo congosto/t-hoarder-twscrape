@@ -54,6 +54,14 @@ def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print)
     if missing:
         raise FileNotFoundError(f"No existen en el proyecto: {', '.join(ds + '.csv' for ds in missing)}")
 
+    # el dataset combinado hereda el tipo (search/users) de sus orígenes: deben
+    # ser del mismo tipo, si no las operaciones de Charts no encajan
+    types = {context.dataset_log_type(project_dir, ds) for ds in datasets}
+    present = {t for t in types if t}
+    if len(present) > 1:
+        raise ValueError("No se pueden unir datasets de tipos distintos (search y users); une datasets del mismo tipo")
+    log_type = present.pop() if present else "search"
+
     dfs = {ds: pd.read_csv(p, encoding="utf-8") for ds, p in paths.items()}
     ref_ds, ref_df = next(iter(dfs.items()))
     ref_cols = set(ref_df.columns)
@@ -74,23 +82,15 @@ def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print)
     _backup_dataset(project_dir, dest, log=log)
     dest_path = project_dir / f"{dest}.csv"
     merged.to_csv(dest_path, index=False, encoding="utf-8")
-    context.put_context_merge(project_dir, dest, datasets, len(merged))
+    context.log_merge_datasets(project_dir, dest, log_type, datasets, len(merged))
     log(f"Dataset combinado '{dest}' en {dest_path.name} ({len(merged)} tweets, viene de: {', '.join(datasets)})")
     return dest_path
 
 
-# sufijos exactos de los ficheros de contexto de un dataset (para respaldarlos)
-_CONTEXT_SUFFIXES = [
-    "_search_context.csv", "_users_context.csv", "_merge_context.csv",
-    "_clean_context.csv", "_RTs_context.csv", "_replies_context.csv",
-    "_replies_advanced_context.csv",
-]
-
-
-def _backup_dataset(project_dir: Path, name: str, log=print, backup_contexts: bool = False) -> None:
+def _backup_dataset(project_dir: Path, name: str, log=print) -> None:
     """Si {name}.csv existe, guarda su versión anterior como {name}_prev_<fecha>.csv
-    antes de sobrescribirla. Con backup_contexts, respalda además los ficheros de
-    contexto del dataset (con extensión .bak, para que no se listen como datasets)."""
+    antes de sobrescribirla (para no perder los tweets anteriores). El contexto no se
+    respalda: es un log append-only y conserva la historia por sí mismo."""
     from datetime import datetime
 
     dest_path = project_dir / f"{name}.csv"
@@ -99,11 +99,6 @@ def _backup_dataset(project_dir: Path, name: str, log=print, backup_contexts: bo
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     dest_path.rename(project_dir / f"{name}_prev_{stamp}.csv")
     log(f"El dataset destino ya existía; versión anterior guardada como {name}_prev_{stamp}.csv")
-    if backup_contexts:
-        for suffix in _CONTEXT_SUFFIXES:
-            ctx = project_dir / f"{name}{suffix}"
-            if ctx.exists():
-                ctx.rename(project_dir / f"{name}_prev_{stamp}{suffix}.bak")
 
 
 def clean_dataset(project_dir: Path, source: str, dest: str,
@@ -151,14 +146,18 @@ def clean_dataset(project_dir: Path, source: str, dest: str,
             df = df[~text_normalized.str.contains(pattern, case=False, na=False, regex=True)]
             log(f"Tras excluir falsas positivas {false_positives}: {len(df)} tweets")
 
+    # el dataset limpio hereda el tipo (search/users) de su origen
+    log_type = context.dataset_log_type(project_dir, source) or "search"
+
     # el df ya está en memoria, así que se puede respaldar/sobrescribir el destino
-    # aunque sea el mismo fichero de origen (limpieza in situ)
-    _backup_dataset(project_dir, dest, log=log, backup_contexts=True)
+    # aunque sea el mismo fichero de origen (limpieza in situ); el contexto no se
+    # respalda, se le añade la operación clean_dataset y conserva la historia
+    _backup_dataset(project_dir, dest, log=log)
 
     output_path = project_dir / f"{dest}.csv"
     df.to_csv(output_path, index=False, encoding="utf-8")
-    context.put_context_clean(project_dir, dest, source, langs, positives, false_positives,
-                              total_before, len(df))
+    context.log_clean_dataset(project_dir, dest, log_type, source, langs, positives,
+                              false_positives, total_before, len(df))
     log(f"Dataset limpio '{dest}' en {output_path.name} ({total_before} -> {len(df)} tweets, viene de: {source})")
     return output_path
 
