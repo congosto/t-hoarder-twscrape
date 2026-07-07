@@ -898,23 +898,16 @@ with context_col:
 
     if st.session_state.active_project:
         project_dir = projects.select_project(st.session_state.active_project)
-        prefixes = sorted({
-            f.name[: -len("_search_context.csv")] for f in project_dir.glob("*_search_context.csv")
-        } | {
-            f.name[: -len("_users_context.csv")] for f in project_dir.glob("*_users_context.csv")
-        })
+        prefixes = project_prefixes(project_dir)
         if prefixes:
-            st.caption("Descargas con contexto guardado:")
+            st.caption("Datasets y su log de contexto:")
             for prefix in prefixes:
                 with st.expander(prefix):
-                    search_ctx = context.get_context_search_full(project_dir, prefix)
-                    if search_ctx:
-                        st.write("**Search**")
-                        st.json(search_ctx, expanded=False)
-                    users_ctx = context.get_context_user_full(project_dir, prefix)
-                    if users_ctx:
-                        st.write("**User TL**")
-                        st.json(users_ctx, expanded=False)
+                    log_df = context.get_log(project_dir, prefix)
+                    if log_df is not None and not log_df.empty:
+                        st.dataframe(log_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.caption("Sin operaciones registradas.")
 
 with right:
     st.markdown("### Resultados")

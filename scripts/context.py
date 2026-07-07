@@ -193,6 +193,20 @@ def get_context_user_range(dataset: Path, prefix: str) -> tuple[str, str] | None
     return row["since"], row["until"]
 
 
+def get_log(dataset: Path, prefix: str) -> pd.DataFrame | None:
+    """Log completo de operaciones del dataset (para mostrar en el panel de
+    Contexto), sin las columnas totalmente vacías. None si no tiene log."""
+    log_type = dataset_log_type(dataset, prefix)
+    if log_type is None:
+        return None
+    df = _read_log(dataset, prefix, log_type)
+    if df is None or df.empty:
+        return None
+    keep = [c for c in df.columns
+            if c == "operation" or (df[c].astype(str).str.strip() != "").any()]
+    return df[keep]
+
+
 def get_context_user_full(dataset: Path, prefix: str) -> dict | None:
     du = get_context_user(dataset, prefix)
     if du is None or du.empty:
