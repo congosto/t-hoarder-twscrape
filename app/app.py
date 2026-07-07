@@ -812,6 +812,16 @@ with left:
                 with col_rts:
                     tg_rts = st.number_input("Min RTs", min_value=0, value=1000, key="tg_rts")
 
+                col_comm_chk, col_comm_rel = st.columns([1, 2])
+                with col_comm_chk:
+                    tg_communities = st.checkbox("Show communities", key="tg_communities")
+                with col_comm_rel:
+                    tg_comm_relation = st.selectbox(
+                        "Communities relation", ["RT", "replies", "replies_advanced"],
+                        key="tg_comm_relation", disabled=not tg_communities,
+                        label_visibility="collapsed",
+                    )
+
                 col_topics_chk, col_topics_file = st.columns([1, 2])
                 with col_topics_chk:
                     tg_topics = st.checkbox("Show topics", key="tg_topics")
@@ -860,6 +870,7 @@ with left:
                                 min_reach=tg_reach, min_RTs=tg_rts,
                                 show_topics=tg_topics, topics_file=tg_topics_file,
                                 show_events=tg_events, events_file=tg_events_file,
+                                show_communities=tg_communities, communities_relation=tg_comm_relation,
                                 min_date_zoom=tg_zoom_min if tg_zoom else None,
                                 max_date_zoom=tg_zoom_max if tg_zoom else None,
                                 log=log,

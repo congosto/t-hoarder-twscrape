@@ -266,6 +266,14 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     Min reach | Min RTs  (misma fila; por defecto 10000 y 1000)
     (no hay campo para comments: la gráfica Comments vs RTs usa un umbral
     fijo de Comments >= 30, como el antiguo cuaderno R)
+    Show communities + Communities relation (misma fila; el desplegable
+      RT|replies|replies_advanced se deshabilita si Show communities no está
+      marcado): si se marca, lee el fichero clasificado
+      {dataset}_{relation}_classified.csv (en vez de {dataset}.csv) y añade las
+      gráficas por comunidad (Tweets by community y Most frequent words by
+      community). Falla con mensaje claro si no existen el clasificado o el
+      fichero de comunidades de esa relación (hay que generarlos antes en
+      Graphs > Detect communities y Classify tweets)
     Show topics + Topics file (misma fila; el fichero se deshabilita si Show topics no está marcado)
     Show events + Events file (misma fila; idem)
     Zoom (checkbox): si se marca, despliega Min date zoom / Max date zoom
@@ -275,7 +283,7 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     - "Generar gráfico de Tweets": genera y muestra en el panel de
       Resultados las gráficas de impacto (alcance, RTs e influencers, comments
       vs RTs), palabras frecuentes, menciones a medios, topics (si aplica) y
-      comunidades (si el dataset tiene ciclo ARS completo); guarda los PNG en
+      por comunidad (si Show communities está marcado); guarda los PNG en
       data/{project}/{dataset}_graficas/
     - "Generar informe HTML de Tweets": genera las mismas gráficas y las
       empaqueta en un informe HTML autocontenido (imágenes embebidas en

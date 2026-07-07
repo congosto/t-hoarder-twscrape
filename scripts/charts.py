@@ -11,19 +11,62 @@ import charts_profile as _charts_profile
 from utils_charts import savefig
 
 
-def _load_tweets(project_dir: Path, prefix: str):
-    classified_file = project_dir / f"{prefix}_classified.csv"
-    plain_file = project_dir / f"{prefix}.csv"
-    communities_name_file = project_dir / f"{prefix}_communities.csv"
+def _norm_community(series):
+    """Normaliza la comunidad a etiqueta str limpia ('0', '1'; None si está vacía),
+    para que casen los tipos entre los tweets clasificados y la tabla de comunidades."""
+    def one(c):
+        if pd.isna(c) or str(c).strip() in ("", "nan"):
+            return None
+        s = str(c).strip()
+        try:
+            return str(int(float(s)))
+        except ValueError:
+            return s
+    return series.map(one)
 
-    if classified_file.exists():
+
+def _build_communities_table(communities_file: Path, min_pct: float = 2.0):
+    """Tabla de comunidades para las gráficas por comunidad, a partir de
+    {prefix}_{relation}_communities.csv (community, pct_nodes): se queda con las
+    comunidades por encima de min_pct% y les asigna nombre y color (mismo criterio
+    de coloreado que el visor de grafos)."""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import to_hex
+
+    df = pd.read_csv(communities_file)
+    df["community"] = _norm_community(df["community"])
+    df = df.dropna(subset=["community"])
+    if "pct_nodes" in df.columns:
+        df = df[df["pct_nodes"] > min_pct].sort_values("pct_nodes", ascending=False)
+    df = df.reset_index(drop=True)
+    palette = plt.get_cmap("tab10" if len(df) <= 10 else "tab20")
+    df["name_community"] = df["community"].map(lambda c: f"Community {c}")
+    df["color"] = [to_hex(palette(i % palette.N)) for i in range(len(df))]
+    return df[["community", "name_community", "color"]]
+
+
+def _load_tweets(project_dir: Path, prefix: str, communities_relation: str | None = None):
+    """Carga los tweets del dataset. Si se indica communities_relation, lee el fichero
+    clasificado {prefix}_{relation}_classified.csv (que trae la columna 'community')
+    en vez de {prefix}.csv, y devuelve además la tabla de comunidades."""
+    if communities_relation:
+        classified_file = project_dir / f"{prefix}_{communities_relation}_classified.csv"
+        communities_file = project_dir / f"{prefix}_{communities_relation}_communities.csv"
+        if not classified_file.exists():
+            raise FileNotFoundError(
+                f"{classified_file.name} does not exist. Run Graphs > Classify tweets "
+                f"first for relation '{communities_relation}'.")
+        if not communities_file.exists():
+            raise FileNotFoundError(
+                f"{communities_file.name} does not exist. Run Graphs > Detect communities "
+                f"first for relation '{communities_relation}'.")
         tweets_file = classified_file
-        ars = True
-    elif plain_file.exists():
-        tweets_file = plain_file
-        ars = False
+        communities = _build_communities_table(communities_file)
     else:
-        raise FileNotFoundError(f"{plain_file} or {classified_file} does not exist")
+        tweets_file = project_dir / f"{prefix}.csv"
+        if not tweets_file.exists():
+            raise FileNotFoundError(f"{tweets_file} does not exist")
+        communities = None
 
     tweets = pd.read_csv(tweets_file)
     if "date" not in tweets.columns:
@@ -35,9 +78,9 @@ def _load_tweets(project_dir: Path, prefix: str):
         .sort_values("date")
         .reset_index(drop=True)
     )
-
-    communities = pd.read_csv(communities_name_file) if ars and communities_name_file.exists() else None
-    return tweets, ars, communities
+    if communities is not None and "community" in tweets.columns:
+        tweets["community"] = _norm_community(tweets["community"])
+    return tweets, communities
 
 
 def generate_tweet_charts(
@@ -51,6 +94,8 @@ def generate_tweet_charts(
     topics_file: str = "",
     show_events: bool = False,
     events_file: str = "",
+    show_communities: bool = False,
+    communities_relation: str = "RT",
     min_date_zoom: str | None = None,
     max_date_zoom: str | None = None,
     log=print,
@@ -60,13 +105,18 @@ def generate_tweet_charts(
     Si se indican min_date_zoom/max_date_zoom, las graficas se limitan a ese
     rango de fechas en vez de usar todo el periodo disponible.
 
+    Si show_communities, lee los tweets clasificados de communities_relation
+    (RT | replies | replies_advanced) en vez de {prefix}.csv y añade las gráficas
+    por comunidad (tweets_by_community y words_frequency_by_community).
+
     Devuelve (figs, image_path): figs es un dict {nombre: matplotlib.Figure},
     image_path es la carpeta donde se han guardado los PNG.
     """
     project_dir = Path(project_dir)
     slot_time = "1h"
 
-    tweets, ars, communities = _load_tweets(project_dir, prefix)
+    tweets, communities = _load_tweets(
+        project_dir, prefix, communities_relation if show_communities else None)
 
     image_path = project_dir / f"{prefix}_graficas"
     image_path.mkdir(exist_ok=True)
@@ -173,15 +223,16 @@ def generate_tweet_charts(
             f"{prefix}_topics_RTs.png",
         )
 
-    if ars and communities is not None:
+    if communities is not None and not communities.empty:
         add(
             "Most frequent words by community",
             _charts.words_frequency_by_community(tweets, communities, base_title),
+            f"{prefix}_{communities_relation}_words_by_community.png",
         )
         add(
             "Tweets by community",
             _charts.tweets_by_community(tweets, min_date, max_date, communities, base_title, events, slot_time),
-            f"{prefix}_tweets_by_communities.png",
+            f"{prefix}_{communities_relation}_tweets_by_community.png",
         )
 
     return figs, image_path
