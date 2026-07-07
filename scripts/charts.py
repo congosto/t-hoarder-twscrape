@@ -152,7 +152,8 @@ def generate_tweet_charts(
         "TheObjective_es", "eldebate_com", "publico_es", "elmundoes",
         "europapress", "ElHuffPost", "elespanolcom", "elconfidencial",
         "laSextaTV", "abc_es", "rtvenoticias", "OndaCero_es", "HoyPorHoy",
-        "okdiario", "voz_populi", "libertaddigital",
+        "okdiario", "voz_populi", "libertaddigital", "MalasLenguas_Tv",
+        "edatvoficial", "Hora25", "Lanoche_24h", "larazon_es", "gaceta_es",
     ]
     add(
         "Media mentions",

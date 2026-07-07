@@ -574,13 +574,29 @@ def draw_media_acumulate(df, ini_date, end_date, media, RTs, base_title, slot_ti
 
     fig, ax = plt.subplots(figsize=(10, 6))
     limit_y = counts["cumulative_sum"].max() if not counts.empty else 1
+    finals, colors = {}, {}
     for username in top_media:
         g = counts[counts["username"] == username]
-        ax.plot(g["date"], g["cumulative_sum"], marker="o", markersize=3, label=username)
-        last = g.iloc[-1]
-        ax.annotate(f"{username} ({last['cumulative_sum']:,.0f} ref.)",
-                     (last["date"], last["cumulative_sum"]), fontsize=8,
-                     xytext=(5, 0), textcoords="offset points", va="center")
+        line = ax.plot(g["date"], g["cumulative_sum"], marker="o", markersize=3, label=username)[0]
+        colors[username] = line.get_color()
+        finals[username] = (g["date"].iloc[-1], g["cumulative_sum"].iloc[-1])
+
+    # etiquetas al final de cada línea separadas verticalmente un mínimo para que
+    # no se solapen (con muchos medios de valores parecidos se pisaban); van del
+    # color de su línea, así se distinguen aunque se muevan
+    min_sep = limit_y * 0.03
+    label_y, prev = {}, None
+    for username in sorted(top_media, key=lambda u: finals[u][1]):
+        y = finals[username][1]
+        if prev is not None and y - prev < min_sep:
+            y = prev + min_sep
+        label_y[username] = y
+        prev = y
+    for username in top_media:
+        x_last, y_real = finals[username]
+        ax.annotate(f"{username} ({y_real:,.0f} ref.)", (x_last, label_y[username]),
+                    fontsize=8, xytext=(5, 0), textcoords="offset points",
+                    va="center", color=colors[username])
 
     apply_date_axis(ax, ini_date, end_date + expand_time(ini_date, end_date, 40))
     ax.set_ylim(0, limit_y * 1.3)
