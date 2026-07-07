@@ -155,6 +155,9 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     - El dataset limpio hereda el tipo (search/users) de su origen. Añade una
       operación clean_dataset al log de contexto del destino (que hace además que
       aparezca en las listas de datasets)
+    - En el panel de resultados muestra un resumen (tamaño antes → después,
+      nº y % de tweets eliminados) y la tabla de los tweets descartados
+      (los que no pasan el filtro), ordenados por RTs de mayor a menor
 
   Location
     Dataset (dataset con los tweets originales)

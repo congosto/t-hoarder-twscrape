@@ -103,7 +103,7 @@ def _backup_dataset(project_dir: Path, name: str, log=print) -> None:
 
 def clean_dataset(project_dir: Path, source: str, dest: str,
                   langs: list[str] | None = None, positives: list[str] | None = None,
-                  false_positives: list[str] | None = None, log=print) -> Path:
+                  false_positives: list[str] | None = None, log=print) -> tuple:
     """Filtra el dataset {source}.csv por idioma y/o palabras clave y lo guarda como
     {dest}.csv.
 
@@ -112,10 +112,12 @@ def clean_dataset(project_dir: Path, source: str, dest: str,
     (ej. 'sanchez' coincide con 'Sánchez').
 
     Si el dataset destino ya existe (típicamente porque es el mismo que el origen,
-    limpieza in situ), su versión anterior y su contexto se guardan antes de
-    sobrescribir. Además se crea {dest}_clean_context.csv con la procedencia
-    (de qué dataset viene y con qué criterios), que hace que el dataset limpio
-    aparezca en las listas de datasets.
+    limpieza in situ), su versión anterior se guarda antes de sobrescribir; al log
+    de contexto se le añade la operación clean_dataset (de qué dataset viene y con
+    qué criterios), que hace que el dataset limpio aparezca en las listas.
+
+    Devuelve (output_path, total_before, total_after, discarded_df): los tweets
+    descartados (los del origen que no pasan el filtro), ordenados por RTs.
     """
     import context
 
@@ -123,8 +125,9 @@ def clean_dataset(project_dir: Path, source: str, dest: str,
     if not input_file.exists():
         raise FileNotFoundError(f"No existe {input_file.name} en el proyecto")
 
-    df = pd.read_csv(input_file, encoding="utf-8")
-    total_before = len(df)
+    df_source = pd.read_csv(input_file, encoding="utf-8")
+    total_before = len(df_source)
+    df = df_source
 
     if langs:
         df = df[df["lang"].isin(langs)]
@@ -159,6 +162,13 @@ def clean_dataset(project_dir: Path, source: str, dest: str,
     context.log_clean_dataset(project_dir, dest, log_type, source, langs, positives,
                               false_positives, total_before, len(df))
     log(f"Dataset limpio '{dest}' en {output_path.name} ({total_before} -> {len(df)} tweets, viene de: {source})")
+
+    # tweets descartados: los del origen que no han pasado el filtro (los índices
+    # de un filtrado booleano se conservan, así que basta con la diferencia)
+    discarded = df_source.loc[df_source.index.difference(df.index)]
+    if "retweet_count" in discarded.columns:
+        discarded = discarded.sort_values("retweet_count", ascending=False)
+    return output_path, total_before, len(df), discarded
     return output_path
 
 

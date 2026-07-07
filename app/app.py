@@ -598,13 +598,18 @@ with left:
                         positives_list = [w.strip() for w in clean_positives.split(",") if w.strip()]
                         false_positives_list = [w.strip() for w in clean_false_positives.split(",") if w.strip()]
                         try:
-                            output_file = utils.clean_dataset(
+                            output_file, before, after, discarded = utils.clean_dataset(
                                 project_dir, clean_prefix, clean_dest,
                                 langs=langs_list, positives=positives_list,
                                 false_positives=false_positives_list, log=log,
                             )
+                            pct = round((before - after) / before * 100, 1) if before else 0.0
                             log(f"Resultado en {output_file}")
-                            set_result(output_file)
+                            set_result_df(
+                                discarded,
+                                f"'{clean_dest}': {before:,} → {after:,} tweets · "
+                                f"{pct}% eliminados ({before - after:,}). Tweets descartados:",
+                            )
                             # rerun para que el dataset limpio aparezca ya en las listas
                             st.rerun()
                         except FileNotFoundError as e:
