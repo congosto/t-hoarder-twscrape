@@ -228,6 +228,15 @@ _NEW_PREFIX_OPTION = "➕ nuevo dataset..."
 _DATA_EXTS = (".csv", ".gdf", ".gexf", ".txt", ".tsv", ".json")
 
 
+def _backup_label(path):
+    """Etiqueta legible de un backup {name}_prev_<YYYYMMDD-HHMMSS>.csv: fecha + tamaño."""
+    import re
+    m = re.search(r"_prev_(\d{8})-(\d{6})\.csv$", path.name)
+    fecha = f"{m.group(1)[:4]}-{m.group(1)[4:6]}-{m.group(1)[6:]} {m.group(2)[:2]}:{m.group(2)[2:4]}:{m.group(2)[4:]}" if m else path.name
+    mb = path.stat().st_size / (1024 * 1024)
+    return f"{fecha} · {mb:.1f} MB"
+
+
 def _strip_extension(name):
     """El dataset es el prefijo de los ficheros, sin extensión: si el usuario
     escribe 'panas.csv' se queda 'panas' (evita generar 'panas.csv.csv')."""
@@ -537,7 +546,7 @@ with left:
                         log_error(f"no existe {acm_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
 
     elif section == "Tools":
-        tab1, tab2, tab3 = st.tabs(["Merge datasets", "Clean dataset", "Location"])
+        tab1, tab2, tab3, tab4 = st.tabs(["Merge datasets", "Clean dataset", "Restore dataset", "Location"])
         with tab1:
             if not st.session_state.active_project:
                 st.write("Selecciona o crea un proyecto en 'Project' antes de unir datasets.")
@@ -615,6 +624,33 @@ with left:
                         except FileNotFoundError as e:
                             log_error(str(e))
         with tab3:
+            if not st.session_state.active_project:
+                st.write("Selecciona o crea un proyecto en 'Project' antes de restaurar datasets.")
+            else:
+                project_dir = projects.select_project(st.session_state.active_project)
+                restorable = utils.datasets_with_backups(project_dir)
+                if not restorable:
+                    st.write("No hay datasets con versiones anteriores. Se generan al combinar, "
+                             "limpiar o restaurar un dataset (ficheros {dataset}_prev_<fecha>.csv).")
+                else:
+                    rst_dataset = st.selectbox("Dataset", restorable, key="rst_dataset")
+                    backups = utils.dataset_backups(project_dir, rst_dataset)
+                    labels = {_backup_label(f): f.name for f in backups}
+                    rst_choice = st.selectbox("Version to restore (previous versions, newest first)",
+                                              list(labels.keys()), key="rst_version")
+                    st.caption("Restaurar sustituye el dataset actual por esa versión anterior "
+                               "(el actual se guarda antes como nuevo _prev_, así que es reversible).")
+                    if st.button("Restore dataset"):
+                        try:
+                            path, total = utils.restore_dataset(
+                                project_dir, rst_dataset, labels[rst_choice], log=log
+                            )
+                            log(f"Restaurado {path.name} ({total} tweets)")
+                            set_result(path)
+                            st.rerun()
+                        except FileNotFoundError as e:
+                            log_error(str(e))
+        with tab4:
             if not st.session_state.active_project:
                 st.write("Selecciona o crea un proyecto en 'Project' antes de extraer localizaciones.")
             else:

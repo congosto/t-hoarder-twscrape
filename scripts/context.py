@@ -27,6 +27,7 @@ _LOG_COLUMNS = [
     "operation", "last_date", "since", "until", "query", "product", "frequency",
     "order", "username", "date", "total_tweets", "merged_from", "n_datasets",
     "cleaned_from", "langs", "positives", "false_positives", "total_before", "total_after",
+    "restored_from",
 ]
 
 
@@ -136,6 +137,14 @@ def log_clean_dataset(dataset, prefix, log_type, source, langs, positives,
 
 
 # ── Tipo de log de un dataset (search / users) ───────────────────────────────
+
+def log_restore_dataset(dataset, prefix, log_type, restored_from, total_tweets) -> None:
+    _record(dataset, prefix, log_type, {
+        "operation": "restore_dataset",
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "restored_from": restored_from, "total_tweets": str(total_tweets),
+    })
+
 
 def dataset_log_type(dataset: Path, prefix: str) -> str | None:
     if _ctx_path(dataset, prefix, "search").exists():

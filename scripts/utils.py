@@ -1,8 +1,47 @@
 import re
+import shutil
 import unicodedata
 from pathlib import Path
 
 import pandas as pd
+
+# backups de tweets creados por merge/clean/restore: {name}_prev_<YYYYMMDD-HHMMSS>.csv
+_BACKUP_RE = re.compile(r"^(?P<name>.+)_prev_(?P<stamp>\d{8}-\d{6})\.csv$")
+
+
+def datasets_with_backups(project_dir: Path) -> list[str]:
+    """Nombres de datasets que tienen alguna versión anterior (_prev_) restaurable."""
+    names = {m.group("name") for f in project_dir.glob("*_prev_*.csv")
+             if (m := _BACKUP_RE.match(f.name))}
+    return sorted(names)
+
+
+def dataset_backups(project_dir: Path, name: str) -> list[Path]:
+    """Backups _prev_ de un dataset, del más reciente al más antiguo."""
+    files = [f for f in project_dir.glob(f"{name}_prev_*.csv")
+             if (m := _BACKUP_RE.match(f.name)) and m.group("name") == name]
+    return sorted(files, key=lambda f: f.name, reverse=True)
+
+
+def restore_dataset(project_dir: Path, name: str, backup_filename: str, log=print) -> tuple:
+    """Restaura {name}.csv desde uno de sus backups _prev_. Antes respalda el actual
+    (restore reversible) y anota la operación restore_dataset en el log de contexto.
+    Devuelve (path, total_tweets)."""
+    import context
+
+    backup = project_dir / backup_filename
+    if not backup.exists():
+        raise FileNotFoundError(f"No existe el backup {backup_filename}")
+
+    _backup_dataset(project_dir, name, log=log)  # respalda el actual si existe
+    current = project_dir / f"{name}.csv"
+    shutil.copy(backup, current)
+    total = len(pd.read_csv(current, encoding="utf-8"))
+
+    log_type = context.dataset_log_type(project_dir, name) or "search"
+    context.log_restore_dataset(project_dir, name, log_type, backup_filename, total)
+    log(f"Dataset '{name}' restaurado desde {backup_filename} ({total} tweets)")
+    return current, total
 
 _NEWLINES = re.compile(r"[\n\r]+")
 

@@ -121,7 +121,7 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
 
 - Tools
 
-  Merge datasets | Clean data | Location
+  Merge datasets | Clean dataset | Restore dataset | Location
 
   Merge datasets
     Datasets to merge (must be in the active project) (selección múltiple;
@@ -158,6 +158,17 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     - En el panel de resultados muestra un resumen (tamaño antes → después,
       nº y % de tweets eliminados) y la tabla de los tweets descartados
       (los que no pasan el filtro), ordenados por RTs de mayor a menor
+
+  Restore dataset
+    Dataset (solo lista los datasets que tienen alguna versión anterior; las
+      versiones anteriores {dataset}_prev_<fecha>.csv las generan Merge, Clean
+      y el propio Restore al sobrescribir un dataset)
+    Version to restore (desplegable con las versiones anteriores, de más reciente
+      a más antigua, mostrando fecha y tamaño)
+    Botón "Restore dataset":
+    - Sustituye {dataset}.csv por la versión anterior elegida; antes guarda el
+      actual como un nuevo {dataset}_prev_<fecha>.csv, así que es reversible
+    - Anota la operación restore_dataset (restored_from, total_tweets) en el log
 
   Location
     Dataset (dataset con los tweets originales)
