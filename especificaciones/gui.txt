@@ -1,7 +1,7 @@
 Prototipo visual
 
 Parte superior:
-logo de la app (logo_t-hoarder.png) nombre de la app (t-hoarder-twscraper)
+logo de la app (logo_t-hoarder.png) nombre de la app (t-hoarder-twscrape)
 un separador de zona
 
 una lista de botones horizontales con las siguientes funciones
@@ -16,14 +16,17 @@ una lista de botones horizontales con las siguientes funciones
 (Settings va la última: es la que menos se usa una vez configuradas las
 cuentas. Al arrancar, la sección seleccionada por defecto es Project.)
 
-Entradas de Prefix (común a todas las secciones): con un proyecto activo,
-el Prefix es un desplegable con los prefixes existentes en el proyecto,
-ordenados del más reciente al más antiguo (fecha del fichero de contexto),
-con el más reciente preseleccionado — así se trabaja por defecto con lo
-último. En Search y User TL el desplegable incluye además la opción
-"➕ nuevo prefix...", que despliega un campo de texto para escribirlo; en el
-resto de secciones el prefix tiene que existir. Search y Charts > Tweets
-listan solo los prefixes de historical_search; User TL y Charts > Users solo
+Entradas de Dataset (común a todas las secciones): un dataset es el nombre
+(prefijo, sin extensión) del conjunto de ficheros de una descarga —
+{dataset}.csv, {dataset}_RTs.csv, {dataset}_loc.csv, etc. Con un proyecto
+activo, el Dataset es un desplegable con los datasets existentes en el
+proyecto, ordenados del más reciente al más antiguo (fecha del fichero de
+contexto), con el más reciente preseleccionado — así se trabaja por defecto
+con lo último. En Search y User TL el desplegable incluye además la opción
+"➕ nuevo dataset...", que despliega un campo de texto para escribirlo (si se
+escribe con extensión .csv/.gdf/… se ignora, el dataset no lleva extensión);
+en el resto de secciones el dataset tiene que existir. Search y Charts > Tweets
+listan solo los datasets de historical_search; User TL y Charts > Users solo
 los de historical_timeline; el resto de secciones (RTs, Comments, Tools,
 Graphs) listan ambos.
 
@@ -69,8 +72,8 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
   Search | User TL | Retweets | Comments | Advanced Comments
 
   Search
-    Prefix (File prefix for results)
-    Botón "Cargar contexto": si el Prefix ya tiene una descarga previa, rellena
+    Dataset (nombre del dataset, sin extensión)
+    Botón "Cargar contexto": si el Dataset ya tiene una descarga previa, rellena
       Query/Product/From/To/Frequency con lo guardado; si no tiene contexto,
       limpia esos campos a sus valores por defecto
     Query (Twitter query, supports advanced queries)
@@ -79,7 +82,7 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     To (End date of tweets YYYY-mm-dd HH:MM:SS)
     Frequency (Interval min | hour | day | week | month | year)
   User TL
-    Prefix (File prefix for results)
+    Dataset (nombre del dataset, sin extensión)
     Botón "Cargar contexto": igual que en Search, pero rellena/limpia
       Users list/From/Product/To/Frequency
     Username(s) (uno o varios usuarios)
@@ -88,13 +91,13 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     To (End date of tweets YYYY-mm-dd HH:MM:SS)
     Frequency (Sampling frequency - min | hour | day | week | month | year)
   Retweets
-    Prefix (Prefix of the file containing the original tweets)
+    Dataset (dataset con los tweets originales)
     Min RTs (Minimum number of RTs required to download RTs)
   Comments
-    Prefix (Prefix of the file containing the original tweets)
+    Dataset (dataset con los tweets originales)
     Min Replies (Minimum number of comments required to download)
   Advanced Comments
-    Prefix (Prefix of the file containing the original tweets)
+    Dataset (dataset con los tweets originales)
     Min Replies (Minimum number of comments required to download)
     Last (Number of days since the tweet date)
     Frequency (Interval: min | hour | day | week | month | year)
@@ -108,50 +111,50 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     Output file
 
   Clean data
-    Prefix (Prefix of the file with the original tweets)
+    Dataset (dataset con los tweets originales)
     Positives (List of included words)
     False positives (List of excluded words)
     Output file
 
   Location
-    Prefix (Prefix of the file with the original tweets)
+    Dataset (dataset con los tweets originales)
     acciones:
-    - Geocodifica de forma offline (geonamescache) la localización declarada en el perfil de cada usuario presente en {prefix}.csv
+    - Geocodifica de forma offline (geonamescache) la localización declarada en el perfil de cada usuario presente en {dataset}.csv
     - Identifica país, y si es España, también la Comunidad Autónoma, y ciudad
     resultados:
-    - {prefix}_loc.csv con columnas: username, location, country, region, city
+    - {dataset}_loc.csv con columnas: username, location, country, region, city
 
 - Graphs
 
   Detect communities | Generate graph | Classify tweets | Visualize graph
 
   Detect communities
-    Prefix (Prefix of the file with comments or RTs)
+    Dataset (dataset con comentarios o RTs)
     Relation (RT | replies | replies_advanced)
     acciones:
     - Construye el grafo dirigido y ponderado de la relación elegida (RT, replies o replies_advanced) y se queda con el componente gigante
     - Calcula el in-degree y out-degree ponderados de cada usuario
     - Detecta comunidades (algoritmo de Louvain/Blondel). El resultado no es determinista: cada ejecución puede dar comunidades distintas, por eso se persiste en disco y no se recalcula en los siguientes pasos
     resultados:
-    - {prefix}_{relation}_communities.csv: tabla de comunidades (community, pct_nodes), ordenada de mayor a menor tamaño
-    - {prefix}_users_{relation}_communities.csv: comunidad de cada usuario (user, community, weight_indegree, weight_outdegree), ordenada por indegree
+    - {dataset}_{relation}_communities.csv: tabla de comunidades (community, pct_nodes), ordenada de mayor a menor tamaño
+    - {dataset}_users_{relation}_communities.csv: comunidad de cada usuario (user, community, weight_indegree, weight_outdegree), ordenada por indegree
 
   Generate graph
-    Prefix (Prefix of the file with comments or RTs)
+    Dataset (dataset con comentarios o RTs)
     Relation (RT | replies | replies_advanced)
     Format (gdf | gexf)
-    Include communities (checkbox, usa {prefix}_users_{relation}_communities.csv generado en Detect communities)
-    Include locations (checkbox, usa {prefix}_loc.csv generado en Tools > Location)
+    Include communities (checkbox, usa {dataset}_users_{relation}_communities.csv generado en Detect communities)
+    Include locations (checkbox, usa {dataset}_loc.csv generado en Tools > Location)
     resultados:
-    - {prefix}_{relation}.gdf o {prefix}_{relation}.gexf, listo para abrir en Gephi o para Visualize graph
+    - {dataset}_{relation}.gdf o {dataset}_{relation}.gexf, listo para abrir en Gephi o para Visualize graph
 
   Classify tweets
-    Prefix (Prefix of the file with the original tweets)
+    Dataset (dataset con los tweets originales)
     Relation (RT | replies | replies_advanced)
     acciones:
-    - Cruza {prefix}.csv con {prefix}_users_{relation}_communities.csv para asignar la comunidad del autor a cada tweet
+    - Cruza {dataset}.csv con {dataset}_users_{relation}_communities.csv para asignar la comunidad del autor a cada tweet
     resultados:
-    - {prefix}_{relation}_classified.csv
+    - {dataset}_{relation}_classified.csv
 
   Visualize graph
     Select graph (lista de ficheros .gdf/.gexf del proyecto)
@@ -199,7 +202,7 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
   Tweets | Users
 
   Tweet Graphs
-    Prefix | Base title  (misma fila)
+    Dataset | Base title  (misma fila)
     Time zone (desplegable: Europe/Berlin (por defecto) | America/Chicago | America/Caracas)
     Texto "Show influencers with values equal or higher" y debajo,
     Min reach | Min RTs  (misma fila; por defecto 10000 y 1000)
@@ -215,17 +218,17 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
       Resultados las gráficas de impacto (alcance, RTs e influencers, comments
       vs RTs), palabras frecuentes, menciones a medios, topics (si aplica) y
       comunidades (si el dataset tiene ciclo ARS completo); guarda los PNG en
-      data/{project}/{prefix}_graficas/
+      data/{project}/{dataset}_graficas/
     - "Generar informe HTML de Tweets": genera las mismas gráficas y las
       empaqueta en un informe HTML autocontenido (imágenes embebidas en
       base64, un único fichero compartible) con cabecera (título, dataset,
       fecha), índice con enlaces y una sección por gráfica; se guarda en
-      data/{project}/{prefix}_informe_tweets.html, se muestra embebido en el
+      data/{project}/{dataset}_informe_tweets.html, se muestra embebido en el
       panel de resultados con un botón para descargarlo
     (Show users se quitó del formulario: ya no genera la gráfica "por usuario")
 
   User Graphs
-    Prefix | Username  (misma fila)
+    Dataset | Username  (misma fila)
     Base title
     Time zone (mismo desplegable que en Tweets)
     Show topics + Topics file (misma fila, igual que en Tweets)
@@ -247,7 +250,7 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
       retweets) y topics (si aplica)
     - "Generar informe HTML de Usuario": igual que el informe de Tweets pero
       con las gráficas de usuario; se guarda en
-      data/{project}/{prefix}_{username}_informe_usuario.html
+      data/{project}/{dataset}_{username}_informe_usuario.html
 
 La parte central (60% del espacio) pasa a ser solo de resultados:
     Botón "Borrar resultados": visible siempre que haya algo que mostrar (error,
@@ -259,14 +262,14 @@ La parte central (60% del espacio) pasa a ser solo de resultados:
       visor interactivo del grafo (con botón "Descargar PNG" dentro del propio
       visor), o vista previa del fichero generado
       (tabla para CSV -ancho automático si el CSV tiene 3 columnas o menos,
-      por ejemplo {prefix}_communities.csv-, primeras 50 líneas en texto para
+      por ejemplo {dataset}_communities.csv-, primeras 50 líneas en texto para
       otros formatos como .gdf/.gexf)
 
 La parte derecha (20% del espacio) es de Contexto/Ayuda:
     Cuentas activas (primero)
     Proyecto activo
     Si hay un proyecto activo: lista desplegable "Descargas con contexto
-      guardado", una entrada por Prefix con contexto, expandible para ver el
+      guardado", una entrada por Dataset con contexto, expandible para ver el
       detalle (query/users, product, since, until, frequency) de Search y/o
       User TL
 
@@ -293,7 +296,7 @@ Notas de implementación:
 - El contexto de las descargas (scripts/context.py) guarda, además
   de las fechas, la query/lista de usuarios, el product y la frequency
   originales, para poder reconstruir el formulario completo con el botón
-  "Cargar contexto" al reutilizar un Prefix.
+  "Cargar contexto" al reutilizar un Dataset.
 - "Desactivar proyecto" (scripts/projects.py) mueve la carpeta del
   proyecto a data/desactivated/{project} en vez de borrarla.
 - Se evaluó una sección "Contents" (Detect entities | Detect frames | Detect sentiment) para análisis de texto de los tweets. Se implementó y se probó (NER con spaCy, diccionarios propios, sentimiento con pysentimiento) pero se eliminó por completo: cada proyecto necesita su propio diccionario hecho a mano, y esa elaboración manual de diccionarios no encajaba en el flujo de la app.

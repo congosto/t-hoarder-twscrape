@@ -1,4 +1,4 @@
-"""Interfaz de t-hoarder-twscraper. Settings>New Account y Download>Search ya están conectados a scripts reales."""
+"""Interfaz de t-hoarder-twscrape. Settings>New Account y Download>Search ya están conectados a scripts reales."""
 
 import sys
 from pathlib import Path
@@ -49,7 +49,7 @@ def parse_users_list(text: str) -> tuple[list[str], str | None]:
         return [], f"Error: no incluyas '@' en los usuarios ({', '.join(with_at)})"
     return users, None
 
-st.set_page_config(page_title="t-hoarder-twscraper", layout="wide")
+st.set_page_config(page_title="t-hoarder-twscrape", layout="wide")
 
 LOGO_PATH = "../especificaciones/logo_t-hoarder.png"
 
@@ -73,7 +73,7 @@ with header_col1:
     except Exception:
         st.write("🐦")
 with header_col2:
-    st.markdown("## t-hoarder-twscraper")
+    st.markdown("## t-hoarder-twscrape")
 
 # ---------- Barra de navegación horizontal ----------
 nav_cols = st.columns(len(SECTIONS))
@@ -210,29 +210,53 @@ def project_prefixes(project_dir, kinds=("search", "users")):
     return prefixes
 
 
-_NEW_PREFIX_OPTION = "➕ nuevo prefix..."
+_NEW_PREFIX_OPTION = "➕ nuevo dataset..."
+
+
+_DATA_EXTS = (".csv", ".gdf", ".gexf", ".txt", ".tsv", ".json")
+
+
+def _strip_extension(name):
+    """El dataset es el prefijo de los ficheros, sin extensión: si el usuario
+    escribe 'panas.csv' se queda 'panas' (evita generar 'panas.csv.csv')."""
+    low = name.lower()
+    for ext in _DATA_EXTS:
+        if low.endswith(ext):
+            return name[: -len(ext)]
+    return name
+
+
+def _new_dataset_input(key):
+    """Campo de texto para un dataset nuevo, quitándole la extensión si la lleva."""
+    raw = st.text_input("Nuevo dataset", key=f"{key}_new").strip()
+    name = _strip_extension(raw)
+    if name != raw:
+        st.caption(f"El dataset no lleva extensión: se usará «{name}».")
+    return name
 
 
 def prefix_input(label, key, allow_new=False, kinds=("search", "users")):
-    """Entrada de Prefix como desplegable con los prefixes del proyecto activo,
+    """Entrada de Dataset como desplegable con los datasets del proyecto activo,
     el más reciente preseleccionado (así se trabaja por defecto con lo último).
 
+    Un dataset es el prefijo (sin extensión) de los ficheros que produce; los
+    ficheros derivados son {dataset}.csv, {dataset}_RTs.csv, etc.
     Con allow_new (Search y User TL) el desplegable incluye la opción de crear
-    un prefix nuevo, que despliega un campo de texto. En el resto de casos el
-    prefix tiene que existir. Sin proyecto activo, campo de texto plano.
-    kinds limita el origen de los prefixes listados (ver project_prefixes).
+    un dataset nuevo, que despliega un campo de texto. En el resto de casos el
+    dataset tiene que existir. Sin proyecto activo, campo de texto plano.
+    kinds limita el origen de los datasets listados (ver project_prefixes).
     """
     if not st.session_state.active_project:
-        return st.text_input(label, key=f"{key}_txt").strip()
+        return _strip_extension(st.text_input(label, key=f"{key}_txt").strip())
     options = project_prefixes(projects.select_project(st.session_state.active_project), kinds=kinds)
     if allow_new:
         options = options + [_NEW_PREFIX_OPTION]
     if not options:
-        st.caption("No hay ningún prefix en este proyecto todavía.")
+        st.caption("No hay ningún dataset en este proyecto todavía.")
         return ""
     choice = st.selectbox(label, options, key=f"{key}_sel")
     if choice == _NEW_PREFIX_OPTION:
-        return st.text_input("Nuevo prefix", key=f"{key}_new").strip()
+        return _new_dataset_input(key)
     return choice or ""
 
 
@@ -329,10 +353,10 @@ with left:
     elif section == "Download":
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["Search", "User TL", "Retweets", "Comments", "Advanced Comments"])
         with tab1:
-            search_prefix = prefix_input("Prefix", "search_prefix", allow_new=True, kinds=("search",))
+            search_prefix = prefix_input("Dataset", "search_prefix", allow_new=True, kinds=("search",))
             if st.button("Cargar contexto", key="search_load_ctx"):
                 if not search_prefix:
-                    log_error("escribe el Prefix antes de cargar el contexto")
+                    log_error("escribe el Dataset antes de cargar el contexto")
                 elif not st.session_state.active_project:
                     log_error("selecciona o crea un proyecto antes de cargar el contexto")
                 else:
@@ -382,10 +406,10 @@ with left:
                     log(f"Resultado en {output_file}")
                     set_result(output_file)
         with tab2:
-            utl_prefix = prefix_input("Prefix", "utl_prefix", allow_new=True, kinds=("users",))
+            utl_prefix = prefix_input("Dataset", "utl_prefix", allow_new=True, kinds=("users",))
             if st.button("Cargar contexto", key="utl_load_ctx"):
                 if not utl_prefix:
-                    log_error("escribe el Prefix antes de cargar el contexto")
+                    log_error("escribe el Dataset antes de cargar el contexto")
                 elif not st.session_state.active_project:
                     log_error("selecciona o crea un proyecto antes de cargar el contexto")
                 else:
@@ -440,13 +464,13 @@ with left:
                     log(f"Resultado en {output_file}")
                     set_result(output_file)
         with tab3:
-            rt_prefix = prefix_input("Prefix", "rt_prefix")
+            rt_prefix = prefix_input("Dataset", "rt_prefix")
             rt_min = st.number_input("Min RTs", min_value=0, value=1, key="rt_min")
             if st.button("Lanzar descarga RTs"):
                 if not st.session_state.active_project:
                     log_error("selecciona o crea un proyecto antes de descargar")
                 elif not rt_prefix:
-                    log_error("escribe el Prefix del fichero con los tweets originales")
+                    log_error("escribe el Dataset del fichero con los tweets originales")
                 else:
                     log(f"Lanzando get_retweets (min_rts={int(rt_min)})")
                     try:
@@ -459,13 +483,13 @@ with left:
                     except FileNotFoundError:
                         log_error(f"no existe {rt_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
         with tab4:
-            cm_prefix = prefix_input("Prefix", "cm_prefix")
+            cm_prefix = prefix_input("Dataset", "cm_prefix")
             cm_min = st.number_input("Min Replies", min_value=0, value=1, key="cm_min")
             if st.button("Lanzar descarga comentarios"):
                 if not st.session_state.active_project:
                     log_error("selecciona o crea un proyecto antes de descargar")
                 elif not cm_prefix:
-                    log_error("escribe el Prefix del fichero con los tweets originales")
+                    log_error("escribe el Dataset del fichero con los tweets originales")
                 else:
                     log(f"Lanzando get_replies (min_replies={int(cm_min)})")
                     try:
@@ -478,7 +502,7 @@ with left:
                     except FileNotFoundError:
                         log_error(f"no existe {cm_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
         with tab5:
-            acm_prefix = prefix_input("Prefix", "acm_prefix")
+            acm_prefix = prefix_input("Dataset", "acm_prefix")
             acm_min = st.number_input("Min Replies", min_value=0, value=1, key="acm_min")
             acm_last = st.number_input("Last (días)", min_value=0, value=1, key="acm_last")
             acm_freq = frequency_input("acm")
@@ -486,7 +510,7 @@ with left:
                 if not st.session_state.active_project:
                     log_error("selecciona o crea un proyecto antes de descargar")
                 elif not acm_prefix:
-                    log_error("escribe el Prefix del fichero con los tweets originales")
+                    log_error("escribe el Dataset del fichero con los tweets originales")
                 else:
                     log(f"Lanzando get_replies_advanced (frequency={acm_freq})")
                     try:
@@ -533,7 +557,7 @@ with left:
             if not st.session_state.active_project:
                 st.write("Selecciona o crea un proyecto en 'Project' antes de limpiar datos.")
             else:
-                clean_prefix = prefix_input("Prefix (prefijo del fichero con los tweets originales)", "clean_prefix")
+                clean_prefix = prefix_input("Dataset (prefijo del fichero con los tweets originales)", "clean_prefix")
                 clean_langs_text = st.text_input(
                     "Languages (idiomas a conservar, separados por comas, ej. es,ca; vacío = no filtra)",
                     key="clean_langs_text",
@@ -549,7 +573,7 @@ with left:
                 clean_out = st.text_input("Output file", key="clean_out")
                 if st.button("Limpiar datos"):
                     if not clean_prefix:
-                        log_error("escribe el Prefix del fichero a limpiar")
+                        log_error("escribe el Dataset del fichero a limpiar")
                     elif not clean_out:
                         log_error("escribe un nombre de fichero de salida")
                     else:
@@ -572,12 +596,12 @@ with left:
                 st.write("Selecciona o crea un proyecto en 'Project' antes de extraer localizaciones.")
             else:
                 loc_prefix = prefix_input(
-                    "Prefix (prefijo del fichero con los tweets originales; genera {prefix}_loc.csv)",
+                    "Dataset (prefijo del fichero con los tweets originales; genera {dataset}_loc.csv)",
                     "loc_prefix",
                 )
                 if st.button("Extraer localización"):
                     if not loc_prefix:
-                        log_error("escribe el Prefix")
+                        log_error("escribe el Dataset")
                     else:
                         project_dir = projects.select_project(st.session_state.active_project)
                         try:
@@ -598,13 +622,13 @@ with left:
                 ["Detect communities", "Generate graph", "Classify tweets", "Visualize graph"]
             )
             with tab1:
-                dc_prefix = prefix_input("Prefix", "dc_prefix")
+                dc_prefix = prefix_input("Dataset", "dc_prefix")
                 dc_relation = st.selectbox(
                     "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="dc_relation"
                 )
                 if st.button("Detectar comunidades"):
                     if not dc_prefix:
-                        log_error("escribe el Prefix")
+                        log_error("escribe el Dataset")
                     else:
                         try:
                             communities_file, users_file = graphs_mod.detect_communities(
@@ -614,7 +638,7 @@ with left:
                         except FileNotFoundError as e:
                             log_error(str(e))
             with tab2:
-                gg_prefix = prefix_input("Prefix", "gg_prefix")
+                gg_prefix = prefix_input("Dataset", "gg_prefix")
                 gg_relation = st.selectbox(
                     "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="gg_relation"
                 )
@@ -629,7 +653,7 @@ with left:
                 )
                 if st.button("Generar grafo"):
                     if not gg_prefix:
-                        log_error("escribe el Prefix")
+                        log_error("escribe el Dataset")
                     else:
                         try:
                             graph_file = graphs_mod.generate_graph(
@@ -642,13 +666,13 @@ with left:
                         except FileNotFoundError as e:
                             log_error(str(e))
             with tab3:
-                ct_prefix = prefix_input("Prefix", "ct_prefix")
+                ct_prefix = prefix_input("Dataset", "ct_prefix")
                 ct_relation = st.selectbox(
                     "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="ct_relation"
                 )
                 if st.button("Clasificar tweets"):
                     if not ct_prefix:
-                        log_error("escribe el Prefix")
+                        log_error("escribe el Dataset")
                     else:
                         try:
                             classified_file = graphs_mod.classify_tweets(
@@ -696,7 +720,7 @@ with left:
             else:
                 col_prefix, col_title = st.columns(2)
                 with col_prefix:
-                    tg_prefix = prefix_input("Prefix", "tg_prefix", kinds=("search",))
+                    tg_prefix = prefix_input("Dataset", "tg_prefix", kinds=("search",))
                 with col_title:
                     tg_title = st.text_input("Base title", key="tg_title")
 
@@ -747,7 +771,7 @@ with left:
                 tg_do_report = col_btn_report.button("Generar informe HTML de Tweets")
                 if tg_do_charts or tg_do_report:
                     if not tg_prefix:
-                        log_error("escribe el Prefix")
+                        log_error("escribe el Dataset")
                     elif tg_zoom and (not tg_zoom_min.strip() or not tg_zoom_max.strip()):
                         log_error("rellena 'Min date zoom' y 'Max date zoom' o desmarca 'Zoom'")
                     else:
@@ -786,7 +810,7 @@ with left:
             else:
                 col_prefix, col_username = st.columns(2)
                 with col_prefix:
-                    ug_prefix = prefix_input("Prefix", "ug_prefix", kinds=("users",))
+                    ug_prefix = prefix_input("Dataset", "ug_prefix", kinds=("users",))
                 with col_username:
                     ug_username = st.text_input("Username", key="ug_username").strip()
 
@@ -818,7 +842,7 @@ with left:
                 ug_do_report = col_btn_report.button("Generar informe HTML de Usuario")
                 if ug_do_charts or ug_do_report:
                     if not ug_prefix or not ug_username:
-                        log_error("escribe el Prefix y el Username")
+                        log_error("escribe el Dataset y el Username")
                     else:
                         try:
                             import charts as charts_mod

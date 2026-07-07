@@ -1,5 +1,5 @@
 """graphs.py — grafos de relaciones (RT / replies) con detección de comunidades
-y visor interactivo sigma.js, para t-hoarder-twscraper.
+y visor interactivo sigma.js, para t-hoarder-twscrape.
 
 Versión auditada y mejorada (jul-2026), integrada desde la auditoría externa
 (cuatro revisores, dos rondas; ver commit). API pública sin cambios:
