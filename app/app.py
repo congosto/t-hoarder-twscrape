@@ -827,8 +827,8 @@ with left:
                     tg_topics = st.checkbox("Show topics", key="tg_topics")
                 with col_topics_file:
                     tg_topics_file = st.text_input(
-                        "Topics file (if Show topics)", key="tg_topics_file", disabled=not tg_topics,
-                        label_visibility="collapsed", placeholder="Topics file (if Show topics)",
+                        "Topics file (CSV columns: topics, color)", key="tg_topics_file", disabled=not tg_topics,
+                        label_visibility="collapsed", placeholder="Topics file (CSV columns: topics, color)",
                     )
 
                 col_events_chk, col_events_file = st.columns([1, 2])
@@ -836,8 +836,8 @@ with left:
                     tg_events = st.checkbox("Show events", key="tg_events")
                 with col_events_file:
                     tg_events_file = st.text_input(
-                        "Events file (if Show events)", key="tg_events_file", disabled=not tg_events,
-                        label_visibility="collapsed", placeholder="Events file (if Show events)",
+                        "Events file (CSV columns: date, event)", key="tg_events_file", disabled=not tg_events,
+                        label_visibility="collapsed", placeholder="Events file (CSV columns: date, event)",
                     )
 
                 tg_zoom = st.checkbox("Zoom", key="tg_zoom")
@@ -912,8 +912,8 @@ with left:
                     ug_topics = st.checkbox("Show topics", key="ug_topics")
                 with col_topics_file:
                     ug_topics_file = st.text_input(
-                        "Topics file (if Show topics)", key="ug_topics_file", disabled=not ug_topics,
-                        label_visibility="collapsed", placeholder="Topics file (if Show topics)",
+                        "Topics file (CSV columns: topics, color)", key="ug_topics_file", disabled=not ug_topics,
+                        label_visibility="collapsed", placeholder="Topics file (CSV columns: topics, color)",
                     )
 
                 col_events_chk, col_events_file = st.columns([1, 2])
@@ -921,8 +921,8 @@ with left:
                     ug_events = st.checkbox("Show events", key="ug_events")
                 with col_events_file:
                     ug_events_file = st.text_input(
-                        "Events file (if Show events)", key="ug_events_file", disabled=not ug_events,
-                        label_visibility="collapsed", placeholder="Events file (if Show events)",
+                        "Events file (CSV columns: date, event)", key="ug_events_file", disabled=not ug_events,
+                        label_visibility="collapsed", placeholder="Events file (CSV columns: date, event)",
                     )
 
                 col_btn_charts, col_btn_report = st.columns(2)
