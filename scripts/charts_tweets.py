@@ -647,13 +647,29 @@ def draw_topics_acumulate(df, topics, ini_date, end_date, RTs, base_title, event
     limit_y = grouped["cumulative_sum"].max() if not grouped.empty else 1
 
     fig, ax = plt.subplots(figsize=(10, 6))
+    finals = {}
     for topic, g in grouped.groupby("topics"):
         ax.plot(g["date_slot"], g["cumulative_sum"], linewidth=2, alpha=0.7,
                 color=color_map.get(topic), label=topic)
         last = g[g["date_slot"] == g["date_slot"].max()].iloc[-1]
-        ax.annotate(f"{topic} ({last['cumulative_sum']:,.0f} ref.)",
-                     (last["date_slot"], last["cumulative_sum"]), fontsize=8,
-                     color=color_map.get(topic), xytext=(5, 0), textcoords="offset points")
+        finals[topic] = (last["date_slot"], last["cumulative_sum"])
+
+    # etiquetas al final separadas verticalmente un mínimo para que no se solapen
+    # (con muchos topics de valores parecidos se pisaban), del color de su línea
+    topic_order = list(finals.keys())
+    min_sep = limit_y * 0.035
+    label_y, prev = {}, None
+    for topic in sorted(topic_order, key=lambda t: finals[t][1]):
+        y = finals[topic][1]
+        if prev is not None and y - prev < min_sep:
+            y = prev + min_sep
+        label_y[topic] = y
+        prev = y
+    for topic in topic_order:
+        x_last, y_real = finals[topic]
+        ax.annotate(f"{topic} ({y_real:,.0f} ref.)", (x_last, label_y[topic]),
+                    fontsize=8, color=color_map.get(topic),
+                    xytext=(5, 0), textcoords="offset points", va="center")
 
     if events is not None and not events.empty:
         ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
