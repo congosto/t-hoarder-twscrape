@@ -554,6 +554,9 @@ with left:
                                 )
                                 log(f"Resultado en {output_file}")
                                 set_result(output_file)
+                                # rerun para que el dataset combinado aparezca ya en las
+                                # listas (la lista se calculó antes de crear su contexto)
+                                st.rerun()
                             except (ValueError, FileNotFoundError) as e:
                                 log_error(str(e))
         with tab2:
