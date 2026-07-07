@@ -20,21 +20,21 @@ FREQ_UNITS = ["min", "hour", "day", "week", "month", "year"]
 def frequency_input(key_prefix: str) -> str:
     col_n, col_unit = st.columns(2)
     with col_n:
-        n = st.number_input("Frequency (cantidad)", min_value=1, value=1, key=f"{key_prefix}_freq_n")
+        n = st.number_input("Frequency (amount)", min_value=1, value=1, key=f"{key_prefix}_freq_n")
     with col_unit:
-        unit = st.selectbox("Frequency (unidad)", FREQ_UNITS, key=f"{key_prefix}_freq_unit")
+        unit = st.selectbox("Frequency (unit)", FREQ_UNITS, key=f"{key_prefix}_freq_unit")
     return f"{int(n)} {unit}"
 
 
 def validate_date_range(since: str, until: str) -> str | None:
     """Devuelve un mensaje de error si las fechas están vacías o mal formadas; None si son válidas."""
     if not since.strip() or not until.strip():
-        return "Error: rellena los campos 'From' y 'To' con fecha YYYY-mm-dd HH:MM:SS"
+        return "Error: fill in 'From' and 'To' with date YYYY-mm-dd HH:MM:SS"
     try:
         pd.Timestamp(since)
         pd.Timestamp(until)
     except (ValueError, TypeError):
-        return "Error: 'From'/'To' deben tener formato YYYY-mm-dd HH:MM:SS"
+        return "Error: 'From'/'To' must have format YYYY-mm-dd HH:MM:SS"
     return None
 
 
@@ -43,10 +43,10 @@ def parse_users_list(text: str) -> tuple[list[str], str | None]:
     Si algún usuario lleva '@', se devuelve error en vez de quitarlo silenciosamente."""
     users = [u.strip() for u in text.split(",") if u.strip()]
     if not users:
-        return [], "Error: escribe al menos un username en 'Users list'"
+        return [], "Error: enter at least one username in 'Users list'"
     with_at = [u for u in users if u.startswith("@")]
     if with_at:
-        return [], f"Error: no incluyas '@' en los usuarios ({', '.join(with_at)})"
+        return [], f"Error: do not include '@' in usernames ({', '.join(with_at)})"
     return users, None
 
 st.set_page_config(page_title="t-hoarder-twscrape", layout="wide")
@@ -59,7 +59,7 @@ SECTIONS = ["Project", "Download", "Tools", "Graphs", "Charts", "Settings"]
 if "section" not in st.session_state:
     st.session_state.section = "Project"
 if "console" not in st.session_state:
-    st.session_state.console = ["> consola lista..."]
+    st.session_state.console = ["> console ready..."]
 if "active_project" not in st.session_state:
     st.session_state.active_project = None
 if "active_accounts" not in st.session_state:
@@ -98,7 +98,7 @@ with sep2:
     st.markdown(f"<div style='{VSEP_STYLE}'></div>", unsafe_allow_html=True)
 
 st.divider()
-st.markdown("### Consola")
+st.markdown("### Console")
 console_placeholder = st.empty()
 
 
@@ -249,10 +249,10 @@ def _strip_extension(name):
 
 def _new_dataset_input(key):
     """Campo de texto para un dataset nuevo, quitándole la extensión si la lleva."""
-    raw = st.text_input("Nuevo dataset", key=f"{key}_new").strip()
+    raw = st.text_input("New dataset", key=f"{key}_new").strip()
     name = _strip_extension(raw)
     if name != raw:
-        st.caption(f"El dataset no lleva extensión: se usará «{name}».")
+        st.caption(f"Dataset names have no extension; '{name}' will be used.")
     return name
 
 
@@ -273,7 +273,7 @@ def prefix_input(label, key, allow_new=False, kinds=_ALL_KINDS):
     if allow_new:
         options = options + [_NEW_PREFIX_OPTION]
     if not options:
-        st.caption("No hay ningún dataset en este proyecto todavía.")
+        st.caption("No datasets in this project yet.")
         return ""
     choice = st.selectbox(label, options, key=f"{key}_sel")
     if choice == _NEW_PREFIX_OPTION:
@@ -304,32 +304,32 @@ with left:
             new_email_password = st.text_input("Email Password", type="password", key="new_email_password")
             new_auth_token = st.text_input("Auth Token", key="new_auth_token")
             new_ct0 = st.text_input("ct0", key="new_ct0")
-            if st.button("Crear cuenta"):
+            if st.button("Create account"):
                 cookies = f"auth_token={new_auth_token}; ct0={new_ct0}"
-                log(f"Agregando cuenta @{new_username}...")
+                log(f"Adding account @{new_username}...")
                 result = run_async(accounts.add_account(
                     new_username, new_password, new_email, new_email_password, cookies
                 ))
                 if result.get("success") and result.get("active"):
-                    log(f"Cuenta @{new_username} agregada y activa")
+                    log(f"Account @{new_username} added and active")
                 elif result.get("success"):
-                    log(f"Cuenta @{new_username} agregada pero no activa (revisa cookies)")
+                    log(f"Account @{new_username} added but not active (check cookies)")
                 else:
                     log_error(f"{result.get('message')}")
         with tab2:
-            if st.button("Refrescar lista"):
+            if st.button("Refresh list"):
                 st.session_state.active_accounts = run_async(accounts.list_accounts())
             data = st.session_state.get("active_accounts", [])
             if data:
                 set_result_df(pd.DataFrame(data)[["username", "email", "active"]], "Cuentas activas")
             else:
-                st.write("Sin datos. Pulsa 'Refrescar lista'.")
+                st.write("No data. Click 'Refresh list'.")
         with tab3:
-            del_username = st.text_input("Username a eliminar", key="del_username")
-            if st.button("Eliminar cuenta"):
+            del_username = st.text_input("Username to delete", key="del_username")
+            if st.button("Delete account"):
                 result = run_async(accounts.delete_account(del_username))
                 if result.get("success"):
-                    log(f"Cuenta @{del_username} eliminada")
+                    log(f"Account @{del_username} deleted")
                 else:
                     log_error(f"{result.get('message')}")
 
@@ -339,18 +339,18 @@ with left:
             active_list = projects.list_active_projects()
             if active_list:
                 chosen = st.selectbox("Project name", active_list)
-                if st.button("Seleccionar proyecto"):
+                if st.button("Select project"):
                     st.session_state.active_project = chosen
-                    log(f"Proyecto activo: {chosen}")
+                    log(f"Active project: {chosen}")
             else:
-                st.write("No hay proyectos. Crea uno en 'New project'.")
+                st.write("No projects. Create one in 'New project'.")
         with tab2:
-            new_project_name = st.text_input("Project name (nuevo)", key="new_project_name")
-            if st.button("Crear proyecto"):
+            new_project_name = st.text_input("Project name (new)", key="new_project_name")
+            if st.button("Create project"):
                 try:
                     projects.new_project(new_project_name)
                     st.session_state.active_project = new_project_name
-                    log(f"Proyecto '{new_project_name}' creado y activado")
+                    log(f"Project '{new_project_name}' created and activated")
                 except (ValueError, FileExistsError) as e:
                     log_error(str(e))
         with tab3:
@@ -358,28 +358,28 @@ with left:
             if active_list:
                 set_result_df(pd.DataFrame({"project": active_list}), "Proyectos activos")
             else:
-                st.write("No hay proyectos activos.")
+                st.write("No active projects.")
         with tab4:
             active_list = projects.list_active_projects()
             if active_list:
-                to_deactivate = st.selectbox("Project name a desactivar", active_list, key="deact_select")
-                if st.button("Desactivar proyecto"):
+                to_deactivate = st.selectbox("Project name to deactivate", active_list, key="deact_select")
+                if st.button("Deactivate project"):
                     projects.deactivate_project(to_deactivate)
                     if st.session_state.active_project == to_deactivate:
                         st.session_state.active_project = None
-                    log(f"Proyecto '{to_deactivate}' desactivado")
+                    log(f"Project '{to_deactivate}' deactivated")
             else:
-                st.write("No hay proyectos activos para desactivar.")
+                st.write("No active projects to deactivate.")
 
     elif section == "Download":
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["Search", "User TL", "Retweets", "Comments", "Advanced Comments"])
         with tab1:
             search_prefix = prefix_input("Dataset", "search_prefix", allow_new=True, kinds=("search",))
-            if st.button("Cargar contexto", key="search_load_ctx"):
+            if st.button("Load context", key="search_load_ctx"):
                 if not search_prefix:
-                    log_error("escribe el Dataset antes de cargar el contexto")
+                    log_error("enter the Dataset before loading the context")
                 elif not st.session_state.active_project:
-                    log_error("selecciona o crea un proyecto antes de cargar el contexto")
+                    log_error("select or create a project before loading the context")
                 else:
                     try:
                         project_dir = projects.select_project(st.session_state.active_project)
@@ -394,7 +394,7 @@ with left:
                         freq_parts = saved["frequency"].split() if saved["frequency"] else []
                         st.session_state.search_freq_n = int(freq_parts[0]) if len(freq_parts) == 2 else 1
                         st.session_state.search_freq_unit = freq_parts[1] if len(freq_parts) == 2 else "hour"
-                        log(f"Contexto cargado para el prefix '{search_prefix}'")
+                        log(f"Context loaded for dataset '{search_prefix}'")
                     else:
                         st.session_state.search_query = ""
                         st.session_state.search_product = "Top"
@@ -402,7 +402,7 @@ with left:
                         st.session_state.search_to = ""
                         st.session_state.search_freq_n = 1
                         st.session_state.search_freq_unit = "hour"
-                        log(f"No hay contexto guardado para el prefix '{search_prefix}'")
+                        log(f"No saved context for dataset '{search_prefix}'")
                     st.rerun()
 
             search_query = st.text_input("Query", key="search_query")
@@ -410,29 +410,29 @@ with left:
             search_from = st.text_input("From (YYYY-mm-dd HH:MM:SS)", key="search_from")
             search_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="search_to")
             search_freq = frequency_input("search")
-            if st.button("Lanzar búsqueda"):
+            if st.button("Launch search"):
                 date_error = validate_date_range(search_from, search_to)
                 if not st.session_state.active_project:
-                    log_error("selecciona o crea un proyecto antes de descargar")
+                    log_error("select or create a project before downloading")
                 elif date_error:
                     log(date_error)
                 else:
-                    log(f"Lanzando historical_search ({search_product}, frequency={search_freq})")
+                    log(f"Launching historical_search ({search_product}, frequency={search_freq})")
                     output_file = download.historical_search(
                         data_path=DATA_PATH, dataset=st.session_state.active_project,
                         prefix=search_prefix, query=search_query,
                         since=search_from, until=search_to,
                         frequency=search_freq, product=search_product, log=log,
                     )
-                    log(f"Resultado en {output_file}")
+                    log(f"Result in {output_file}")
                     set_result(output_file)
         with tab2:
             utl_prefix = prefix_input("Dataset", "utl_prefix", allow_new=True, kinds=("users",))
-            if st.button("Cargar contexto", key="utl_load_ctx"):
+            if st.button("Load context", key="utl_load_ctx"):
                 if not utl_prefix:
-                    log_error("escribe el Dataset antes de cargar el contexto")
+                    log_error("enter the Dataset before loading the context")
                 elif not st.session_state.active_project:
-                    log_error("selecciona o crea un proyecto antes de cargar el contexto")
+                    log_error("select or create a project before loading the context")
                 else:
                     try:
                         project_dir = projects.select_project(st.session_state.active_project)
@@ -447,7 +447,7 @@ with left:
                         freq_parts = saved["frequency"].split() if saved["frequency"] else []
                         st.session_state.utl_freq_n = int(freq_parts[0]) if len(freq_parts) == 2 else 1
                         st.session_state.utl_freq_unit = freq_parts[1] if len(freq_parts) == 2 else "hour"
-                        log(f"Contexto cargado para el prefix '{utl_prefix}'")
+                        log(f"Context loaded for dataset '{utl_prefix}'")
                     else:
                         st.session_state.utl_users_text = ""
                         st.session_state.utl_from = ""
@@ -455,7 +455,7 @@ with left:
                         st.session_state.utl_product = "Top"
                         st.session_state.utl_freq_n = 1
                         st.session_state.utl_freq_unit = "hour"
-                        log(f"No hay contexto guardado para el prefix '{utl_prefix}'")
+                        log(f"No saved context for dataset '{utl_prefix}'")
                     st.rerun()
 
             utl_users_text = st.text_input(
@@ -465,96 +465,96 @@ with left:
             utl_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="utl_product")
             utl_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="utl_to")
             utl_freq = frequency_input("utl")
-            if st.button("Lanzar descarga TL"):
+            if st.button("Launch TL download"):
                 date_error = validate_date_range(utl_from, utl_to)
                 users_list, users_error = parse_users_list(utl_users_text)
                 if not st.session_state.active_project:
-                    log_error("selecciona o crea un proyecto antes de descargar")
+                    log_error("select or create a project before downloading")
                 elif date_error:
                     log(date_error)
                 elif users_error:
                     log(users_error)
                 else:
-                    log(f"Lanzando historical_timeline para {len(users_list)} usuario(s) (frequency={utl_freq})")
+                    log(f"Launching historical_timeline for {len(users_list)} user(s) (frequency={utl_freq})")
                     output_file = download.historical_timeline(
                         data_path=DATA_PATH, dataset=st.session_state.active_project,
                         prefix=utl_prefix, list_users=users_list,
                         since=utl_from, until=utl_to, frequency=utl_freq,
                         product=utl_product, log=log,
                     )
-                    log(f"Resultado en {output_file}")
+                    log(f"Result in {output_file}")
                     set_result(output_file)
         with tab3:
             rt_prefix = prefix_input("Dataset", "rt_prefix")
             rt_min = st.number_input("Min RTs", min_value=0, value=1, key="rt_min")
-            if st.button("Lanzar descarga RTs"):
+            if st.button("Launch RTs download"):
                 if not st.session_state.active_project:
-                    log_error("selecciona o crea un proyecto antes de descargar")
+                    log_error("select or create a project before downloading")
                 elif not rt_prefix:
-                    log_error("escribe el Dataset del fichero con los tweets originales")
+                    log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Lanzando get_retweets (min_rts={int(rt_min)})")
+                    log(f"Launching get_retweets (min_rts={int(rt_min)})")
                     try:
                         output_file = download.get_retweets(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
                             prefix=rt_prefix, min_rts=int(rt_min), log=log,
                         )
-                        log(f"Resultado en {output_file}")
+                        log(f"Result in {output_file}")
                         set_result(output_file)
                     except FileNotFoundError:
-                        log_error(f"no existe {rt_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
+                        log_error(f"{rt_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
         with tab4:
             cm_prefix = prefix_input("Dataset", "cm_prefix")
             cm_min = st.number_input("Min Replies", min_value=0, value=1, key="cm_min")
-            if st.button("Lanzar descarga comentarios"):
+            if st.button("Launch comments download"):
                 if not st.session_state.active_project:
-                    log_error("selecciona o crea un proyecto antes de descargar")
+                    log_error("select or create a project before downloading")
                 elif not cm_prefix:
-                    log_error("escribe el Dataset del fichero con los tweets originales")
+                    log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Lanzando get_replies (min_replies={int(cm_min)})")
+                    log(f"Launching get_replies (min_replies={int(cm_min)})")
                     try:
                         output_file = download.get_replies(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
                             prefix=cm_prefix, min_replies=int(cm_min), log=log,
                         )
-                        log(f"Resultado en {output_file}")
+                        log(f"Result in {output_file}")
                         set_result(output_file)
                     except FileNotFoundError:
-                        log_error(f"no existe {cm_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
+                        log_error(f"{cm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
         with tab5:
             acm_prefix = prefix_input("Dataset", "acm_prefix")
             acm_min = st.number_input("Min Replies", min_value=0, value=1, key="acm_min")
-            acm_last = st.number_input("Last (días)", min_value=0, value=1, key="acm_last")
+            acm_last = st.number_input("Last (days)", min_value=0, value=1, key="acm_last")
             acm_freq = frequency_input("acm")
-            if st.button("Lanzar descarga avanzada"):
+            if st.button("Launch advanced download"):
                 if not st.session_state.active_project:
-                    log_error("selecciona o crea un proyecto antes de descargar")
+                    log_error("select or create a project before downloading")
                 elif not acm_prefix:
-                    log_error("escribe el Dataset del fichero con los tweets originales")
+                    log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Lanzando get_replies_advanced (frequency={acm_freq})")
+                    log(f"Launching get_replies_advanced (frequency={acm_freq})")
                     try:
                         output_file = download.get_replies_advanced(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
                             prefix=acm_prefix, min_replies=int(acm_min),
                             last_days=int(acm_last), frequency=acm_freq, log=log,
                         )
-                        log(f"Resultado en {output_file}")
+                        log(f"Result in {output_file}")
                         set_result(output_file)
                     except FileNotFoundError:
-                        log_error(f"no existe {acm_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
+                        log_error(f"{acm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
 
     elif section == "Tools":
         tab1, tab2, tab3, tab4 = st.tabs(["Merge datasets", "Clean dataset", "Restore dataset", "Location"])
         with tab1:
             if not st.session_state.active_project:
-                st.write("Selecciona o crea un proyecto en 'Project' antes de unir datasets.")
+                st.write("Select or create a project in 'Project' before merging datasets.")
             else:
                 project_dir = projects.select_project(st.session_state.active_project)
                 available_datasets = project_prefixes(project_dir)
                 if not available_datasets:
-                    st.write("No hay ningún dataset en este proyecto todavía.")
+                    st.write("No datasets in this project yet.")
                 else:
                     merge_datasets_selected = st.multiselect(
                         "Datasets to merge (must be in the active project)",
@@ -563,15 +563,15 @@ with left:
                     merge_dest = _strip_extension(st.text_input("Destination dataset", key="merge_dest").strip())
                     if st.button("Combine datasets"):
                         if len(merge_datasets_selected) < 2:
-                            log_error("selecciona al menos 2 datasets para unir")
+                            log_error("select at least 2 datasets to merge")
                         elif not merge_dest:
-                            log_error("escribe el nombre del dataset destino")
+                            log_error("enter the destination dataset name")
                         else:
                             try:
                                 output_file = utils.merge_datasets(
                                     project_dir, merge_datasets_selected, merge_dest, log=log
                                 )
-                                log(f"Resultado en {output_file}")
+                                log(f"Result in {output_file}")
                                 set_result(output_file)
                                 # rerun para que el dataset combinado aparezca ya en las
                                 # listas (la lista se calculó antes de crear su contexto)
@@ -580,27 +580,27 @@ with left:
                                 log_error(str(e))
         with tab2:
             if not st.session_state.active_project:
-                st.write("Selecciona o crea un proyecto en 'Project' antes de limpiar datos.")
+                st.write("Select or create a project in 'Project' before cleaning data.")
             else:
                 clean_prefix = prefix_input("Dataset (prefix of the file with the original tweets)", "clean_prefix")
                 clean_langs_text = st.text_input(
-                    "Languages (idiomas a conservar, separados por comas, ej. es,ca; vacío = no filtra)",
+                    "Languages (to keep, comma-separated, e.g. es,ca; empty = no filter)",
                     key="clean_langs_text",
                 )
                 clean_positives = st.text_area(
-                    "Positives: incluir los tweets que contengan alguna de esta lista de palabras separadas por comas (ej. rstats,python)",
+                    "Positives: keep tweets containing any of these comma-separated words (e.g. rstats,python)",
                     key="clean_positives",
                 )
                 clean_false_positives = st.text_area(
-                    "False positives: excluir los tweets que contengan alguna de esta lista de palabras separadas por comas (ej. futbol,humor)",
+                    "False positives: exclude tweets containing any of these comma-separated words (e.g. futbol,humor)",
                     key="clean_false_positives",
                 )
                 clean_dest = _strip_extension(st.text_input("Destination dataset", key="clean_dest").strip())
                 if st.button("Clean dataset"):
                     if not clean_prefix:
-                        log_error("escribe el Dataset a limpiar")
+                        log_error("enter the Dataset to clean")
                     elif not clean_dest:
-                        log_error("escribe el nombre del dataset destino")
+                        log_error("enter the destination dataset name")
                     else:
                         project_dir = projects.select_project(st.session_state.active_project)
                         langs_list = [w.strip() for w in clean_langs_text.split(",") if w.strip()]
@@ -613,11 +613,11 @@ with left:
                                 false_positives=false_positives_list, log=log,
                             )
                             pct = round((before - after) / before * 100, 1) if before else 0.0
-                            log(f"Resultado en {output_file}")
+                            log(f"Result in {output_file}")
                             set_result_df(
                                 discarded,
                                 f"'{clean_dest}': {before:,} → {after:,} tweets · "
-                                f"{pct}% eliminados ({before - after:,}). Tweets descartados:",
+                                f"{pct}% removed ({before - after:,}). Discarded tweets:",
                             )
                             # rerun para que el dataset limpio aparezca ya en las listas
                             st.rerun()
@@ -625,54 +625,54 @@ with left:
                             log_error(str(e))
         with tab3:
             if not st.session_state.active_project:
-                st.write("Selecciona o crea un proyecto en 'Project' antes de restaurar datasets.")
+                st.write("Select or create a project in 'Project' before restoring datasets.")
             else:
                 project_dir = projects.select_project(st.session_state.active_project)
                 restorable = utils.datasets_with_backups(project_dir)
                 if not restorable:
-                    st.write("No hay datasets con versiones anteriores. Se generan al combinar, "
-                             "limpiar o restaurar un dataset (ficheros {dataset}_prev_<fecha>.csv).")
+                    st.write("No datasets have previous versions. They are created when merging, "
+                             "cleaning or restoring a dataset (files {dataset}_prev_<date>.csv).")
                 else:
                     rst_dataset = st.selectbox("Dataset", restorable, key="rst_dataset")
                     backups = utils.dataset_backups(project_dir, rst_dataset)
                     labels = {_backup_label(f): f.name for f in backups}
                     rst_choice = st.selectbox("Version to restore (previous versions, newest first)",
                                               list(labels.keys()), key="rst_version")
-                    st.caption("Restaurar sustituye el dataset actual por esa versión anterior "
-                               "(el actual se guarda antes como nuevo _prev_, así que es reversible).")
+                    st.caption("Restoring replaces the current dataset with that previous version "
+                               "(the current one is saved first as a new _prev_, so it is reversible).")
                     if st.button("Restore dataset"):
                         try:
                             path, total = utils.restore_dataset(
                                 project_dir, rst_dataset, labels[rst_choice], log=log
                             )
-                            log(f"Restaurado {path.name} ({total} tweets)")
+                            log(f"Restored {path.name} ({total} tweets)")
                             set_result(path)
                             st.rerun()
                         except FileNotFoundError as e:
                             log_error(str(e))
         with tab4:
             if not st.session_state.active_project:
-                st.write("Selecciona o crea un proyecto en 'Project' antes de extraer localizaciones.")
+                st.write("Select or create a project in 'Project' before extracting locations.")
             else:
                 loc_prefix = prefix_input(
-                    "Dataset (prefijo del fichero con los tweets originales; genera {dataset}_loc.csv)",
+                    "Dataset (dataset with the original tweets; generates {dataset}_loc.csv)",
                     "loc_prefix",
                 )
-                if st.button("Extraer localización"):
+                if st.button("Extract location"):
                     if not loc_prefix:
-                        log_error("escribe el Dataset")
+                        log_error("enter the Dataset")
                     else:
                         project_dir = projects.select_project(st.session_state.active_project)
                         try:
                             output_file = utils.extract_locations(project_dir, loc_prefix, log=log)
-                            log(f"Resultado en {output_file}")
+                            log(f"Result in {output_file}")
                             set_result(output_file)
                         except FileNotFoundError as e:
                             log_error(str(e))
 
     elif section == "Graphs":
         if not st.session_state.active_project:
-            st.write("Selecciona o crea un proyecto en 'Project' antes de trabajar con grafos.")
+            st.write("Select or create a project in 'Project' before working with graphs.")
         else:
             project_dir = projects.select_project(st.session_state.active_project)
             import graphs as graphs_mod
@@ -683,11 +683,11 @@ with left:
             with tab1:
                 dc_prefix = prefix_input("Dataset", "dc_prefix")
                 dc_relation = st.selectbox(
-                    "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="dc_relation"
+                    "Relation (relation type)", ["RT", "replies", "replies_advanced"], key="dc_relation"
                 )
-                if st.button("Detectar comunidades"):
+                if st.button("Detect communities"):
                     if not dc_prefix:
-                        log_error("escribe el Dataset")
+                        log_error("enter the Dataset")
                     else:
                         try:
                             communities_file, users_file = graphs_mod.detect_communities(
@@ -699,20 +699,20 @@ with left:
             with tab2:
                 gg_prefix = prefix_input("Dataset", "gg_prefix")
                 gg_relation = st.selectbox(
-                    "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="gg_relation"
+                    "Relation (relation type)", ["RT", "replies", "replies_advanced"], key="gg_relation"
                 )
                 gg_format = st.selectbox("Format", ["gdf", "gexf"], key="gg_format")
                 gg_include_communities = st.checkbox(
-                    "Include communities (requiere haber ejecutado antes 'Detect communities')",
+                    "Include communities (requires running 'Detect communities' first)",
                     value=True, key="gg_include_communities",
                 )
                 gg_include_locations = st.checkbox(
-                    "Include locations (requiere {prefix}_loc.csv, generado en Tools > Location)",
+                    "Include locations (requires {prefix}_loc.csv, generated in Tools > Location)",
                     value=False, key="gg_include_locations",
                 )
-                if st.button("Generar grafo"):
+                if st.button("Generate graph"):
                     if not gg_prefix:
-                        log_error("escribe el Dataset")
+                        log_error("enter the Dataset")
                     else:
                         try:
                             graph_file = graphs_mod.generate_graph(
@@ -720,24 +720,24 @@ with left:
                                 include_communities=gg_include_communities,
                                 include_locations=gg_include_locations, log=log,
                             )
-                            log(f"Grafo en {graph_file}")
+                            log(f"Graph in {graph_file}")
                             set_result(graph_file)
                         except FileNotFoundError as e:
                             log_error(str(e))
             with tab3:
                 ct_prefix = prefix_input("Dataset", "ct_prefix")
                 ct_relation = st.selectbox(
-                    "Relation (tipo de relación)", ["RT", "replies", "replies_advanced"], key="ct_relation"
+                    "Relation (relation type)", ["RT", "replies", "replies_advanced"], key="ct_relation"
                 )
-                if st.button("Clasificar tweets"):
+                if st.button("Classify tweets"):
                     if not ct_prefix:
-                        log_error("escribe el Dataset")
+                        log_error("enter the Dataset")
                     else:
                         try:
                             classified_file = graphs_mod.classify_tweets(
                                 project_dir, ct_prefix, ct_relation, log=log
                             )
-                            log(f"Resultado en {classified_file}")
+                            log(f"Result in {classified_file}")
                             set_result(classified_file)
                         except FileNotFoundError as e:
                             log_error(str(e))
@@ -746,25 +746,25 @@ with left:
                     p.name for p in project_dir.glob("*.gdf")
                 ) + sorted(p.name for p in project_dir.glob("*.gexf"))
                 if not available_graphs:
-                    st.write("No hay ficheros de grafo (.gdf/.gexf) en este proyecto todavía.")
+                    st.write("No graph files (.gdf/.gexf) in this project yet.")
                 else:
                     vg_file = st.selectbox("Select graph", available_graphs, key="vg_file")
                     vg_max_labels = st.slider(
-                        "Máximo de etiquetas por comunidad", min_value=1, max_value=50, value=10, key="vg_max_labels"
+                        "Max labels per community", min_value=1, max_value=50, value=10, key="vg_max_labels"
                     )
                     vg_iterations = st.slider(
-                        "Iteraciones de ForceAtlas2", min_value=100, max_value=2000, value=300, step=50,
+                        "ForceAtlas2 iterations", min_value=100, max_value=2000, value=300, step=50,
                         key="vg_iterations",
-                        help="El layout se calcula en el navegador en segundos. Con el modo LinLog "
-                             "las comunidades se separan en unos cientos de iteraciones.",
+                        help="The layout is computed in the browser in seconds. With LinLog mode "
+                             "communities separate within a few hundred iterations.",
                     )
-                    if st.button("Visualizar grafo"):
+                    if st.button("Visualize graph"):
                         try:
                             view_data, communities_shown = graphs_mod.graph_view_data(
                                 project_dir, vg_file,
                                 max_labels_per_community=vg_max_labels, log=log,
                             )
-                            log(f"Comunidades mostradas: {', '.join(communities_shown)}")
+                            log(f"Communities shown: {', '.join(communities_shown)}")
                             set_result_graph_html(graphs_mod.render_graph_html(
                                 view_data, vg_iterations, Path(vg_file).stem,
                             ))
@@ -772,10 +772,10 @@ with left:
                             log_error(str(e))
 
     elif section == "Charts":
-        chart_type = st.radio("Graphic type", ["Tweets", "Users"], horizontal=True)
+        chart_type = st.radio("Chart type", ["Tweets", "Users"], horizontal=True)
         if chart_type == "Tweets":
             if not st.session_state.active_project:
-                st.write("Selecciona o crea un proyecto en 'Project' antes de generar gráficas.")
+                st.write("Select or create a project in 'Project' before generating charts.")
             else:
                 col_prefix, col_title = st.columns(2)
                 with col_prefix:
@@ -799,8 +799,8 @@ with left:
                     tg_topics = st.checkbox("Show topics", key="tg_topics")
                 with col_topics_file:
                     tg_topics_file = st.text_input(
-                        "Topics file (si show_topics)", key="tg_topics_file", disabled=not tg_topics,
-                        label_visibility="collapsed", placeholder="Topics file (si show_topics)",
+                        "Topics file (if Show topics)", key="tg_topics_file", disabled=not tg_topics,
+                        label_visibility="collapsed", placeholder="Topics file (if Show topics)",
                     )
 
                 col_events_chk, col_events_file = st.columns([1, 2])
@@ -808,8 +808,8 @@ with left:
                     tg_events = st.checkbox("Show events", key="tg_events")
                 with col_events_file:
                     tg_events_file = st.text_input(
-                        "Events file (si show_events)", key="tg_events_file", disabled=not tg_events,
-                        label_visibility="collapsed", placeholder="Events file (si show_events)",
+                        "Events file (if Show events)", key="tg_events_file", disabled=not tg_events,
+                        label_visibility="collapsed", placeholder="Events file (if Show events)",
                     )
 
                 tg_zoom = st.checkbox("Zoom", key="tg_zoom")
@@ -826,13 +826,13 @@ with left:
                         )
 
                 col_btn_charts, col_btn_report = st.columns(2)
-                tg_do_charts = col_btn_charts.button("Generar gráfico de Tweets")
-                tg_do_report = col_btn_report.button("Generar informe HTML de Tweets")
+                tg_do_charts = col_btn_charts.button("Generate Tweets chart")
+                tg_do_report = col_btn_report.button("Generate Tweets HTML report")
                 if tg_do_charts or tg_do_report:
                     if not tg_prefix:
-                        log_error("escribe el Dataset")
+                        log_error("enter the Dataset")
                     elif tg_zoom and (not tg_zoom_min.strip() or not tg_zoom_max.strip()):
-                        log_error("rellena 'Min date zoom' y 'Max date zoom' o desmarca 'Zoom'")
+                        log_error("fill in 'Min date zoom' and 'Max date zoom' or uncheck 'Zoom'")
                     else:
                         try:
                             import charts as charts_mod
@@ -847,15 +847,15 @@ with left:
                                 log=log,
                             )
                             if tg_do_charts:
-                                with st.spinner("Generando gráficas..."):
+                                with st.spinner("Generating charts..."):
                                     figs, image_path = charts_mod.generate_tweet_charts(
                                         project_dir, tg_prefix, tg_title or tg_prefix, tg_tz,
                                         **chart_args,
                                     )
-                                log(f"Tweet Graph generado: {len(figs)} gráficas en {image_path}")
+                                log(f"Tweet Graph generated: {len(figs)} charts in {image_path}")
                                 set_result_charts(figs, image_path)
                             else:
-                                with st.spinner("Generando informe HTML..."):
+                                with st.spinner("Generating HTML report..."):
                                     report_html, report_path = charts_mod.generate_tweet_report(
                                         project_dir, tg_prefix, tg_title or tg_prefix, tg_tz,
                                         **chart_args,
@@ -865,7 +865,7 @@ with left:
                             log_error(str(e))
         else:
             if not st.session_state.active_project:
-                st.write("Selecciona o crea un proyecto en 'Project' antes de generar gráficas.")
+                st.write("Select or create a project in 'Project' before generating charts.")
             else:
                 col_prefix, col_username = st.columns(2)
                 with col_prefix:
@@ -883,8 +883,8 @@ with left:
                     ug_topics = st.checkbox("Show topics", key="ug_topics")
                 with col_topics_file:
                     ug_topics_file = st.text_input(
-                        "Topics file (si show_topics)", key="ug_topics_file", disabled=not ug_topics,
-                        label_visibility="collapsed", placeholder="Topics file (si show_topics)",
+                        "Topics file (if Show topics)", key="ug_topics_file", disabled=not ug_topics,
+                        label_visibility="collapsed", placeholder="Topics file (if Show topics)",
                     )
 
                 col_events_chk, col_events_file = st.columns([1, 2])
@@ -892,16 +892,16 @@ with left:
                     ug_events = st.checkbox("Show events", key="ug_events")
                 with col_events_file:
                     ug_events_file = st.text_input(
-                        "Events file (si show_events)", key="ug_events_file", disabled=not ug_events,
-                        label_visibility="collapsed", placeholder="Events file (si show_events)",
+                        "Events file (if Show events)", key="ug_events_file", disabled=not ug_events,
+                        label_visibility="collapsed", placeholder="Events file (if Show events)",
                     )
 
                 col_btn_charts, col_btn_report = st.columns(2)
-                ug_do_charts = col_btn_charts.button("Generar gráfico de Usuario")
-                ug_do_report = col_btn_report.button("Generar informe HTML de Usuario")
+                ug_do_charts = col_btn_charts.button("Generate User chart")
+                ug_do_report = col_btn_report.button("Generate User HTML report")
                 if ug_do_charts or ug_do_report:
                     if not ug_prefix or not ug_username:
-                        log_error("escribe el Dataset y el Username")
+                        log_error("enter the Dataset and Username")
                     else:
                         try:
                             import charts as charts_mod
@@ -913,15 +913,15 @@ with left:
                                 log=log,
                             )
                             if ug_do_charts:
-                                with st.spinner("Generando gráficas..."):
+                                with st.spinner("Generating charts..."):
                                     figs, image_path = charts_mod.generate_user_charts(
                                         project_dir, ug_prefix, ug_username, ug_title or ug_username, ug_tz,
                                         **chart_args,
                                     )
-                                log(f"User Graph generado: {len(figs)} gráficas en {image_path}")
+                                log(f"User Graph generated: {len(figs)} charts in {image_path}")
                                 set_result_charts(figs, image_path)
                             else:
-                                with st.spinner("Generando informe HTML..."):
+                                with st.spinner("Generating HTML report..."):
                                     report_html, report_path = charts_mod.generate_user_report(
                                         project_dir, ug_prefix, ug_username, ug_title or ug_username, ug_tz,
                                         **chart_args,
@@ -931,27 +931,27 @@ with left:
                             log_error(str(e))
 
 with context_col:
-    st.markdown("### Contexto")
+    st.markdown("### Context")
     n_accounts = sum(1 for a in st.session_state.get("active_accounts", []) if a.get("active"))
     project_label = st.session_state.active_project or "ninguno"
-    st.write(f"**Cuentas activas:** {n_accounts}")
-    st.write(f"**Proyecto activo:** {project_label}")
+    st.write(f"**Active accounts:** {n_accounts}")
+    st.write(f"**Active project:** {project_label}")
 
     if st.session_state.active_project:
         project_dir = projects.select_project(st.session_state.active_project)
         prefixes = project_prefixes(project_dir)
         if prefixes:
-            st.caption("Datasets y su log de contexto:")
+            st.caption("Datasets and their context log:")
             for prefix in prefixes:
                 with st.expander(prefix):
                     log_df = context.get_log(project_dir, prefix)
                     if log_df is not None and not log_df.empty:
                         st.dataframe(log_df, use_container_width=True, hide_index=True)
                     else:
-                        st.caption("Sin operaciones registradas.")
+                        st.caption("No operations recorded.")
 
 with right:
-    st.markdown("### Resultados")
+    st.markdown("### Results")
     error_msg = st.session_state.get("last_error")
     graph_html = st.session_state.get("graph_html")
     chart_figures = st.session_state.get("chart_figures")
@@ -959,7 +959,7 @@ with right:
     result_df = st.session_state.get("last_result_df")
     result_file = st.session_state.get("last_result_file")
     if error_msg or chart_figures or result_df is not None or graph_html or report_html or result_file:
-        if st.button("Borrar resultados"):
+        if st.button("Clear results"):
             clear_results()
             st.rerun()
 
@@ -967,14 +967,14 @@ with right:
         st.error(error_msg)
     elif report_html:
         report_path = st.session_state.get("report_path", "")
-        st.caption(f"Informe guardado en: {report_path}")
+        st.caption(f"Report saved to: {report_path}")
         st.download_button(
-            "Descargar informe HTML", data=report_html,
+            "Download HTML report", data=report_html,
             file_name=Path(report_path).name or "informe.html", mime="text/html",
         )
         st_components.html(report_html, height=800, scrolling=True)
     elif chart_figures:
-        st.caption(f"Gráficas guardadas en: {st.session_state.get('chart_figures_path', '')}")
+        st.caption(f"Charts saved to: {st.session_state.get('chart_figures_path', '')}")
         # Carrusel: una gráfica cada vez, con botones para pasar de una a otra
         chart_names = list(chart_figures.keys())
         idx = st.session_state.get("chart_carousel_idx", 0) % len(chart_names)
@@ -1004,14 +1004,14 @@ with right:
                     n_rows = sum(1 for _ in f) - 1
                 preview_df = pd.read_csv(path, nrows=50, encoding="utf-8")
                 if n_rows > 50:
-                    st.write(f"{n_rows} filas (mostrando las primeras 50)")
+                    st.write(f"{n_rows} rows (showing first 50)")
                 else:
-                    st.write(f"{n_rows} filas")
+                    st.write(f"{n_rows} rows")
                 st.dataframe(preview_df, use_container_width=preview_df.shape[1] > 3)
             else:
                 with open(path, encoding="utf-8") as f:
                     preview_lines = [next(f, "") for _ in range(50)]
-                st.write("Fichero no tabular (mostrando las primeras 50 líneas)")
+                st.write("Non-tabular file (showing first 50 lines)")
                 st.code("".join(preview_lines), language="text")
 
         _preview_file(result_file)
@@ -1020,4 +1020,4 @@ with right:
             st.divider()
             _preview_file(result_file2)
     else:
-        st.write("Aquí se mostrarán tablas, gráficos o archivos generados según la acción ejecutada.")
+        st.write("Tables, charts or generated files will appear here depending on the action.")

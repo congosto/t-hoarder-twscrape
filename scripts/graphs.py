@@ -90,7 +90,7 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
     if relation == "RT":
         path = project_dir / f"{prefix}_RTs.csv"
         if not path.exists():
-            raise FileNotFoundError(f"No existe {path}. Descarga primero los Retweets.")
+            raise FileNotFoundError(f"{path} does not exist. Download the Retweets first.")
         df = pd.read_csv(path, encoding="utf-8")
         # Descarta RTs huérfanos: los que retuitean (url_rt) un tweet original que
         # ya no está en {prefix}.csv, p.ej. porque el dataset se limpió por idioma o
@@ -104,26 +104,26 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
                 df = df[df["url_rt"].astype(str).isin(valid)]
                 dropped = before - len(df)
                 if dropped:
-                    log(f"RTs descartados porque el tweet retuiteado ya no está en el "
-                        f"dataset {prefix}.csv: {dropped} de {before}")
+                    log(f"RTs discarded because the retweeted tweet is no longer in the "
+                        f"dataset {prefix}.csv: {dropped} of {before}")
         df["source"] = df["username"]
         df["target"] = df["user_retweeted"]
     elif relation == "replies_advanced":
         path = project_dir / f"{prefix}_replies_advanced.csv"
         if not path.exists():
-            raise FileNotFoundError(f"No existe {path}. Descarga primero las Advanced Comments.")
+            raise FileNotFoundError(f"{path} does not exist. Download the Advanced Comments first.")
         df = pd.read_csv(path, encoding="utf-8")
         df["source"] = df["username"]
         df["target"] = df["in_reply_to_user_username"]
     elif relation == "replies":
         path = project_dir / f"{prefix}_replies.csv"
         if not path.exists():
-            raise FileNotFoundError(f"No existe {path}. Descarga primero las Comments.")
+            raise FileNotFoundError(f"{path} does not exist. Download the Comments first.")
         df = pd.read_csv(path, encoding="utf-8")
         df["source"] = df["username"]
         df["target"] = df["in_reply_to_user_username"]
     else:
-        raise ValueError("relation debe ser 'RT', 'replies' o 'replies_advanced'")
+        raise ValueError("relation must be 'RT', 'replies' or 'replies_advanced'")
 
     df = df.dropna(subset=["source", "target"])
     df["source"] = _norm_username(df["source"])
@@ -134,7 +134,7 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
     df = df[(df["source"] != "nan") & (df["target"] != "nan")]
     df = df[df["source"] != df["target"]]
     if df.empty:
-        raise ValueError(f"{path.name} no contiene ninguna relación válida (¿fichero vacío?)")
+        raise ValueError(f"{path.name} contains no valid relation (empty file?)")
     return df
 
 
@@ -155,29 +155,29 @@ def _build_giant_graph(project_dir: Path, prefix: str, relation: str, log=print,
     """
     relations_df = _load_relations(project_dir, prefix, relation,
                                    filter_orphan_rts=filter_orphan_rts, log=log)
-    log(f"Relaciones cargadas: {len(relations_df)}")
+    log(f"Relations loaded: {len(relations_df)}")
 
     edges = relations_df.groupby(["source", "target"]).size().reset_index(name="weight")
     G = nx.from_pandas_edgelist(edges, source="source", target="target",
                                 edge_attr="weight", create_using=nx.DiGraph)
-    log(f"Grafo: {G.number_of_nodes()} nodos, {G.number_of_edges()} aristas")
+    log(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
 
     # weakly_connected_components evita construir una copia no dirigida completa
     # del grafo solo para calcular las componentes.
     components = list(nx.weakly_connected_components(G))
     if not components:
-        raise ValueError("El grafo no tiene ningún nodo tras filtrar las relaciones.")
+        raise ValueError("The graph has no nodes after filtering the relations.")
 
     if min_component_size is None:
         keep = max(components, key=len)
-        log(f"Componente gigante: {len(keep)} nodos de {G.number_of_nodes()}")
+        log(f"Giant component: {len(keep)} nodes of {G.number_of_nodes()}")
     else:
         big = [c for c in components if len(c) >= min_component_size]
         if not big:
             big = [max(components, key=len)]
         keep = set().union(*big)
-        log(f"Componentes con >= {min_component_size} nodos: {len(big)} "
-            f"({len(keep)} nodos de {G.number_of_nodes()})")
+        log(f"Components with >= {min_component_size} nodes: {len(big)} "
+            f"({len(keep)} nodes of {G.number_of_nodes()})")
     G_giant = G.subgraph(keep).copy()
 
     return G_giant, relations_df
@@ -276,11 +276,11 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
                                                    seed=seed, resolution=resolution)
     # Numerar por tamaño descendente: la comunidad 0 es siempre la mayor
     communities = sorted(communities, key=len, reverse=True)
-    log(f"Comunidades encontradas: {len(communities)}")
+    log(f"Communities found: {len(communities)}")
     community_of = {node: str(i) for i, comm in enumerate(communities) for node in comm}
 
     modularity = nx.community.modularity(undirected, communities, weight="weight")
-    log(f"Modularidad: {modularity:.3f}")
+    log(f"Modularity: {modularity:.3f}")
 
     total = G_giant.number_of_nodes()
     counts = pd.Series(community_of).value_counts()
@@ -304,7 +304,7 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
         # cruzada) que el indegree/PageRank no ven. k=None es exacto pero O(V*E);
         # con miles de nodos se aproxima con betweenness_k muestras (nx estándar).
         k = betweenness_k if (betweenness_k and betweenness_k < G_giant.number_of_nodes()) else None
-        log(f"Calculando betweenness centrality ({'exacta' if k is None else f'aprox. k={k}'})...")
+        log(f"Computing betweenness centrality ({'exact' if k is None else f'approx. k={k}'})...")
         betweenness = nx.betweenness_centrality(G_giant, k=k, weight="weight", seed=seed)
         users_table["betweenness"] = users_table["user"].map(betweenness).round(6)
 
@@ -312,8 +312,8 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
     users_file = project_dir / f"{prefix}_users_{relation}_communities.csv"
     users_table.to_csv(users_file, index=False, encoding="utf-8")
 
-    log(f"Tabla de comunidades en {communities_file}")
-    log(f"Tabla de usuarios/comunidad en {users_file}")
+    log(f"Communities table in {communities_file}")
+    log(f"Users/community table in {users_file}")
     return communities_file, users_file
 
 
@@ -336,14 +336,14 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     Devuelve la ruta del fichero de grafo generado.
     """
     if output_format not in ("gdf", "gexf"):
-        raise ValueError(f"output_format debe ser 'gdf' o 'gexf', no '{output_format}'")
+        raise ValueError(f"output_format must be 'gdf' or 'gexf', not '{output_format}'")
     G_giant, relations_df = _build_giant_graph(project_dir, prefix, relation, log=log,
                                                min_component_size=min_component_size,
                                                filter_orphan_rts=filter_orphan_rts)
 
     tweets_file = project_dir / f"{prefix}.csv"
     if not tweets_file.exists():
-        raise FileNotFoundError(f"No existe {tweets_file}")
+        raise FileNotFoundError(f"{tweets_file} does not exist")
     tweets_df = pd.read_csv(tweets_file, encoding="utf-8")
 
     node_attrs = _node_attributes_table(tweets_df, relations_df, relation)
@@ -364,7 +364,7 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     if include_communities:
         users_file = project_dir / f"{prefix}_users_{relation}_communities.csv"
         if not users_file.exists():
-            raise FileNotFoundError(f"No existe {users_file}. Ejecuta antes 'Detect communities'.")
+            raise FileNotFoundError(f"{users_file} does not exist. Run 'Detect communities' first.")
         users_df = pd.read_csv(users_file, encoding="utf-8").set_index("user")
         node_attrs["community"] = node_attrs.index.map(users_df["community"].astype(str).to_dict())
     else:
@@ -373,14 +373,14 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     if include_locations:
         loc_file = project_dir / f"{prefix}_loc.csv"
         if not loc_file.exists():
-            raise FileNotFoundError(f"No existe {loc_file}. Genéralo antes en Tools > Localización.")
+            raise FileNotFoundError(f"{loc_file} does not exist. Generate it first in Tools > Location.")
         loc_df = pd.read_csv(loc_file, encoding="utf-8")
         loc_df["username"] = _norm_username(loc_df["username"])
         loc_df = loc_df.drop_duplicates("username").set_index("username")
         for col in ("location_country", "location_region", "location_city"):
             node_attrs[col] = node_attrs.index.map(loc_df[col].to_dict() if col in loc_df.columns else {})
         n_resolved = int(node_attrs["location_country"].notna().sum())
-        log(f"Localizaciones unidas desde {loc_file.name}: {n_resolved}/{len(node_attrs)} nodos")
+        log(f"Locations joined from {loc_file.name}: {n_resolved}/{len(node_attrs)} nodes")
     else:
         node_attrs["location_country"] = None
         node_attrs["location_region"] = None
@@ -392,7 +392,7 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     else:
         graph_file = project_dir / f"{prefix}_{relation}.gdf"
         _export_gdf(G_giant, node_attrs, graph_file)
-    log(f"Grafo exportado en {graph_file}")
+    log(f"Graph exported to {graph_file}")
 
     return graph_file
 
@@ -402,11 +402,11 @@ def classify_tweets(project_dir: Path, prefix: str, relation: str, log=print) ->
     {prefix}_users_{relation}_communities.csv (generado antes con 'Detect communities')."""
     tweets_file = project_dir / f"{prefix}.csv"
     if not tweets_file.exists():
-        raise FileNotFoundError(f"No existe {tweets_file}")
+        raise FileNotFoundError(f"{tweets_file} does not exist")
 
     users_file = project_dir / f"{prefix}_users_{relation}_communities.csv"
     if not users_file.exists():
-        raise FileNotFoundError(f"No existe {users_file}. Ejecuta antes 'Detect communities'.")
+        raise FileNotFoundError(f"{users_file} does not exist. Run 'Detect communities' first.")
 
     tweets_df = pd.read_csv(tweets_file, encoding="utf-8")
     users_df = pd.read_csv(users_file, encoding="utf-8")
@@ -417,7 +417,7 @@ def classify_tweets(project_dir: Path, prefix: str, relation: str, log=print) ->
     tweets_df.to_csv(classified_file, index=False, encoding="utf-8")
     n_classified = int(tweets_df["community"].notna().sum())
     pct = (n_classified / len(tweets_df) * 100) if len(tweets_df) else 0.0
-    log(f"Tweets clasificados: {n_classified}/{len(tweets_df)} ({pct:.1f}%)")
+    log(f"Tweets classified: {n_classified}/{len(tweets_df)} ({pct:.1f}%)")
     return classified_file
 
 
@@ -567,12 +567,12 @@ def graph_view_data(project_dir: Path, graph_filename: str, max_labels_per_commu
 
     path = project_dir / graph_filename
     if not path.exists():
-        raise FileNotFoundError(f"No existe {path}")
+        raise FileNotFoundError(f"{path} does not exist")
 
     G = load_graph_file(path)
     n_nodes = G.number_of_nodes()
     if n_nodes == 0:
-        raise ValueError(f"{graph_filename} no contiene ningún nodo.")
+        raise ValueError(f"{graph_filename} contains no nodes.")
 
     # En los .gexf los atributos llegan tipados (community puede ser int); se normaliza
     # a str para que la comunidad 0 no cuente como "sin comunidad" y ordenar no mezcle tipos.
@@ -581,12 +581,12 @@ def graph_view_data(project_dir: Path, graph_filename: str, max_labels_per_commu
         c = G.nodes[n].get("community")
         communities[n] = str(c) if c is not None and str(c).strip() != "" else None
     if not any(c for c in communities.values()):
-        raise ValueError("El grafo no tiene comunidades calculadas. Genera el grafo con 'Include communities' activado.")
+        raise ValueError("The graph has no communities. Generate the graph with 'Include communities' enabled.")
 
     counts = pd.Series(communities).value_counts()
     threshold = n_nodes * (min_community_pct / 100.0)
     kept_communities = set(counts[counts > threshold].index) - {None, ""}
-    log(f"Comunidades mostradas (>{min_community_pct}% de nodos): {len(kept_communities)} de {len(counts)}")
+    log(f"Communities shown (>{min_community_pct}% of nodes): {len(kept_communities)} of {len(counts)}")
 
     node_list = list(G.nodes())
     node_community = {n: communities[n] if communities[n] in kept_communities else "Otros" for n in node_list}
@@ -762,11 +762,11 @@ _GRAPH_VIEWER_TEMPLATE = """
   <span>Scaling <input type="number" id="c-scaling" value="10" min="1" step="1"></span>
   <span>Gravity <input type="number" id="c-gravity" value="1" min="0" step="0.1"></span>
   <label><input type="checkbox" id="c-linlog"> LinLog</label>
-  <label><input type="checkbox" id="c-dissuade"> Disuadir hubs</label>
-  <button id="c-noverlap" title="Despega nodos solapados">Noverlap</button>
-  <span>Grado &ge; <input type="number" id="c-mindeg" value="0" min="0" step="1"
-    title="Oculta nodos con weight indegree menor"></span>
-  <input type="search" id="c-search" list="node-options" placeholder="Buscar usuario...">
+  <label><input type="checkbox" id="c-dissuade"> Dissuade hubs</label>
+  <button id="c-noverlap" title="Separate overlapping nodes">Noverlap</button>
+  <span>Degree &ge; <input type="number" id="c-mindeg" value="0" min="0" step="1"
+    title="Hide nodes with lower weight indegree"></span>
+  <input type="search" id="c-search" list="node-options" placeholder="Search user...">
   <datalist id="node-options"></datalist>
 </div>
 <div id="toolbar" class="box">
@@ -775,7 +775,7 @@ _GRAPH_VIEWER_TEMPLATE = """
 </div>
 <div id="legend" class="box"></div>
 <div id="panel" class="box"></div>
-<div id="status">Cargando...</div>
+<div id="status">Loading...</div>
 <div id="tooltip"></div>
 __LIB_TAGS__
 <script>
@@ -885,7 +885,7 @@ function startLayout() {
   layout.total = parseInt($("c-iter").value, 10) || 300;
   layout.done = 0;
   layout.running = true;
-  $("c-run").innerHTML = "&#9646;&#9646; Parar";
+  $("c-run").innerHTML = "&#9646;&#9646; Stop";
   layout.raf = requestAnimationFrame(layoutStep);
 }
 
@@ -893,7 +893,7 @@ function stopLayout() {
   layout.running = false;
   if (layout.raf) cancelAnimationFrame(layout.raf);
   $("c-run").innerHTML = "&#9654; Layout";
-  statusEl.textContent = baseStatus() + " — layout detenido en " + layout.done + " iter";
+  statusEl.textContent = baseStatus() + " — layout stopped at " + layout.done + " iter";
 }
 
 $("c-run").addEventListener("click", () => layout.running ? stopLayout() : startLayout());
@@ -902,16 +902,16 @@ $("c-noverlap").addEventListener("click", () => {
   if (layout.running) stopLayout();
   const nl = graphologyLibrary.layoutNoverlap;
   nl.assign(graph, { maxIterations: 120, settings: nl.inferSettings ? nl.inferSettings(graph) : {} });
-  statusEl.textContent = baseStatus() + " — noverlap aplicado";
+  statusEl.textContent = baseStatus() + " — noverlap applied";
 });
 
 function baseStatus() {
   const st = DATA.stats || {};
   let extra = [];
-  if (st.density != null) extra.push("densidad " + st.density);
-  if (st.reciprocity != null) extra.push("reciprocidad " + st.reciprocity);
-  if (st.modularity != null) extra.push("modularidad " + st.modularity);
-  return graph.order + " nodos, " + graph.size + " aristas" + (extra.length ? " · " + extra.join(" · ") : "");
+  if (st.density != null) extra.push("density " + st.density);
+  if (st.reciprocity != null) extra.push("reciprocity " + st.reciprocity);
+  if (st.modularity != null) extra.push("modularity " + st.modularity);
+  return graph.order + " nodes, " + graph.size + " edges" + (extra.length ? " · " + extra.join(" · ") : "");
 }
 
 // ── Leyenda de comunidades (click para ocultar/mostrar) ──────────────────────
@@ -950,7 +950,7 @@ $("c-search").addEventListener("change", e => {
   const q = e.target.value.trim().toLowerCase();
   if (!q) return;
   const node = graph.hasNode(q) ? q : graph.findNode(n => n.toLowerCase() === q);
-  if (!node) { statusEl.textContent = baseStatus() + ' — no existe "' + q + '"'; return; }
+  if (!node) { statusEl.textContent = baseStatus() + ' — not found "' + q + '"'; return; }
   selectNode(node);
   const pos = renderer.getNodeDisplayData(node);
   if (pos) renderer.getCamera().animate({ x: pos.x, y: pos.y, ratio: 0.08 }, { duration: 500 });
@@ -964,12 +964,12 @@ function selectNode(node) {
   const a = graph.getNodeAttributes(node);
   let html = '<span class="close" id="panel-close">&#10005;</span>' +
     "<h3>" + escHtml(a.label) + "</h3>" +
-    '<div><a href="https://x.com/' + encodeURIComponent(a.label) + '" target="_blank" rel="noopener">Ver perfil en X &#8599;</a></div>' +
+    '<div><a href="https://x.com/' + encodeURIComponent(a.label) + '" target="_blank" rel="noopener">View profile on X &#8599;</a></div>' +
     "<table>" +
-    "<tr><td>comunidad</td><td><span class='sw' style='display:inline-block;width:9px;height:9px;background:" +
+    "<tr><td>community</td><td><span class='sw' style='display:inline-block;width:9px;height:9px;background:" +
       a.color + "'></span> " + escHtml(a.comm) + "</td></tr>" +
     "<tr><td>weight indegree</td><td>" + (a.indeg || 0) + "</td></tr>" +
-    "<tr><td>conexiones</td><td>" + graph.inDegree(node) + " entrantes / " + graph.outDegree(node) + " salientes</td></tr>";
+    "<tr><td>connections</td><td>" + graph.inDegree(node) + " in / " + graph.outDegree(node) + " out</td></tr>";
   const attrs = a.attrs || {};
   ATTR_ORDER.filter(k => k in attrs).forEach(k => {
     html += "<tr><td>" + escHtml(k) + "</td><td>" + escHtml(attrs[k]) + "</td></tr>";

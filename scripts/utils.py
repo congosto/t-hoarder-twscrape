@@ -31,7 +31,7 @@ def restore_dataset(project_dir: Path, name: str, backup_filename: str, log=prin
 
     backup = project_dir / backup_filename
     if not backup.exists():
-        raise FileNotFoundError(f"No existe el backup {backup_filename}")
+        raise FileNotFoundError(f"Backup {backup_filename} does not exist")
 
     _backup_dataset(project_dir, name, log=log)  # respalda el actual si existe
     current = project_dir / f"{name}.csv"
@@ -40,7 +40,7 @@ def restore_dataset(project_dir: Path, name: str, backup_filename: str, log=prin
 
     log_type = context.dataset_log_type(project_dir, name) or "search"
     context.log_restore_dataset(project_dir, name, log_type, backup_filename, total)
-    log(f"Dataset '{name}' restaurado desde {backup_filename} ({total} tweets)")
+    log(f"Dataset '{name}' restored from {backup_filename} ({total} tweets)")
     return current, total
 
 _NEWLINES = re.compile(r"[\n\r]+")
@@ -86,19 +86,19 @@ def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print)
     import context
 
     if len(datasets) < 2:
-        raise ValueError("Se necesitan al menos 2 datasets para unir")
+        raise ValueError("At least 2 datasets are needed to merge")
 
     paths = {ds: project_dir / f"{ds}.csv" for ds in datasets}
     missing = [ds for ds, p in paths.items() if not p.exists()]
     if missing:
-        raise FileNotFoundError(f"No existen en el proyecto: {', '.join(ds + '.csv' for ds in missing)}")
+        raise FileNotFoundError(f"Not found in the project: {', '.join(ds + '.csv' for ds in missing)}")
 
     # el dataset combinado hereda el tipo (search/users) de sus orígenes: deben
     # ser del mismo tipo, si no las operaciones de Charts no encajan
     types = {context.dataset_log_type(project_dir, ds) for ds in datasets}
     present = {t for t in types if t}
     if len(present) > 1:
-        raise ValueError("No se pueden unir datasets de tipos distintos (search y users); une datasets del mismo tipo")
+        raise ValueError("Cannot merge datasets of different types (search and users); merge datasets of the same type")
     log_type = present.pop() if present else "search"
 
     dfs = {ds: pd.read_csv(p, encoding="utf-8") for ds, p in paths.items()}
@@ -106,15 +106,15 @@ def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print)
     ref_cols = set(ref_df.columns)
     mismatched = [ds for ds, df in dfs.items() if set(df.columns) != ref_cols]
     if mismatched:
-        raise ValueError(f"Las columnas no coinciden con {ref_ds}.csv en: {', '.join(mismatched)}")
+        raise ValueError(f"Columns do not match {ref_ds}.csv in: {', '.join(mismatched)}")
 
-    log(f"Uniendo {len(datasets)} datasets...")
+    log(f"Merging {len(datasets)} datasets...")
     merged = pd.concat(dfs.values(), ignore_index=True)
     total_raw = len(merged)
     key = "id" if "id" in merged.columns else ("url" if "url" in merged.columns else None)
     if key:
         merged = merged.drop_duplicates(subset=key, keep="first")
-    log(f"Tweets: {total_raw} -> {len(merged)} tras quitar duplicados")
+    log(f"Tweets: {total_raw} -> {len(merged)} after removing duplicates")
 
     # si el destino ya existe (típicamente porque es uno de los datasets unidos),
     # se guarda la versión anterior antes de sobrescribir para no perderla
@@ -122,7 +122,7 @@ def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print)
     dest_path = project_dir / f"{dest}.csv"
     merged.to_csv(dest_path, index=False, encoding="utf-8")
     context.log_merge_datasets(project_dir, dest, log_type, datasets, len(merged))
-    log(f"Dataset combinado '{dest}' en {dest_path.name} ({len(merged)} tweets, viene de: {', '.join(datasets)})")
+    log(f"Merged dataset '{dest}' in {dest_path.name} ({len(merged)} tweets, from: {', '.join(datasets)})")
     return dest_path
 
 
@@ -137,7 +137,7 @@ def _backup_dataset(project_dir: Path, name: str, log=print) -> None:
         return
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     dest_path.rename(project_dir / f"{name}_prev_{stamp}.csv")
-    log(f"El dataset destino ya existía; versión anterior guardada como {name}_prev_{stamp}.csv")
+    log(f"Destination dataset already existed; previous version saved as {name}_prev_{stamp}.csv")
 
 
 def clean_dataset(project_dir: Path, source: str, dest: str,
@@ -162,7 +162,7 @@ def clean_dataset(project_dir: Path, source: str, dest: str,
 
     input_file = project_dir / f"{source}.csv"
     if not input_file.exists():
-        raise FileNotFoundError(f"No existe {input_file.name} en el proyecto")
+        raise FileNotFoundError(f"{input_file.name} does not exist in the project")
 
     df_source = pd.read_csv(input_file, encoding="utf-8")
     total_before = len(df_source)
@@ -170,7 +170,7 @@ def clean_dataset(project_dir: Path, source: str, dest: str,
 
     if langs:
         df = df[df["lang"].isin(langs)]
-        log(f"Tras filtrar por idioma {langs}: {len(df)} tweets")
+        log(f"After filtering by language {langs}: {len(df)} tweets")
 
     if positives or false_positives:
         text_normalized = df["text"].astype(str).map(_strip_accents)
@@ -180,13 +180,13 @@ def clean_dataset(project_dir: Path, source: str, dest: str,
         if pattern:
             df = df[text_normalized.str.contains(pattern, case=False, na=False, regex=True)]
             text_normalized = text_normalized[df.index]
-            log(f"Tras filtrar por positivas {positives}: {len(df)} tweets")
+            log(f"After filtering by positives {positives}: {len(df)} tweets")
 
     if false_positives:
         pattern = "|".join(re.escape(_strip_accents(w.strip())) for w in false_positives if w.strip())
         if pattern:
             df = df[~text_normalized.str.contains(pattern, case=False, na=False, regex=True)]
-            log(f"Tras excluir falsas positivas {false_positives}: {len(df)} tweets")
+            log(f"After excluding false positives {false_positives}: {len(df)} tweets")
 
     # el dataset limpio hereda el tipo (search/users) de su origen
     log_type = context.dataset_log_type(project_dir, source) or "search"
@@ -200,7 +200,7 @@ def clean_dataset(project_dir: Path, source: str, dest: str,
     df.to_csv(output_path, index=False, encoding="utf-8")
     context.log_clean_dataset(project_dir, dest, log_type, source, langs, positives,
                               false_positives, total_before, len(df))
-    log(f"Dataset limpio '{dest}' en {output_path.name} ({total_before} -> {len(df)} tweets, viene de: {source})")
+    log(f"Cleaned dataset '{dest}' in {output_path.name} ({total_before} -> {len(df)} tweets, from: {source})")
 
     # tweets descartados: los del origen que no han pasado el filtro (los índices
     # de un filtrado booleano se conservan, así que basta con la diferencia)
@@ -390,7 +390,7 @@ def extract_locations(project_dir: Path, prefix: str, log=print) -> Path:
     """
     tweets_file = project_dir / f"{prefix}.csv"
     if not tweets_file.exists():
-        raise FileNotFoundError(f"No existe {tweets_file.name}")
+        raise FileNotFoundError(f"{tweets_file.name} does not exist")
 
     frames = [pd.read_csv(tweets_file, encoding="utf-8")]
 
@@ -409,7 +409,7 @@ def extract_locations(project_dir: Path, prefix: str, log=print) -> Path:
     combined = pd.concat(frames, ignore_index=True)
     combined = combined.dropna(subset=["username"]).drop_duplicates(subset="username", keep="first")
     combined = combined[combined["location"].notna() & (combined["location"].astype(str).str.strip() != "")]
-    log(f"Perfiles con localización en su biografía: {len(combined)}")
+    log(f"Profiles with location in their bio: {len(combined)}")
 
     countries, regions, cities = [], [], []
     cache: dict[str, tuple] = {}
@@ -430,7 +430,7 @@ def extract_locations(project_dir: Path, prefix: str, log=print) -> Path:
     # Se descartan las localizaciones que no resolvieron a un país real
     # (texto sin sentido geográfico, ej. "Everywhere", "Mundo", etc.)
     result = result[result["location_country"].notna()]
-    log(f"Localizaciones resueltas a un país real: {len(result)}/{n_total}")
+    log(f"Locations resolved to a real country: {len(result)}/{n_total}")
 
     output_path = project_dir / f"{prefix}_loc.csv"
     result.to_csv(output_path, index=False, encoding="utf-8")

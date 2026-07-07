@@ -9,9 +9,9 @@ INACTIVE_DIR = DATA_DIR / "desactivated"
 def _validate_name(name: str) -> str:
     name = name.strip()
     if not name:
-        raise ValueError("El nombre del proyecto no puede estar vacío")
+        raise ValueError("Project name cannot be empty")
     if any(c in name for c in r'\/:*?"<>|'):
-        raise ValueError("El nombre del proyecto contiene caracteres no válidos")
+        raise ValueError("Project name contains invalid characters")
     return name
 
 
@@ -20,9 +20,9 @@ def new_project(name: str) -> Path:
     project_dir = DATA_DIR / name
 
     if project_dir.exists():
-        raise FileExistsError(f"El proyecto '{name}' ya existe")
+        raise FileExistsError(f"Project '{name}' already exists")
     if (INACTIVE_DIR / name).exists():
-        raise FileExistsError(f"El proyecto '{name}' existe pero está desactivado")
+        raise FileExistsError(f"Project '{name}' exists but is deactivated")
 
     project_dir.mkdir(parents=True)
     return project_dir
@@ -59,14 +59,14 @@ def list_inactive_projects() -> list[str]:
 def select_project(name: str) -> Path:
     project_dir = DATA_DIR / name
     if not project_dir.is_dir():
-        raise FileNotFoundError(f"El proyecto '{name}' no existe o no está activo")
+        raise FileNotFoundError(f"Project '{name}' does not exist or is not active")
     return project_dir
 
 
 def deactivate_project(name: str) -> None:
     project_dir = DATA_DIR / name
     if not project_dir.is_dir():
-        raise FileNotFoundError(f"El proyecto '{name}' no existe o no está activo")
+        raise FileNotFoundError(f"Project '{name}' does not exist or is not active")
 
     INACTIVE_DIR.mkdir(parents=True, exist_ok=True)
     shutil.move(str(project_dir), str(INACTIVE_DIR / name))

@@ -23,11 +23,11 @@ def _load_tweets(project_dir: Path, prefix: str):
         tweets_file = plain_file
         ars = False
     else:
-        raise FileNotFoundError(f"No existe {plain_file} ni {classified_file}")
+        raise FileNotFoundError(f"{plain_file} or {classified_file} does not exist")
 
     tweets = pd.read_csv(tweets_file)
     if "date" not in tweets.columns:
-        raise FileNotFoundError(f"{tweets_file} no tiene columna 'date'; no es un fichero de tweets valido")
+        raise FileNotFoundError(f"{tweets_file} has no 'date' column; not a valid tweets file")
     tweets["date"] = pd.to_datetime(tweets["date"], utc=True, errors="coerce")
     tweets = (
         tweets.sort_values("date")
@@ -76,16 +76,16 @@ def generate_tweet_charts(
     tweets["date_slot"] = tweets["date"].dt.floor("h")
 
     if tweets.empty:
-        raise FileNotFoundError(f"{prefix}: no hay tweets con fecha valida")
+        raise FileNotFoundError(f"{prefix}: no tweets with a valid date")
 
     if min_date_zoom and max_date_zoom:
         try:
             min_date = pd.Timestamp(min_date_zoom)
             max_date = pd.Timestamp(max_date_zoom)
         except (ValueError, TypeError):
-            raise ValueError("min_date_zoom/max_date_zoom deben tener formato yyyy-mm-dd HH:MM:SS")
+            raise ValueError("min_date_zoom/max_date_zoom must have format yyyy-mm-dd HH:MM:SS")
         if min_date >= max_date:
-            raise ValueError("min_date_zoom debe ser anterior a max_date_zoom")
+            raise ValueError("min_date_zoom must be earlier than max_date_zoom")
     else:
         min_date = tweets["date_slot"].min()
         max_date = tweets["date_slot"].max()
@@ -108,21 +108,21 @@ def generate_tweet_charts(
         figs[name] = fig
         if filename:
             savefig(fig, image_path / filename)
-        log(f"Grafica generada: {name}")
+        log(f"Chart generated: {name}")
 
     add(
-        "Tweets vs. alcance con influencers",
+        "Tweets vs. reach with influencers",
         _charts.draw_tweets_vs_reach_influencers(tweets, min_date, max_date, min_reach, base_title, slot_time),
         f"{prefix}_tweets_vs_reach_influencers.png",
     )
     add(
-        "Tweets vs. alcance",
+        "Tweets vs. reach",
         _charts.draw_tweets_vs_reach(tweets, min_date, max_date, base_title, slot_time),
         f"{prefix}_tweets_vs_reach.png",
     )
 
     add(
-        "Tweets vs. RTs con influencers",
+        "Tweets vs. RTs with influencers",
         _charts.draw_tweets_vs_RTs_influencers(tweets, min_date, max_date, min_RTs, base_title, slot_time),
         f"{prefix}_tweets_vs_RTs_influencers.png",
     )
@@ -132,17 +132,17 @@ def generate_tweet_charts(
         f"{prefix}_tweets_vs_RTs.png",
     )
     add(
-        "Comentarios vs. RTs",
+        "Comments vs. RTs",
         _charts.draw_comments_vs_RTs(tweets, min_date, max_date, base_title),
         f"{prefix}_comments_vs_RTs.png",
     )
     add(
-        "Palabras mas frecuentes",
+        "Most frequent words",
         _charts.draw_word_frequency(tweets, min_date, max_date, False, base_title, str(project_dir), prefix),
         f"{prefix}_word_cloud.png",
     )
     add(
-        "Palabras mas frecuentes (con amplificacion)",
+        "Most frequent words (with amplification)",
         _charts.draw_word_frequency(tweets, min_date, max_date, True, base_title),
         f"{prefix}_word_cloud_RTs.png",
     )
@@ -155,30 +155,30 @@ def generate_tweet_charts(
         "okdiario", "voz_populi", "libertaddigital",
     ]
     add(
-        "Menciones a medios",
+        "Media mentions",
         _charts.draw_media_acumulate(tweets, min_date, max_date, media, True, base_title, slot_time),
         f"{prefix}_medios.png",
     )
 
     if topics is not None:
         add(
-            "Topics - evolucion acumulada",
+            "Topics - cumulative",
             _charts.draw_topics_acumulate(tweets, topics, min_date, max_date, False, base_title, events, slot_time),
             f"{prefix}_topics.png",
         )
         add(
-            "Topics - evolucion acumulada (con amplificacion)",
+            "Topics - cumulative (with amplification)",
             _charts.draw_topics_acumulate(tweets, topics, min_date, max_date, True, base_title, events, slot_time),
             f"{prefix}_topics_RTs.png",
         )
 
     if ars and communities is not None:
         add(
-            "Palabras mas frecuentes por comunidad",
+            "Most frequent words by community",
             _charts.words_frequency_by_community(tweets, communities, base_title),
         )
         add(
-            "Tweets por comunidad",
+            "Tweets by community",
             _charts.tweets_by_community(tweets, min_date, max_date, communities, base_title, events, slot_time),
             f"{prefix}_tweets_by_communities.png",
         )
@@ -189,11 +189,11 @@ def generate_tweet_charts(
 def _load_user_tweets(project_dir: Path, prefix: str, username: str):
     plain_file = project_dir / f"{prefix}.csv"
     if not plain_file.exists():
-        raise FileNotFoundError(f"No existe {plain_file}")
+        raise FileNotFoundError(f"{plain_file} does not exist")
 
     tweets = pd.read_csv(plain_file)
     if "date" not in tweets.columns:
-        raise FileNotFoundError(f"{plain_file} no tiene columna 'date'; no es un fichero de tweets valido")
+        raise FileNotFoundError(f"{plain_file} has no 'date' column; not a valid tweets file")
     tweets["date"] = pd.to_datetime(tweets["date"], utc=True, errors="coerce")
     tweets = tweets[tweets["username"].str.lower() == username.lower()]
     tweets = tweets.drop_duplicates(subset=["url"], keep="first").sort_values("date").reset_index(drop=True)
@@ -252,30 +252,30 @@ def generate_user_charts(
         figs[name] = fig
         if filename:
             savefig(fig, image_path / filename)
-        log(f"Grafica generada: {name}")
+        log(f"Chart generated: {name}")
 
     add(
-        "Rutina diaria",
+        "Daily routine",
         _charts_profile.daily_routine(tweets, min_date, max_date, time_zone, base_title, events),
         f"{prefix}_daily_routine_total.png",
     )
     add(
-        "Rutina diaria por fuente",
+        "Daily routine by source",
         _charts_profile.daily_routine_by_source(tweets, min_date, max_date, time_zone, base_title, events),
         f"{prefix}_daily_routine_by_source.png",
     )
     add(
-        "Ritmo semanal",
+        "Weekly rhythm",
         _charts_profile.rhythm_week(tweets, min_date, max_date, time_zone, base_title),
         f"{prefix}_rhythm_week_total.png",
     )
     add(
-        "Ritmo mensual",
+        "Monthly rhythm",
         _charts_profile.rhythm_month(tweets, min_date, max_date, time_zone, base_title),
         f"{prefix}_rhythm_month_total.png",
     )
     add(
-        "Tweets vs. Favoritos",
+        "Tweets vs. Favorites",
         _charts_profile.impact_tweets(tweets, min_date, max_date, "Fav", "#50af4a", base_title),
         f"{prefix}_tweets_vs_fav_total.png",
     )
@@ -285,22 +285,22 @@ def generate_user_charts(
         f"{prefix}_tweets_vs_RTs_total.png",
     )
     add(
-        "Tweets vs. Citas",
+        "Tweets vs. Quotes",
         _charts_profile.impact_tweets(tweets, min_date, max_date, "Quotes", "#9C1A37", base_title),
         f"{prefix}_tweets_vs_quotes_total.png",
     )
     add(
-        "Tweets vs. Comentarios",
+        "Tweets vs. Comments",
         _charts_profile.impact_tweets(tweets, min_date, max_date, "Replies", "#ff7733", base_title),
         f"{prefix}_tweets_vs_replies_total.png",
     )
     add(
-        "Tweets vs. Impresiones",
+        "Tweets vs. Impressions",
         _charts_profile.impact_tweets(tweets, min_date, max_date, "Impresions", "#bf609f", base_title),
         f"{prefix}_tweets_vs_impresions_total.png",
     )
     add(
-        "Tweets por idioma",
+        "Tweets by language",
         _charts_profile.tweets_by_language(tweets, min_date, max_date, base_title, events),
         f"{prefix}_tweets_by_language.png",
     )
@@ -310,24 +310,24 @@ def generate_user_charts(
         f"{prefix}_engagement_total.png",
     )
     add(
-        "Comentarios vs. RTs",
+        "Comments vs. RTs",
         _charts.draw_comments_vs_RTs(tweets, min_date, max_date, base_title),
         f"{prefix}_comments_vs_RTs.png",
     )
     add(
-        "Palabras mas frecuentes",
+        "Most frequent words",
         _charts.draw_word_frequency(tweets, min_date, max_date, False, base_title, str(project_dir), prefix),
         f"{prefix}_word_cloud.png",
     )
     add(
-        "Palabras mas frecuentes (con amplificacion)",
+        "Most frequent words (with amplification)",
         _charts.draw_word_frequency(tweets, min_date, max_date, True, base_title),
         f"{prefix}_word_cloud_RTs.png",
     )
 
     if topics is not None:
         add(
-            "Topics - evolucion acumulada",
+            "Topics - cumulative",
             _charts.draw_topics_acumulate(tweets, topics, min_date, max_date, False, base_title, events, slot_time),
             f"{prefix}_topics.png",
         )
@@ -386,10 +386,10 @@ def build_html_report(figs: dict, title: str, subtitle: str = "") -> str:
         f"<title>{escape(title)}</title><style>{_REPORT_CSS}</style></head><body>"
         "<div class='container'>"
         f"<header><h1>{escape(title)}</h1>"
-        f"<div class='meta'>{meta}Generado el {fecha}</div></header>"
+        f"<div class='meta'>{meta}Generated on {fecha}</div></header>"
         f"<nav>{''.join(nav)}</nav>"
         f"{''.join(sections)}"
-        "<footer>Generado con t-hoarder_twscrape</footer>"
+        "<footer>Generated with t-hoarder_twscrape</footer>"
         "</div>"
         # los enlaces del indice se desplazan por JavaScript: dentro del iframe
         # srcdoc de Streamlit, un href="#ancla" se resuelve contra la URL de la
@@ -416,12 +416,12 @@ def generate_tweet_report(project_dir: Path, prefix: str, base_title: str, *args
     import matplotlib.pyplot as plt
 
     figs, _ = generate_tweet_charts(project_dir, prefix, base_title, *args, log=log, **kwargs)
-    html = build_html_report(figs, title=f"{base_title}: informe de tweets", subtitle=f"Dataset {prefix}")
+    html = build_html_report(figs, title=f"{base_title}: tweets report", subtitle=f"Dataset {prefix}")
     out_path = Path(project_dir) / f"{prefix}_informe_tweets.html"
     out_path.write_text(html, encoding="utf-8")
     for fig in figs.values():
         plt.close(fig)
-    log(f"Informe HTML guardado en {out_path}")
+    log(f"HTML report saved to {out_path}")
     return html, out_path
 
 
@@ -434,10 +434,10 @@ def generate_user_report(project_dir: Path, prefix: str, username: str, base_tit
     import matplotlib.pyplot as plt
 
     figs, _ = generate_user_charts(project_dir, prefix, username, base_title, *args, log=log, **kwargs)
-    html = build_html_report(figs, title=f"{base_title}: informe de usuario", subtitle=f"Dataset {prefix} — @{username}")
+    html = build_html_report(figs, title=f"{base_title}: user report", subtitle=f"Dataset {prefix} — @{username}")
     out_path = Path(project_dir) / f"{prefix}_{username}_informe_usuario.html"
     out_path.write_text(html, encoding="utf-8")
     for fig in figs.values():
         plt.close(fig)
-    log(f"Informe HTML guardado en {out_path}")
+    log(f"HTML report saved to {out_path}")
     return html, out_path

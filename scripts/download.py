@@ -84,18 +84,18 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
         append = output_file.exists()
         if last_date is not None:
             since = last_date
-            log(f"Reanudando desde el contexto guardado: {since} (rango original: {original_since} -> {original_until})")
+            log(f"Resuming from saved context: {since} (original range: {original_since} -> {original_until})")
 
         sequence = date_sequence(since, until, frequency)
 
         for i in range(len(sequence) - 1):
             min_date, max_date = sequence[i], sequence[i + 1]
-            log(f"Desde {min_date} hasta {max_date}")
+            log(f"From {min_date} to {max_date}")
             query_date = f"{query} since:{min_date:%Y-%m-%d_%H:%M:%S} until:{max_date:%Y-%m-%d_%H:%M:%S}"
-            log(f"--> Descargando {query_date} ......")
+            log(f"--> Downloading {query_date} ......")
 
             tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
-            log(f"Descargados {len(tweets)} tweets")
+            log(f"Downloaded {len(tweets)} tweets")
             if tweets:
                 df = _to_dataframe(tweets)
                 df = clean_text(df)
@@ -109,7 +109,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
                 query=query, product=product, frequency=frequency,
             )
             if i < len(sequence) - 2:
-                log(f"Esperando {sleep_time} segundos antes de la próxima iteración...")
+                log(f"Waiting {sleep_time} seconds before the next iteration...")
                 time.sleep(sleep_time)
 
         total = 0
@@ -120,7 +120,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
             total = len(df)
         context.log_end_download(output, prefix, "search", total)
 
-        log("Descarga 'Historical Search' completada")
+        log("'Historical Search' download completed")
         return output_file
     finally:
         logger.remove(_log_handler)
@@ -148,18 +148,18 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                 row = ctx[ctx["username"] == user]
                 if not row.empty:
                     since_partial = _to_utc_timestamp(row["last_date"].iloc[0])
-                    log(f"Reanudando @{user} desde el contexto guardado: {since_partial} (rango original: {original_since} -> {original_until})")
+                    log(f"Resuming @{user} from saved context: {since_partial} (original range: {original_since} -> {original_until})")
 
             log(f"--> download user {user}")
             sequence = date_sequence(since_partial, until, frequency)
 
             for i in range(len(sequence) - 1):
                 min_date, max_date = sequence[i], sequence[i + 1]
-                log(f"Desde {min_date} hasta {max_date}")
+                log(f"From {min_date} to {max_date}")
                 query_date = f"from:{user} since:{min_date:%Y-%m-%d_%H:%M:%S} until:{max_date:%Y-%m-%d_%H:%M:%S}"
 
                 tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
-                log(f"Descargados {len(tweets)} tweets")
+                log(f"Downloaded {len(tweets)} tweets")
                 if tweets:
                     df = _to_dataframe(tweets)
                     df = df[df["username"].str.lower() == user.lower()]
@@ -174,7 +174,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                     product=product, frequency=frequency,
                 )
                 if i < len(sequence) - 2:
-                    log(f"Esperando {sleep_time} segundos antes de la próxima iteración...")
+                    log(f"Waiting {sleep_time} seconds before the next iteration...")
                     time.sleep(sleep_time)
 
         total = 0
@@ -185,7 +185,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
             total = len(df)
         context.log_end_download(output, prefix, "users", total)
 
-        log("Descarga 'Historical Timeline' completada")
+        log("'Historical Timeline' download completed")
         return output_file
     finally:
         logger.remove(_log_handler)
@@ -217,7 +217,7 @@ def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
 
             log(f"Download RTs from {tweet_urls[i]} {i + 1}/{len(tweet_ids)}")
             users = run_async(scraping.get_retweeters(tweet_id, n=n))
-            log(f"Descargados {len(users)} retweeters")
+            log(f"Downloaded {len(users)} retweeters")
             if users:
                 df = pd.DataFrame(users)
                 df["user_retweeted"] = tweet_urls[i].split("/")[-3]
@@ -234,10 +234,10 @@ def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
 
             context.put_context_RTs(output, prefix, tweet_id)
             if i < len(tweet_ids) - 1:
-                log(f"Esperando {sleep_time} segundos antes de la próxima iteración...")
+                log(f"Waiting {sleep_time} seconds before the next iteration...")
                 time.sleep(sleep_time)
 
-        log("Descarga 'Retweets' completada")
+        log("'Retweets' download completed")
         return output_file
     finally:
         logger.remove(_log_handler)
@@ -270,7 +270,7 @@ def get_replies(data_path: Path, dataset: str, prefix: str, min_replies: int = 1
 
             log(f"Download replies from {tweet_urls[i]} {i + 1}/{len(tweet_ids)}")
             replies = run_async(scraping.tweet_replies(tweet_id, n=n))
-            log(f"Descargadas {len(replies)} respuestas")
+            log(f"Downloaded {len(replies)} replies")
             if replies:
                 df = _to_dataframe(replies)
                 df = clean_text(df)
@@ -279,10 +279,10 @@ def get_replies(data_path: Path, dataset: str, prefix: str, min_replies: int = 1
                 context.put_context_replies(output, prefix, tweet_id)
                 append = True
 
-            log(f"Esperando {sleep_time} segundos antes de la próxima iteración...")
+            log(f"Waiting {sleep_time} seconds before the next iteration...")
             time.sleep(sleep_time)
 
-        log("Descarga 'Replies' completada")
+        log("'Replies' download completed")
         return output_file
     finally:
         logger.remove(_log_handler)
@@ -326,9 +326,9 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
                     f"conversation_id:{tweet_id} filter:replies "
                     f"since:{min_date:%Y-%m-%d_%H:%M:%S} until:{max_date:%Y-%m-%d_%H:%M:%S}"
                 )
-                log(f"--> Descargando {query} ......")
+                log(f"--> Downloading {query} ......")
                 replies = run_async(scraping.search_tweets(query, n=n, product=product))
-                log(f"Descargadas {len(replies)} respuestas")
+                log(f"Downloaded {len(replies)} replies")
                 if replies:
                     df = _to_dataframe(replies)
                     df["url_replied"] = tweet_urls[i]
@@ -340,10 +340,10 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
                     append = True
 
                 if j < len(sequence) - 2:
-                    log(f"Esperando {sleep_time} segundos antes de la próxima iteración...")
+                    log(f"Waiting {sleep_time} seconds before the next iteration...")
                     time.sleep(sleep_time)
 
-        log("Descarga 'Replies avanzadas' completada")
+        log("'Advanced Replies' download completed")
         return output_file
     finally:
         logger.remove(_log_handler)
