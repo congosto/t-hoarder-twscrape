@@ -67,7 +67,7 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
 
 - Project
 
-  Select project | New project | Active projects | Desactive project
+  Select project | New project | Active projects | Deactivate project | Reactivate project
 
   (Las listas de proyectos van ordenadas por actividad, del más reciente al
   más antiguo: cuenta el mtime más nuevo entre el directorio del proyecto y
@@ -79,10 +79,14 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     Project name
   Active projects
     List of active projects
-  Desactive project
-    Project name
+  Deactivate project
+    Project name to deactivate (desplegable con los proyectos activos)
     acciones:
-    - No borra el proyecto: lo mueve de data/{project} a data/desactivated/{project}, para no saturar el desplegable de proyectos activos sin perder los datos
+    - No borra el proyecto: lo mueve de data/{project} a data/desactivated/{project}, para no saturar el desplegable de proyectos activos sin perder los datos (se muestra la nota "t-hoarder never deletes a project...")
+  Reactivate project
+    Deactivated project to reactivate (desplegable con los proyectos desactivados)
+    acciones:
+    - Vuelve a mover el proyecto de data/desactivated/{project} a data/{project} y lo deja como proyecto activo
 
 - Download
 

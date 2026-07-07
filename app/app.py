@@ -334,7 +334,9 @@ with left:
                     log_error(f"{result.get('message')}")
 
     elif section == "Project":
-        tab1, tab2, tab3, tab4 = st.tabs(["Select project", "New project", "Active projects", "Desactive project"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+            ["Select project", "New project", "Active projects", "Deactivate project", "Reactivate project"]
+        )
         with tab1:
             active_list = projects.list_active_projects()
             if active_list:
@@ -356,20 +358,36 @@ with left:
         with tab3:
             active_list = projects.list_active_projects()
             if active_list:
-                set_result_df(pd.DataFrame({"project": active_list}), "Proyectos activos")
+                set_result_df(pd.DataFrame({"project": active_list}), "Active projects")
             else:
                 st.write("No active projects.")
         with tab4:
             active_list = projects.list_active_projects()
             if active_list:
                 to_deactivate = st.selectbox("Project name to deactivate", active_list, key="deact_select")
+                st.caption("t-hoarder never deletes a project: it just moves it to data/desactivated/.")
                 if st.button("Deactivate project"):
                     projects.deactivate_project(to_deactivate)
                     if st.session_state.active_project == to_deactivate:
                         st.session_state.active_project = None
                     log(f"Project '{to_deactivate}' deactivated")
+                    st.rerun()
             else:
                 st.write("No active projects to deactivate.")
+        with tab5:
+            inactive_list = projects.list_inactive_projects()
+            if inactive_list:
+                to_reactivate = st.selectbox("Deactivated project to reactivate", inactive_list, key="react_select")
+                if st.button("Reactivate project"):
+                    try:
+                        projects.reactivate_project(to_reactivate)
+                        st.session_state.active_project = to_reactivate
+                        log(f"Project '{to_reactivate}' reactivated and set as active")
+                        st.rerun()
+                    except (FileNotFoundError, FileExistsError) as e:
+                        log_error(str(e))
+            else:
+                st.write("No deactivated projects.")
 
     elif section == "Download":
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["Search", "User TL", "Retweets", "Comments", "Advanced Comments"])

@@ -64,9 +64,24 @@ def select_project(name: str) -> Path:
 
 
 def deactivate_project(name: str) -> None:
+    """No borra el proyecto: lo mueve de data/{name} a data/desactivated/{name}."""
     project_dir = DATA_DIR / name
     if not project_dir.is_dir():
         raise FileNotFoundError(f"Project '{name}' does not exist or is not active")
 
     INACTIVE_DIR.mkdir(parents=True, exist_ok=True)
     shutil.move(str(project_dir), str(INACTIVE_DIR / name))
+
+
+def reactivate_project(name: str) -> Path:
+    """Vuelve a activar un proyecto desactivado: lo mueve de data/desactivated/{name}
+    de vuelta a data/{name}."""
+    inactive_dir = INACTIVE_DIR / name
+    if not inactive_dir.is_dir():
+        raise FileNotFoundError(f"Project '{name}' is not deactivated")
+    project_dir = DATA_DIR / name
+    if project_dir.exists():
+        raise FileExistsError(f"An active project named '{name}' already exists")
+
+    shutil.move(str(inactive_dir), str(project_dir))
+    return project_dir
