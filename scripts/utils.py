@@ -45,7 +45,6 @@ def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print)
     crea un fichero de contexto {dest}_merge_context.csv con la procedencia.
     """
     import context
-    from datetime import datetime
 
     if len(datasets) < 2:
         raise ValueError("Se necesitan al menos 2 datasets para unir")
@@ -70,35 +69,67 @@ def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print)
         merged = merged.drop_duplicates(subset=key, keep="first")
     log(f"Tweets: {total_raw} -> {len(merged)} tras quitar duplicados")
 
-    dest_path = project_dir / f"{dest}.csv"
     # si el destino ya existe (típicamente porque es uno de los datasets unidos),
     # se guarda la versión anterior antes de sobrescribir para no perderla
-    if dest_path.exists():
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup = project_dir / f"{dest}_prev_{stamp}.csv"
-        dest_path.rename(backup)
-        log(f"El dataset destino ya existía; versión anterior guardada como {backup.name}")
-
+    _backup_dataset(project_dir, dest, log=log)
+    dest_path = project_dir / f"{dest}.csv"
     merged.to_csv(dest_path, index=False, encoding="utf-8")
     context.put_context_merge(project_dir, dest, datasets, len(merged))
     log(f"Dataset combinado '{dest}' en {dest_path.name} ({len(merged)} tweets, viene de: {', '.join(datasets)})")
     return dest_path
 
 
-def clean_data(project_dir: Path, prefix: str, output_filename: str,
-                langs: list[str] | None = None, positives: list[str] | None = None,
-                false_positives: list[str] | None = None, log=print) -> Path:
-    """Filtra el fichero {prefix}.csv del proyecto por idioma y/o palabras clave.
+# sufijos exactos de los ficheros de contexto de un dataset (para respaldarlos)
+_CONTEXT_SUFFIXES = [
+    "_search_context.csv", "_users_context.csv", "_merge_context.csv",
+    "_clean_context.csv", "_RTs_context.csv", "_replies_context.csv",
+    "_replies_advanced_context.csv",
+]
+
+
+def _backup_dataset(project_dir: Path, name: str, log=print, backup_contexts: bool = False) -> None:
+    """Si {name}.csv existe, guarda su versión anterior como {name}_prev_<fecha>.csv
+    antes de sobrescribirla. Con backup_contexts, respalda además los ficheros de
+    contexto del dataset (con extensión .bak, para que no se listen como datasets)."""
+    from datetime import datetime
+
+    dest_path = project_dir / f"{name}.csv"
+    if not dest_path.exists():
+        return
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest_path.rename(project_dir / f"{name}_prev_{stamp}.csv")
+    log(f"El dataset destino ya existía; versión anterior guardada como {name}_prev_{stamp}.csv")
+    if backup_contexts:
+        for suffix in _CONTEXT_SUFFIXES:
+            ctx = project_dir / f"{name}{suffix}"
+            if ctx.exists():
+                ctx.rename(project_dir / f"{name}_prev_{stamp}{suffix}.bak")
+
+
+def clean_dataset(project_dir: Path, source: str, dest: str,
+                  langs: list[str] | None = None, positives: list[str] | None = None,
+                  false_positives: list[str] | None = None, log=print) -> Path:
+    """Filtra el dataset {source}.csv por idioma y/o palabras clave y lo guarda como
+    {dest}.csv.
 
     langs: lista de códigos de idioma a conservar (ej. ['es', 'ca']). Vacío/None = no filtra.
     positives/false_positives: comparación insensible a mayúsculas y a acentos
     (ej. 'sanchez' coincide con 'Sánchez').
+
+    Si el dataset destino ya existe (típicamente porque es el mismo que el origen,
+    limpieza in situ), su versión anterior y su contexto se guardan antes de
+    sobrescribir. Además se crea {dest}_clean_context.csv con la procedencia
+    (de qué dataset viene y con qué criterios), que hace que el dataset limpio
+    aparezca en las listas de datasets.
     """
-    input_file = project_dir / f"{prefix}.csv"
+    import context
+
+    input_file = project_dir / f"{source}.csv"
     if not input_file.exists():
         raise FileNotFoundError(f"No existe {input_file.name} en el proyecto")
 
     df = pd.read_csv(input_file, encoding="utf-8")
+    total_before = len(df)
 
     if langs:
         df = df[df["lang"].isin(langs)]
@@ -120,9 +151,15 @@ def clean_data(project_dir: Path, prefix: str, output_filename: str,
             df = df[~text_normalized.str.contains(pattern, case=False, na=False, regex=True)]
             log(f"Tras excluir falsas positivas {false_positives}: {len(df)} tweets")
 
-    output_path = project_dir / output_filename
+    # el df ya está en memoria, así que se puede respaldar/sobrescribir el destino
+    # aunque sea el mismo fichero de origen (limpieza in situ)
+    _backup_dataset(project_dir, dest, log=log, backup_contexts=True)
+
+    output_path = project_dir / f"{dest}.csv"
     df.to_csv(output_path, index=False, encoding="utf-8")
-    log(f"Tweets totales: {len(df)}")
+    context.put_context_clean(project_dir, dest, source, langs, positives, false_positives,
+                              total_before, len(df))
+    log(f"Dataset limpio '{dest}' en {output_path.name} ({total_before} -> {len(df)} tweets, viene de: {source})")
     return output_path
 
 

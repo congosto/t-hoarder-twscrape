@@ -18,6 +18,24 @@ def put_context_merge(dataset: Path, prefix: str, sources: list, total: int) -> 
     }).to_csv(context_file, index=False, encoding="utf-8")
 
 
+def put_context_clean(dataset: Path, prefix: str, source: str, langs, positives,
+                      false_positives, total_before: int, total_after: int) -> None:
+    """Contexto de procedencia de un dataset limpio (Tools > Clean dataset): de qué
+    dataset viene, con qué criterios se limpió y cuántos tweets quedaron. Su
+    existencia también hace que el dataset limpio aparezca en las listas."""
+    dataset.mkdir(parents=True, exist_ok=True)
+    context_file = dataset / f"{prefix}_clean_context.csv"
+    pd.DataFrame({
+        "created": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+        "cleaned_from": [source],
+        "langs": ["|".join(langs or [])],
+        "positives": ["|".join(positives or [])],
+        "false_positives": ["|".join(false_positives or [])],
+        "total_before": [total_before],
+        "total_after": [total_after],
+    }).to_csv(context_file, index=False, encoding="utf-8")
+
+
 def put_context_search(
     dataset: Path, prefix: str, date, since, until, query: str = "", product: str = "", frequency: str = ""
 ) -> None:

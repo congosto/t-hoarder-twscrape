@@ -120,11 +120,24 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
       nº de tweets, fecha); ese contexto hace además que el dataset combinado
       aparezca en las listas de datasets (Graphs, Charts, RTs, etc.)
 
-  Clean data
-    Dataset (dataset con los tweets originales)
-    Positives (List of included words)
-    False positives (List of excluded words)
-    Output file
+  Clean dataset
+    Dataset (prefix of the file with the original tweets; solo lista los
+      datasets del proyecto)
+    Languages (idiomas a conservar, separados por comas; vacío = no filtra)
+    Positives (List of included words; pasa el tweet si contiene alguna)
+    False positives (List of excluded words; descarta el tweet si contiene alguna)
+    Destination dataset (nombre del dataset destino, sin extensión)
+    Botón "Clean dataset":
+    - Limpia el dataset origen con esos criterios (idioma/positivas/falsas
+      positivas, comparación insensible a mayúsculas y acentos) y lo guarda
+      como {dest}.csv
+    - Si el dataset destino ya existe (típicamente porque es el mismo que el
+      origen, limpieza in situ), antes de sobrescribir guarda su versión
+      anterior como {dest}_prev_<fecha>.csv y respalda su contexto anterior
+      (ficheros *_context.csv → *_context.csv.bak, para que no se listen)
+    - Crea {dest}_clean_context.csv con la procedencia (de qué dataset viene y
+      con qué criterios); ese contexto hace además que el dataset limpio
+      aparezca en las listas de datasets
 
   Location
     Dataset (dataset con los tweets originales)

@@ -527,7 +527,7 @@ with left:
                         log_error(f"no existe {acm_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
 
     elif section == "Tools":
-        tab1, tab2, tab3 = st.tabs(["Merge datasets", "Clean data", "Location"])
+        tab1, tab2, tab3 = st.tabs(["Merge datasets", "Clean dataset", "Location"])
         with tab1:
             if not st.session_state.active_project:
                 st.write("Selecciona o crea un proyecto en 'Project' antes de unir datasets.")
@@ -563,7 +563,7 @@ with left:
             if not st.session_state.active_project:
                 st.write("Selecciona o crea un proyecto en 'Project' antes de limpiar datos.")
             else:
-                clean_prefix = prefix_input("Dataset (prefijo del fichero con los tweets originales)", "clean_prefix")
+                clean_prefix = prefix_input("Dataset (prefix of the file with the original tweets)", "clean_prefix")
                 clean_langs_text = st.text_input(
                     "Languages (idiomas a conservar, separados por comas, ej. es,ca; vacío = no filtra)",
                     key="clean_langs_text",
@@ -576,25 +576,27 @@ with left:
                     "False positives: excluir los tweets que contengan alguna de esta lista de palabras separadas por comas (ej. futbol,humor)",
                     key="clean_false_positives",
                 )
-                clean_out = st.text_input("Output file", key="clean_out")
-                if st.button("Limpiar datos"):
+                clean_dest = _strip_extension(st.text_input("Destination dataset", key="clean_dest").strip())
+                if st.button("Clean dataset"):
                     if not clean_prefix:
-                        log_error("escribe el Dataset del fichero a limpiar")
-                    elif not clean_out:
-                        log_error("escribe un nombre de fichero de salida")
+                        log_error("escribe el Dataset a limpiar")
+                    elif not clean_dest:
+                        log_error("escribe el nombre del dataset destino")
                     else:
                         project_dir = projects.select_project(st.session_state.active_project)
                         langs_list = [w.strip() for w in clean_langs_text.split(",") if w.strip()]
                         positives_list = [w.strip() for w in clean_positives.split(",") if w.strip()]
                         false_positives_list = [w.strip() for w in clean_false_positives.split(",") if w.strip()]
                         try:
-                            output_file = utils.clean_data(
-                                project_dir, clean_prefix, clean_out,
+                            output_file = utils.clean_dataset(
+                                project_dir, clean_prefix, clean_dest,
                                 langs=langs_list, positives=positives_list,
                                 false_positives=false_positives_list, log=log,
                             )
                             log(f"Resultado en {output_file}")
                             set_result(output_file)
+                            # rerun para que el dataset limpio aparezca ya en las listas
+                            st.rerun()
                         except FileNotFoundError as e:
                             log_error(str(e))
         with tab3:
