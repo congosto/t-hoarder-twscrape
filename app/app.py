@@ -187,14 +187,16 @@ def set_result_charts(figs, image_path):
 _PREFIX_KIND_SUFFIXES = {
     "search": "_search_context.csv",
     "users": "_users_context.csv",
+    "merge": "_merge_context.csv",
 }
+_ALL_KINDS = ("search", "users", "merge")
 
 
-def project_prefixes(project_dir, kinds=("search", "users")):
-    """Prefixes del proyecto, del más reciente al más antiguo (fecha del contexto).
+def project_prefixes(project_dir, kinds=_ALL_KINDS):
+    """Datasets del proyecto, del más reciente al más antiguo (fecha del contexto).
 
-    kinds filtra por origen: 'search' (historical_search) y/o 'users'
-    (historical_timeline)."""
+    kinds filtra por origen: 'search' (historical_search), 'users'
+    (historical_timeline) y/o 'merge' (datasets combinados en Tools)."""
     suffixes = [_PREFIX_KIND_SUFFIXES[k] for k in kinds]
     files = sorted(
         (f for suffix in suffixes for f in project_dir.glob(f"*{suffix}")),
@@ -235,7 +237,7 @@ def _new_dataset_input(key):
     return name
 
 
-def prefix_input(label, key, allow_new=False, kinds=("search", "users")):
+def prefix_input(label, key, allow_new=False, kinds=_ALL_KINDS):
     """Entrada de Dataset como desplegable con los datasets del proyecto activo,
     el más reciente preseleccionado (así se trabaja por defecto con lo último).
 
@@ -525,29 +527,30 @@ with left:
                         log_error(f"no existe {acm_prefix}.csv en el proyecto activo. Descarga primero esos tweets (Search/User TL).")
 
     elif section == "Tools":
-        tab1, tab2, tab3 = st.tabs(["Merge files", "Clean data", "Location"])
+        tab1, tab2, tab3 = st.tabs(["Merge datasets", "Clean data", "Location"])
         with tab1:
             if not st.session_state.active_project:
-                st.write("Selecciona o crea un proyecto en 'Project' antes de unir ficheros.")
+                st.write("Selecciona o crea un proyecto en 'Project' antes de unir datasets.")
             else:
                 project_dir = projects.select_project(st.session_state.active_project)
-                available_csvs = sorted(p.name for p in project_dir.glob("*.csv"))
-                if not available_csvs:
-                    st.write("No hay ficheros CSV en este proyecto todavía.")
+                available_datasets = project_prefixes(project_dir)
+                if not available_datasets:
+                    st.write("No hay ningún dataset en este proyecto todavía.")
                 else:
-                    merge_files_selected = st.multiselect(
-                        "Files a unir (deben estar en el proyecto activo)", available_csvs, key="merge_files_selected"
+                    merge_datasets_selected = st.multiselect(
+                        "Datasets to merge (must be in the active project)",
+                        available_datasets, key="merge_datasets_selected",
                     )
-                    merge_output_file = st.text_input("Output file", key="merge_output_file")
-                    if st.button("Combinar archivos"):
-                        if len(merge_files_selected) < 2:
-                            log_error("selecciona al menos 2 ficheros para unir")
-                        elif not merge_output_file:
-                            log_error("escribe un nombre de fichero de salida")
+                    merge_dest = _strip_extension(st.text_input("Destination dataset", key="merge_dest").strip())
+                    if st.button("Combine datasets"):
+                        if len(merge_datasets_selected) < 2:
+                            log_error("selecciona al menos 2 datasets para unir")
+                        elif not merge_dest:
+                            log_error("escribe el nombre del dataset destino")
                         else:
                             try:
-                                output_file = utils.merge_files(
-                                    project_dir, merge_files_selected, merge_output_file, log=log
+                                output_file = utils.merge_datasets(
+                                    project_dir, merge_datasets_selected, merge_dest, log=log
                                 )
                                 log(f"Resultado en {output_file}")
                                 set_result(output_file)
@@ -720,7 +723,7 @@ with left:
             else:
                 col_prefix, col_title = st.columns(2)
                 with col_prefix:
-                    tg_prefix = prefix_input("Dataset", "tg_prefix", kinds=("search",))
+                    tg_prefix = prefix_input("Dataset", "tg_prefix", kinds=("search", "merge"))
                 with col_title:
                     tg_title = st.text_input("Base title", key="tg_title")
 
@@ -810,7 +813,7 @@ with left:
             else:
                 col_prefix, col_username = st.columns(2)
                 with col_prefix:
-                    ug_prefix = prefix_input("Dataset", "ug_prefix", kinds=("users",))
+                    ug_prefix = prefix_input("Dataset", "ug_prefix", kinds=("users", "merge"))
                 with col_username:
                     ug_username = st.text_input("Username", key="ug_username").strip()
 

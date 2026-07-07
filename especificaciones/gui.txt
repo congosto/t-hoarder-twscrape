@@ -104,11 +104,21 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
 
 - Tools
 
-  Merge files | Clean data | Location
+  Merge datasets | Clean data | Location
 
-  Merge files
-    Input files (selección múltiple)
-    Output file
+  Merge datasets
+    Datasets to merge (must be in the active project) (selección múltiple;
+      solo lista los datasets del proyecto, no ficheros derivados)
+    Destination dataset (nombre del dataset destino, sin extensión)
+    Botón "Combine datasets":
+    - Une los tweets de los datasets elegidos ({dataset}.csv de cada uno) y
+      quita duplicados por id (o url)
+    - Si el dataset destino ya existe (típicamente porque es uno de los que se
+      unen), su versión anterior se guarda como {dest}_prev_<fecha>.csv antes
+      de sobrescribirla, para no perderla
+    - Crea {dest}_merge_context.csv con la procedencia (de qué datasets viene,
+      nº de tweets, fecha); ese contexto hace además que el dataset combinado
+      aparezca en las listas de datasets (Graphs, Charts, RTs, etc.)
 
   Clean data
     Dataset (dataset con los tweets originales)

@@ -35,40 +35,54 @@ def clean_tweets(df: pd.DataFrame, since, until) -> pd.DataFrame:
     return df
 
 
-def merge_files(project_dir: Path, filenames: list[str], output_filename: str, log=print) -> Path:
-    """Une varios CSV del mismo proyecto, quitando duplicados por 'id'.
+def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print) -> Path:
+    """Une los tweets de varios datasets del proyecto en uno nuevo, quitando
+    duplicados por 'id' (o 'url'). Los datasets son nombres (sin extensión); se
+    lee {dataset}.csv de cada uno, y deben tener las mismas columnas.
 
-    Todos los ficheros deben existir en project_dir y tener exactamente las
-    mismas columnas (mismo formato), si no se rechaza antes de leer nada.
+    Si el dataset destino ya existe (p.ej. es uno de los que se unen), su versión
+    anterior se guarda con sufijo _prev_<fecha> antes de sobrescribirla. Además se
+    crea un fichero de contexto {dest}_merge_context.csv con la procedencia.
     """
-    if len(filenames) < 2:
-        raise ValueError("Se necesitan al menos 2 ficheros para unir")
+    import context
+    from datetime import datetime
 
-    missing = [f for f in filenames if not (project_dir / f).exists()]
+    if len(datasets) < 2:
+        raise ValueError("Se necesitan al menos 2 datasets para unir")
+
+    paths = {ds: project_dir / f"{ds}.csv" for ds in datasets}
+    missing = [ds for ds, p in paths.items() if not p.exists()]
     if missing:
-        raise FileNotFoundError(f"No existen en el proyecto: {', '.join(missing)}")
+        raise FileNotFoundError(f"No existen en el proyecto: {', '.join(ds + '.csv' for ds in missing)}")
 
-    dfs = {}
-    for f in filenames:
-        dfs[f] = pd.read_csv(project_dir / f, encoding="utf-8")
-
-    reference_file, reference_df = next(iter(dfs.items()))
-    reference_columns = set(reference_df.columns)
-    mismatched = [f for f, df in dfs.items() if set(df.columns) != reference_columns]
+    dfs = {ds: pd.read_csv(p, encoding="utf-8") for ds, p in paths.items()}
+    ref_ds, ref_df = next(iter(dfs.items()))
+    ref_cols = set(ref_df.columns)
+    mismatched = [ds for ds, df in dfs.items() if set(df.columns) != ref_cols]
     if mismatched:
-        raise ValueError(
-            f"Las columnas no coinciden con {reference_file} en: {', '.join(mismatched)}"
-        )
+        raise ValueError(f"Las columnas no coinciden con {ref_ds}.csv en: {', '.join(mismatched)}")
 
-    log(f"Uniendo {len(filenames)} ficheros...")
+    log(f"Uniendo {len(datasets)} datasets...")
     merged = pd.concat(dfs.values(), ignore_index=True)
-    if "id" in merged.columns:
-        merged = merged.drop_duplicates(subset="id", keep="first")
+    total_raw = len(merged)
+    key = "id" if "id" in merged.columns else ("url" if "url" in merged.columns else None)
+    if key:
+        merged = merged.drop_duplicates(subset=key, keep="first")
+    log(f"Tweets: {total_raw} -> {len(merged)} tras quitar duplicados")
 
-    output_path = project_dir / output_filename
-    merged.to_csv(output_path, index=False, encoding="utf-8")
-    log(f"Tweets totales: {len(merged)}")
-    return output_path
+    dest_path = project_dir / f"{dest}.csv"
+    # si el destino ya existe (típicamente porque es uno de los datasets unidos),
+    # se guarda la versión anterior antes de sobrescribir para no perderla
+    if dest_path.exists():
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = project_dir / f"{dest}_prev_{stamp}.csv"
+        dest_path.rename(backup)
+        log(f"El dataset destino ya existía; versión anterior guardada como {backup.name}")
+
+    merged.to_csv(dest_path, index=False, encoding="utf-8")
+    context.put_context_merge(project_dir, dest, datasets, len(merged))
+    log(f"Dataset combinado '{dest}' en {dest_path.name} ({len(merged)} tweets, viene de: {', '.join(datasets)})")
+    return dest_path
 
 
 def clean_data(project_dir: Path, prefix: str, output_filename: str,

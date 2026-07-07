@@ -1,6 +1,21 @@
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+
+
+def put_context_merge(dataset: Path, prefix: str, sources: list, total: int) -> None:
+    """Contexto de procedencia de un dataset combinado (Tools > Merge datasets):
+    de qué datasets viene, cuántos tweets tiene y cuándo se creó. Su existencia
+    también hace que el dataset combinado aparezca en las listas de datasets."""
+    dataset.mkdir(parents=True, exist_ok=True)
+    context_file = dataset / f"{prefix}_merge_context.csv"
+    pd.DataFrame({
+        "created": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+        "merged_from": [", ".join(sources)],
+        "n_datasets": [len(sources)],
+        "total_tweets": [total],
+    }).to_csv(context_file, index=False, encoding="utf-8")
 
 
 def put_context_search(
