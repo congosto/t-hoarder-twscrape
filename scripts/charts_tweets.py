@@ -775,6 +775,7 @@ def tweets_by_community(df, ini_date, end_date, communities, base_title, events=
     ax.yaxis.set_major_formatter(ENG_FMT)
     ax.set_ylabel("Accumulated tweets")
     apply_date_axis(ax, ini_date, end_date + expand_time(ini_date, end_date, 18))
-    my_theme(ax, title=f"{base_title}: Tweets by community")
+    my_theme(ax, title=f"{base_title}: Tweets by community",
+             subtitle="(Adding retweet amplification)")
     fig.tight_layout()
     return fig
