@@ -730,33 +730,51 @@ def tweets_by_community(df, ini_date, end_date, communities, base_title, events=
     grp = sub.groupby(["date_slot", "community"])
     num_tweets = grp.size() + grp["retweet_count"].sum()
     grouped = num_tweets.reset_index(name="num_tweets")
-    pivot = grouped.pivot(index="date_slot", columns="community", values="num_tweets").fillna(0)
-    pivot = pivot.reindex(columns=top_community, fill_value=0)
-    pivot = pivot.reindex(pd.date_range(ini_date, end_date, freq=slot_time), fill_value=0)
+    cum = (
+        grouped.pivot(index="date_slot", columns="community", values="num_tweets").fillna(0)
+        .reindex(columns=top_community, fill_value=0)
+        .reindex(pd.date_range(ini_date, end_date, freq=slot_time), fill_value=0)
+        .cumsum()
+    )
 
     color_map = dict(zip(communities["community"], communities["color"]))
     name_map = dict(zip(communities["community"], communities["name_community"]))
-    tweet_peak = pivot.sum(axis=1).max() if not pivot.empty else 1
+    limit_y = max(cum.to_numpy().max(), 1) if len(cum) else 1
 
+    # acumulado por comunidad: nunca baja, y con muchas comunidades se lee mucho
+    # mejor que las barras (el mismo criterio que Tweets by language / medios)
     fig, ax = plt.subplots(figsize=(10, 6))
-    bottom = np.zeros(len(pivot))
-    width = (pivot.index[1] - pivot.index[0]).total_seconds() / 86400 * 0.8 if len(pivot) > 1 else 0.03
+    finals = {}
     for community in top_community:
-        values = pivot[community].values
-        ax.bar(pivot.index, values, bottom=bottom, width=width,
-               color=color_map.get(community), alpha=0.7, label=name_map.get(community))
-        bottom += values
+        ax.plot(cum.index, cum[community].values, color=color_map.get(community),
+                linewidth=2, alpha=0.85)
+        finals[community] = cum[community].iloc[-1]
 
     if events is not None and not events.empty:
         ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
         for _, e in ev.iterrows():
             ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
 
-    ax.set_ylim(0, tweet_peak * 1.3)
+    # etiqueta "comunidad (total)" al final de cada línea, separadas verticalmente
+    # un mínimo para que no se pisen, del color de su línea
+    min_sep = limit_y * 0.035
+    label_y, prev = {}, None
+    for community in sorted(top_community, key=lambda c: finals[c]):
+        y = finals[community]
+        if prev is not None and y - prev < min_sep:
+            y = prev + min_sep
+        label_y[community] = y
+        prev = y
+    for community in top_community:
+        ax.annotate(f"{name_map.get(community)} ({finals[community]:,.0f})",
+                    (cum.index[-1], label_y[community]), fontsize=8,
+                    xytext=(5, 0), textcoords="offset points", va="center",
+                    color=color_map.get(community))
+
+    ax.set_ylim(0, limit_y * 1.15)
     ax.yaxis.set_major_formatter(ENG_FMT)
-    ax.set_ylabel(f"Num tweets per {slot_time}")
-    apply_date_axis(ax, ini_date, end_date)
-    ax.legend(ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.15))
-    my_theme(ax, title=f"{base_title}: Tweets by group")
+    ax.set_ylabel("Accumulated tweets")
+    apply_date_axis(ax, ini_date, end_date + expand_time(ini_date, end_date, 18))
+    my_theme(ax, title=f"{base_title}: Tweets by community")
     fig.tight_layout()
     return fig
