@@ -101,28 +101,25 @@ def _build_payload(df: pd.DataFrame, title: str) -> dict:
     }
 
 
-def _render_html(payload: dict, kind_label: str) -> str:
+def _render_html(payload: dict) -> str:
     data_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     return (
         _TEMPLATE
         .replace("__TITLE__", html_lib.escape(payload["meta"]["title"]))
-        .replace("__KIND__", html_lib.escape(kind_label))
         .replace("__GENERATED__", html_lib.escape(payload["meta"]["generatedAt"]))
         .replace("__DATA_JSON__", data_json)
     )
 
 
 def generate_dashboard(project_dir, prefix: str, title: str | None = None,
-                       kind: str = "tweets", log=print, force: bool = False):
-    """Genera (o reutiliza) el dashboard de {prefix}.csv.
-
-    kind ('tweets' o 'users') es el mismo dashboard para ambos tipos; solo
-    cambia el fichero de caché ({prefix}_dashboard_{kind}.html) y la etiqueta.
-    Devuelve (html, path). Si el HTML existe y es igual o más nuevo que el CSV
-    y no se fuerza, lo reutiliza; si el CSV es más nuevo, regenera."""
+                       log=print, force: bool = False):
+    """Genera (o reutiliza) el dashboard de {prefix}.csv (mismo para datasets
+    de search y de users). Devuelve (html, path). Si el HTML existe y es igual
+    o más nuevo que el CSV y no se fuerza, lo reutiliza; si el CSV es más nuevo,
+    regenera."""
     project_dir = Path(project_dir)
     csv_path = project_dir / f"{prefix}.csv"
-    html_path = project_dir / f"{prefix}_dashboard_{kind}.html"
+    html_path = project_dir / f"{prefix}_dashboard.html"
     if not csv_path.exists():
         raise FileNotFoundError(f"{prefix}.csv does not exist in the active project.")
 
@@ -131,12 +128,11 @@ def generate_dashboard(project_dir, prefix: str, title: str | None = None,
         log(f"Dashboard up to date, reusing {html_path.name}")
         return html_path.read_text(encoding="utf-8"), html_path
 
-    log(f"Generating {kind} dashboard for '{prefix}'...")
+    log(f"Generating dashboard for '{prefix}'...")
     dtype = {c: str for c in _ID_COLS}
     df = pd.read_csv(csv_path, encoding="utf-8", dtype=dtype)
     payload = _build_payload(df, title or prefix)
-    kind_label = "Users" if kind == "users" else "Tweets"
-    html = _render_html(payload, kind_label)
+    html = _render_html(payload)
     html_path.write_text(html, encoding="utf-8")
     log(f"Dashboard saved to {html_path.name} ({payload['meta']['total']} posts)")
     return html, html_path
@@ -191,7 +187,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <main class="shell">
   <section class="hero">
     <h1>__TITLE__</h1>
-    <div class="sub">__KIND__ dashboard · generated __GENERATED__</div>
+    <div class="sub">Dashboard · generated __GENERATED__</div>
   </section>
 
   <section class="row row1">

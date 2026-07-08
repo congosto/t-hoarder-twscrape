@@ -183,19 +183,15 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     resultados:
     - {dataset}_loc.csv con columnas: username, location, country, region, city
 
-- Dashboard  (implementado: scripts/dashboard.py, conectado en Dashboard > Tweets)
+- Dashboard  (implementado: scripts/dashboard.py, conectado en Dashboard)
 
-  Dos pestañas: Tweets y Users. De momento es el MISMO dashboard para los dos
-  tipos (el de Users no difería lo suficiente como para hacer uno aparte);
-  solo cambia qué datasets lista cada pestaña y el fichero de caché: Tweets
-  lista los de historical_search y cachea {dataset}_dashboard_tweets.html;
-  Users lista los de historical_timeline y cachea {dataset}_dashboard_users.html.
+  Una sola vista (no se separan tweets y users porque el dashboard es el mismo).
+  El desplegable Dataset lista todos los datasets del proyecto (search y users).
 
-  Tweets
-    Dataset (desplegable, datasets de historical_search)
+    Dataset (desplegable, todos los datasets del proyecto)
     Title (opcional)
     botón "Show dashboard"
-    - Genera (o reutiliza) un HTML autocontenido {dataset}_dashboard_tweets.html
+    - Genera (o reutiliza) un HTML autocontenido {dataset}_dashboard.html
       y lo muestra en Resultados (embebido) + botón de descarga. Caché: se
       regenera solo si el CSV es más nuevo que el HTML.
     - El HTML es interactivo sin dependencias (SVG/JS vanilla, sin Plotly):
