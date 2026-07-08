@@ -348,8 +348,12 @@ Notas de implementación:
   la descarga usa el product y la unidad de frecuencia del formulario tal
   cual (no se subdivide ni se fuerza ningún product). Cada tramo temporal
   es una consulta. Detección de desbordamiento: si una ventana devuelve
-  len(tweets) >= n (el máximo pedido a la paginación), es señal de que
-  Twitter tenía más y se cortó, así que ese rango puede estar incompleto.
+  len(tweets) >= min(n, 500), se considera que topó con el techo del buscador
+  y ese rango puede estar incompleto. El umbral es fijo (500) y no >= n porque
+  el techo real de Latest queda por debajo de n (~700-950, y variable: un día
+  de pico puede devolver 704 o 951 en distintas ejecuciones), así que >= n
+  casi nunca dispararía; 500 separa bien días normales (~50-160) de picos
+  capados (700+). El min(n, 500) cubre el caso de pedir n < 500.
   No se re-descarga en el momento: se ANOTA en {dataset}_overflow.csv
   (get_replies_advanced usa {dataset}_replies_advanced_overflow.csv), un
   log append con columnas detected_at, source, since, until, product,

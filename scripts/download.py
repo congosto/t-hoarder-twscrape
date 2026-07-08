@@ -67,15 +67,28 @@ def _write_csv(df: pd.DataFrame, path: Path, append: bool) -> None:
     df.to_csv(path, mode="a" if append else "w", header=not append, index=False, encoding="utf-8")
 
 
+# Umbral de aviso de desbordamiento: si una ventana devuelve >= este nº de tweets
+# se considera que topó con el techo del buscador y puede estar incompleta. Es un
+# umbral fijo porque el techo real de Latest queda por debajo de n (~700-950, y
+# variable), así que un criterio >= n casi nunca dispararía. Se usa min(n, ESTE),
+# por si se pide n < 500 (ahí topar con n ya es la señal).
+_OVERFLOW_WARN = 500
+
+
+def _overflow_threshold(n: int) -> int:
+    return min(n, _OVERFLOW_WARN)
+
+
 def _record_overflow(path: Path, source: str, since, until, product: str,
                      frequency: str, tweets: int, n: int, log) -> None:
-    """Anota un tramo que alcanzó el límite n de la paginación (len(tweets) >= n):
-    señal de que Twitter tenía más y se cortó, así que ese rango puede estar
-    incompleto. Se guarda en {prefix}_overflow.csv como log (append) para que el
-    usuario re-descargue esos rangos con una frecuencia más fina y luego haga merge.
-    No se subdivide nada: la descarga usa el product y la frecuencia del formulario."""
+    """Anota un tramo que superó el umbral de desbordamiento (len(tweets) >=
+    min(n, _OVERFLOW_WARN)): señal de que topó con el techo del buscador y ese
+    rango puede estar incompleto. Se guarda en {prefix}_overflow.csv como log
+    (append) para que el usuario re-descargue esos rangos con una frecuencia más
+    fina y luego haga merge. No se subdivide nada: la descarga usa el product y
+    la frecuencia del formulario."""
     log(f"OVERFLOW: {tweets} tweets in [{since:%Y-%m-%d %H:%M} .. {until:%Y-%m-%d %H:%M}] "
-        f"reached the limit n={n}; range may be incomplete (see {path.name})")
+        f"(>= {_overflow_threshold(n)}); range may be incomplete (see {path.name})")
     row = pd.DataFrame([{
         "detected_at": pd.Timestamp.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
         "source": source,
@@ -129,7 +142,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
             log(f"--> Downloading {query_date} (product={product}) ......")
             tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
             log(f"Downloaded {len(tweets)} tweets")
-            if len(tweets) >= n:
+            if len(tweets) >= _overflow_threshold(n):
                 _record_overflow(overflow_file, query, a, b, product, frequency, len(tweets), n, log)
                 overflow_count += 1
             if tweets:
@@ -154,9 +167,9 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
             df.to_csv(output_file, index=False, encoding="utf-8")
             total = len(df)
         if overflow_count:
-            log(f"WARNING: {overflow_count} interval(s) reached the n={n} limit and may be "
-                f"incomplete — see {overflow_file.name}; re-download those ranges at a finer "
-                f"frequency and merge.")
+            log(f"WARNING: {overflow_count} interval(s) reached >= {_overflow_threshold(n)} tweets "
+                f"and may be incomplete — see {overflow_file.name}; re-download those ranges at a "
+                f"finer frequency and merge.")
         context.log_end_download(output, prefix, "search", total)
 
         log("'Historical Search' download completed")
@@ -211,7 +224,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                 log(f"--> Downloading {query_date} (product={product}) ......")
                 tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
                 log(f"Downloaded {len(tweets)} tweets")
-                if len(tweets) >= n:
+                if len(tweets) >= _overflow_threshold(n):
                     _record_overflow(overflow_file, f"from:{_user}", a, b, product, frequency, len(tweets), n, log)
                     overflow_count += 1
                 if tweets:
@@ -237,9 +250,9 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
             df.to_csv(output_file, index=False, encoding="utf-8")
             total = len(df)
         if overflow_count:
-            log(f"WARNING: {overflow_count} interval(s) reached the n={n} limit and may be "
-                f"incomplete — see {overflow_file.name}; re-download those ranges at a finer "
-                f"frequency and merge.")
+            log(f"WARNING: {overflow_count} interval(s) reached >= {_overflow_threshold(n)} tweets "
+                f"and may be incomplete — see {overflow_file.name}; re-download those ranges at a "
+                f"finer frequency and merge.")
         context.log_end_download(output, prefix, "users", total)
 
         log("'Historical Timeline' download completed")
@@ -395,7 +408,7 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
                 log(f"--> Downloading {query} (product={product}) ......")
                 replies = run_async(scraping.search_tweets(query, n=n, product=product))
                 log(f"Downloaded {len(replies)} replies")
-                if len(replies) >= n:
+                if len(replies) >= _overflow_threshold(n):
                     _record_overflow(overflow_file, _url, a, b, product, frequency, len(replies), n, log)
                     overflow_count += 1
                 if replies:
@@ -413,8 +426,8 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
             context.put_context_replies(output, prefix, tweet_id, kind="replies_advanced")
 
         if overflow_count:
-            log(f"WARNING: {overflow_count} interval(s) reached the n={n} limit and may be "
-                f"incomplete — see {overflow_file.name}.")
+            log(f"WARNING: {overflow_count} interval(s) reached >= {_overflow_threshold(n)} tweets "
+                f"and may be incomplete — see {overflow_file.name}.")
         log("'Advanced Replies' download completed")
         return output_file
     finally:
