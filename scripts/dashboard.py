@@ -169,7 +169,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:14px;overflow:hidden;}
   .panel h2{margin:0 0 4px;font-size:16px;}
   .panel .status{color:var(--muted);font-size:12px;margin-bottom:8px;}
-  .heat-scroll{max-height:520px;overflow-y:auto;}
+  .heat-scroll{max-height:520px;overflow:auto;}
   table{width:100%;border-collapse:collapse;font-size:12px;}
   th{text-align:left;color:var(--muted);background:#f8fafc;font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:9px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;}
   td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
@@ -324,7 +324,7 @@ function renderRhythm(r){
   const step=Math.max(1,Math.ceil(n/6)); let xl='';
   for(let i=0;i<n;i+=step){ xl+='<text x="'+X(i)+'" y="'+(H-pB+18)+'" font-size="11" text-anchor="middle" fill="#475569">'+esc(days[i].slice(5))+'</text>'; }
   const dots=days.map((d,i)=>'<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(vals[i]).toFixed(1)+'" r="2.5" fill="#1d4ed8"><title>'+esc(days[i])+': '+fmt(vals[i])+'</title></circle>').join('');
-  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="100%">'
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:300px;display:block">'
     +'<line x1="'+pL+'" y1="'+(pT+ih)+'" x2="'+(W-pR)+'" y2="'+(pT+ih)+'" stroke="#cbd5e1"/>'
     +'<path d="'+area+'" fill="rgba(29,78,216,.12)"/>'
     +'<path d="'+line+'" fill="none" stroke="#1d4ed8" stroke-width="2"/>'
@@ -342,7 +342,9 @@ function renderHeatmap(r,topN){
   const st={}; for(const [k] of metrics){ const vs=top.map(p=>p[k]); st[k]={min:Math.min(...vs),max:Math.max(...vs)}; }
   const labelW=250,colW=88,rowH=24,headH=26;
   const W=labelW+colW*metrics.length, H=headH+rowH*top.length;
-  let s='<svg viewBox="0 0 '+W+' '+H+'" width="100%">';
+  // tamaño explícito en px (evita el bug de altura 0 en móvil); el contenedor
+  // .heat-scroll permite scroll horizontal/vertical si no cabe
+  let s='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block">';
   metrics.forEach(([k,lab],ci)=>{ s+='<text x="'+(labelW+colW*ci+colW/2)+'" y="'+(headH-9)+'" font-size="11" font-weight="700" text-anchor="middle" fill="#475569">'+esc(lab)+'</text>'; });
   top.forEach((p,ri)=>{
     const yy=headH+rowH*ri;
@@ -389,7 +391,13 @@ function exportCsv(){
 
 function render(){
   const {f,r}=applyFilters(); lastFiltered=r;
-  renderKpis(r); renderRhythm(r); renderHeatmap(r,f.topN); renderTable(r,f.topN);
+  // cada paso aislado: si uno falla (p.ej. render SVG en un navegador móvil),
+  // los demás siguen y el error se ve en pantalla en vez de dejar todo vacío
+  const step=(fn,el,tag)=>{ try{ fn(); }catch(e){ if(el) el.innerHTML='<div class="empty">'+tag+' error: '+esc(e.message)+'</div>'; } };
+  step(()=>renderKpis(r), $('kpiGrid'), 'kpi');
+  step(()=>renderRhythm(r), $('rhythmChart'), 'chart');
+  step(()=>renderHeatmap(r,f.topN), $('heatmapChart'), 'heatmap');
+  step(()=>renderTable(r,f.topN), null, 'table');
 }
 
 function reset(){
