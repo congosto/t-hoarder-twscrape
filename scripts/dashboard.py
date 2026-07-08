@@ -36,6 +36,13 @@ def _str(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
     return pd.Series(default, index=df.index, dtype=object)
 
 
+def _cap(s: str, n: int = 500) -> str:
+    """Recorta textos muy largos (protege el peso del HTML sin afectar a tweets
+    normales; la búsqueda sigue cubriendo los primeros n caracteres)."""
+    s = "" if s is None else str(s)
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
 def _post_type(df: pd.DataFrame) -> pd.Series:
     """quote si is_quote_status; reply si in_reply_to_tweet_id_str; si no original."""
     ttype = pd.Series("original", index=df.index, dtype=object)
@@ -56,45 +63,37 @@ def _build_payload(df: pd.DataFrame, title: str) -> dict:
         raise ValueError("No rows with a valid 'date' column to build the dashboard.")
 
     dt = df["_dt"]
-    day = dt.dt.strftime("%Y-%m-%d")
-    label = dt.dt.strftime("%Y-%m-%d %H:%M")
-    hour = dt.dt.hour.astype(int)
-
-    likes = _num(df, "like_count")
-    rts = _num(df, "retweet_count")
-    replies = _num(df, "reply_count")
-    quotes = _num(df, "quote_count")
-    views = _num(df, "views_count")
-    followers = _num(df, "followers_count")
-
-    ids = _str(df, "id")
-    username = _str(df, "username")
-    text = _str(df, "text")
-    url = _str(df, "url", "#")
     lang = _str(df, "lang", "und").replace("", "und")
-    created = _str(df, "created_at")
-    ttype = _post_type(df)
 
-    records = []
-    for rec in zip(ids, username, day, label, hour, text, url, views, likes, rts,
-                   replies, quotes, followers, lang, created, ttype):
-        (rid, usr, d, lab, h, txt, u, vw, lk, rt, rp, qt, fo, lg, cr, tp) = rec
-        records.append({
-            "id": rid, "username": usr, "day": d, "label": lab, "hour": int(h),
-            "text": txt, "url": u,
-            "views": int(vw), "likes": int(lk), "retweets": int(rt),
-            "replies": int(rp), "quotes": int(qt),
-            "followers": int(fo), "createdAt": cr, "lang": lg, "type": tp,
-        })
-
-    languages = sorted({r["lang"] for r in records if r["lang"].strip()})
+    # codificación columnar (una lista por campo, claves de 1 letra) para no
+    # repetir los nombres de campo en cada registro: reduce mucho el peso del
+    # HTML embebido, clave para que cargue en móvil. El JS reconstruye los objetos.
+    cols = {
+        "u": _str(df, "username").tolist(),
+        "d": dt.dt.strftime("%Y-%m-%d").tolist(),
+        "l": dt.dt.strftime("%Y-%m-%d %H:%M").tolist(),
+        "h": dt.dt.hour.astype(int).tolist(),
+        "x": [_cap(t) for t in _str(df, "text").tolist()],
+        "r": _str(df, "url", "#").tolist(),
+        "v": _num(df, "views_count").tolist(),
+        "k": _num(df, "like_count").tolist(),
+        "t": _num(df, "retweet_count").tolist(),
+        "p": _num(df, "reply_count").tolist(),
+        "q": _num(df, "quote_count").tolist(),
+        "f": _num(df, "followers_count").tolist(),
+        "c": _str(df, "created_at").tolist(),
+        "g": lang.tolist(),
+        "y": _post_type(df).tolist(),
+    }
+    days = cols["d"]
+    languages = sorted({g for g in cols["g"] if str(g).strip()})
     return {
-        "posts": records,
+        "cols": cols,
         "meta": {
             "title": title,
-            "total": len(records),
-            "minDate": min(r["day"] for r in records),
-            "maxDate": max(r["day"] for r in records),
+            "total": len(days),
+            "minDate": min(days),
+            "maxDate": max(days),
             "languages": languages,
             "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         },
@@ -243,7 +242,13 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <script id="dashboard-data" type="application/json">__DATA_JSON__</script>
 <script>
 const DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
-const POSTS = DATA.posts, META = DATA.meta;
+const META = DATA.meta, C = DATA.cols;
+const POSTS = [];
+for(let i=0,n=C.d.length;i<n;i++){
+  POSTS.push({username:C.u[i],day:C.d[i],label:C.l[i],hour:C.h[i],text:C.x[i],url:C.r[i],
+    views:C.v[i],likes:C.k[i],retweets:C.t[i],replies:C.p[i],quotes:C.q[i],
+    followers:C.f[i],createdAt:C.c[i],lang:C.g[i],type:C.y[i]});
+}
 const $ = id => document.getElementById(id);
 let lastFiltered = [];
 
