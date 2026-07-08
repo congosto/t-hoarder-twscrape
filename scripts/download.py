@@ -68,6 +68,7 @@ def _write_csv(df: pd.DataFrame, path: Path, append: bool) -> None:
 
 
 _OVERFLOW_THRESHOLD = 700
+_ONE_DAY_SECONDS = 86_400
 
 # escalera de frecuencias, de la más gruesa a la más fina (con su duración en segundos)
 _FREQ_LADDER = [
@@ -96,6 +97,17 @@ def _next_finer_frequency(frequency: str) -> str | None:
         if secs < cur:
             return label
     return None
+
+
+def _effective_product(a, b, product: str) -> str:
+    """En ventanas menores de 1 día se usa siempre 'Top', aunque el formulario
+    pida 'Latest': Latest funciona mal en intervalos cortos. Se decide por la
+    duración real de la ventana (a, b), así las subdivisiones sub-diarias que
+    genera el control de desbordamiento fuerzan Top automáticamente, mientras
+    que cada tramo de nivel superior conserva el product del formulario."""
+    if (b - a).total_seconds() < _ONE_DAY_SECONDS:
+        return "Top"
+    return product
 
 
 def _download_window(min_date, max_date, frequency, slot_fn, log) -> None:
@@ -157,8 +169,9 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
             pace()
             log(f"From {a} to {b}")
             query_date = f"{query} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
-            log(f"--> Downloading {query_date} ......")
-            tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
+            prod = _effective_product(a, b, product)
+            log(f"--> Downloading {query_date} (product={prod}) ......")
+            tweets = run_async(scraping.search_tweets(query_date, n=n, product=prod))
             log(f"Downloaded {len(tweets)} tweets")
             if tweets:
                 df = _to_dataframe(tweets)
@@ -233,7 +246,8 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                 pace()
                 log(f"From {a} to {b}")
                 query_date = f"from:{_user} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
-                tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
+                prod = _effective_product(a, b, product)
+                tweets = run_async(scraping.search_tweets(query_date, n=n, product=prod))
                 log(f"Downloaded {len(tweets)} tweets")
                 if tweets:
                     df = _to_dataframe(tweets)
@@ -408,8 +422,9 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
                 pace()
                 query = (f"conversation_id:{_tid} filter:replies "
                          f"since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}")
-                log(f"--> Downloading {query} ......")
-                replies = run_async(scraping.search_tweets(query, n=n, product=product))
+                prod = _effective_product(a, b, product)
+                log(f"--> Downloading {query} (product={prod}) ......")
+                replies = run_async(scraping.search_tweets(query, n=n, product=prod))
                 log(f"Downloaded {len(replies)} replies")
                 if replies:
                     df = _to_dataframe(replies)

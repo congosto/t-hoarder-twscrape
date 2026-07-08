@@ -350,10 +350,15 @@ Notas de implementación:
   perdiendo tweets), se guardan igualmente y se re-descarga ese tramo
   subdividido a la siguiente frecuencia más fina de la escalera
   year > month > week > day > 3 hour > hour > 30 min > 10 min, de forma
-  recursiva hasta que no desborde (o hasta 10 min, el nivel más fino). El
-  contexto de reanudación se actualiza solo al completar cada tramo de nivel
-  superior; al final se deduplica el fichero por id/url para quitar los
-  solapes que deja la re-descarga.
+  recursiva hasta que no desborde (o hasta 10 min, el nivel más fino).
+  En las ventanas menores de 1 día (3 hour y por debajo) se usa siempre
+  el product 'Top' aunque el formulario pida 'Latest', porque Latest
+  funciona mal en intervalos cortos; el cambio se decide por la duración
+  de cada ventana, así cada tramo de nivel superior conserva el product,
+  from y to del formulario y solo las subdivisiones sub-diarias fuerzan Top.
+  El contexto de reanudación se actualiza solo al completar cada tramo de
+  nivel superior; al final se deduplica el fichero por id/url para quitar
+  los solapes que deja la re-descarga.
 - Charts: la lógica de graficado vive en scripts/charts_tweets.py y
   charts_profile.py (matplotlib, traducción de los antiguos cuadernos
   R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). Estilo
