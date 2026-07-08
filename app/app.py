@@ -564,28 +564,31 @@ with left:
                         log_error(f"{acm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
 
     elif section == "Dashboard":
-        tab_tw, tab_us = st.tabs(["Tweets", "Users"])
-        with tab_tw:
+        def _dashboard_tab(kind, dataset_kinds, key):
             if not st.session_state.active_project:
                 st.write("Select or create a project in 'Project' before opening a dashboard.")
-            else:
-                db_prefix = prefix_input("Dataset", "db_tw_prefix", kinds=("search",))
-                db_title = st.text_input("Title (optional)", key="db_tw_title")
-                if st.button("Show dashboard", key="db_tw_show"):
-                    if not db_prefix:
-                        log_error("select a Dataset")
-                    else:
-                        try:
-                            project_dir = projects.select_project(st.session_state.active_project)
-                            with st.spinner("Building dashboard..."):
-                                html, path = dashboard.generate_tweets_dashboard(
-                                    project_dir, db_prefix, db_title or db_prefix, log=log,
-                                )
-                            set_result_report(html, path)
-                        except (FileNotFoundError, ValueError) as e:
-                            log_error(str(e))
+                return
+            db_prefix = prefix_input("Dataset", f"{key}_prefix", kinds=dataset_kinds)
+            db_title = st.text_input("Title (optional)", key=f"{key}_title")
+            if st.button("Show dashboard", key=f"{key}_show"):
+                if not db_prefix:
+                    log_error("select a Dataset")
+                else:
+                    try:
+                        project_dir = projects.select_project(st.session_state.active_project)
+                        with st.spinner("Building dashboard..."):
+                            html, path = dashboard.generate_dashboard(
+                                project_dir, db_prefix, db_title or db_prefix, kind=kind, log=log,
+                            )
+                        set_result_report(html, path)
+                    except (FileNotFoundError, ValueError) as e:
+                        log_error(str(e))
+
+        tab_tw, tab_us = st.tabs(["Tweets", "Users"])
+        with tab_tw:
+            _dashboard_tab("tweets", ("search",), "db_tw")
         with tab_us:
-            st.write("The users dashboard is not defined yet.")
+            _dashboard_tab("users", ("users",), "db_us")
 
     elif section == "Tools":
         tab1, tab2, tab3, tab4 = st.tabs(["Merge datasets", "Clean dataset", "Restore dataset", "Location"])

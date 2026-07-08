@@ -185,8 +185,11 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
 
 - Dashboard  (implementado: scripts/dashboard.py, conectado en Dashboard > Tweets)
 
-  Dos pestañas: Tweets y Users (un dashboard por tipo). Users todavía sin
-  definir. Tweets lista los datasets de historical_search.
+  Dos pestañas: Tweets y Users. De momento es el MISMO dashboard para los dos
+  tipos (el de Users no difería lo suficiente como para hacer uno aparte);
+  solo cambia qué datasets lista cada pestaña y el fichero de caché: Tweets
+  lista los de historical_search y cachea {dataset}_dashboard_tweets.html;
+  Users lista los de historical_timeline y cachea {dataset}_dashboard_users.html.
 
   Tweets
     Dataset (desplegable, datasets de historical_search)
