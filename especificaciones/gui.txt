@@ -8,6 +8,7 @@ una lista de botones horizontales con las siguientes funciones
 
 - Project
 - Download
+- Dashboard
 - Tools
 - Graphs
 - Charts
@@ -181,6 +182,42 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
     - Identifica país, y si es España, también la Comunidad Autónoma, y ciudad
     resultados:
     - {dataset}_loc.csv con columnas: username, location, country, region, city
+
+- Dashboard  (implementado: scripts/dashboard.py, conectado en Dashboard > Tweets)
+
+  Dos pestañas: Tweets y Users (un dashboard por tipo). Users todavía sin
+  definir. Tweets lista los datasets de historical_search.
+
+  Tweets
+    Dataset (desplegable, datasets de historical_search)
+    Title (opcional)
+    botón "Show dashboard"
+    - Genera (o reutiliza) un HTML autocontenido {dataset}_dashboard_tweets.html
+      y lo muestra en Resultados (embebido) + botón de descarga. Caché: se
+      regenera solo si el CSV es más nuevo que el HTML.
+    - El HTML es interactivo sin dependencias (SVG/JS vanilla, sin Plotly):
+      todos los datos van embebidos como JSON y los filtros recalculan en el
+      navegador KPIs, gráficas y tabla.
+    - Controles (todo en inglés):
+      fila 1: Start date, End date, Post type (all/original/reply/quote),
+              Language, Search text, Min engagement, Top N.
+      fila 2: Sort by (engagement, retweets, replies, quotes, views, likes,
+              followers, account created, date), Direction (desc/asc),
+              Actions (Reset filters, Export CSV).
+    - KPIs (fila 3): Total posts (sin filtrar), Posts (filtered), Engagement,
+      Retweets, Replies, Quotes, Peak date/hour. Todos menos Total posts se
+      recalculan con los filtros. Peak date/hour = franja (día + hora) con más
+      posts. Engagement = likes + retweets + replies + quotes.
+    - Post type se deriva de las columnas twscrape: quote si is_quote_status,
+      reply si in_reply_to_tweet_id_str, si no original.
+    - Gráficas (2, no se repiten las de Charts):
+      1. Posting rhythm: área/línea de posts por día (SVG).
+      2. Top posts heatmap: filas = Top N posts (etiqueta username + fecha),
+         columnas = views, RTs, replies, quotes; color NORMALIZADO por columna
+         (cada métrica escalada 0-1 sobre las filas mostradas), con el valor
+         crudo dentro de cada celda.
+    - Tabla "Top filtered posts": Date, username, Content, views, Likes,
+      Retweets, replies, quotes, Language, Type, URL.
 
 - Graphs
 

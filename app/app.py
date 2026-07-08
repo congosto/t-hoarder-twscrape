@@ -9,7 +9,7 @@ import streamlit.components.v1 as st_components
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import accounts, context, download, projects, scraping, utils  # noqa: E402
+import accounts, context, dashboard, download, projects, scraping, utils  # noqa: E402
 from async_utils import run_async  # noqa: E402
 
 DATA_PATH = str(REPO_ROOT / "data")
@@ -54,7 +54,7 @@ st.set_page_config(page_title="t-hoarder-twscrape", layout="wide")
 LOGO_PATH = "../especificaciones/logo_t-hoarder.png"
 
 # Settings al final: es la sección que menos se usa una vez configuradas las cuentas
-SECTIONS = ["Project", "Download", "Tools", "Graphs", "Charts", "Settings"]
+SECTIONS = ["Project", "Download", "Dashboard", "Tools", "Graphs", "Charts", "Settings"]
 
 if "section" not in st.session_state:
     st.session_state.section = "Project"
@@ -562,6 +562,30 @@ with left:
                         set_result(output_file)
                     except FileNotFoundError:
                         log_error(f"{acm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
+
+    elif section == "Dashboard":
+        tab_tw, tab_us = st.tabs(["Tweets", "Users"])
+        with tab_tw:
+            if not st.session_state.active_project:
+                st.write("Select or create a project in 'Project' before opening a dashboard.")
+            else:
+                db_prefix = prefix_input("Dataset", "db_tw_prefix", kinds=("search",))
+                db_title = st.text_input("Title (optional)", key="db_tw_title")
+                if st.button("Show dashboard", key="db_tw_show"):
+                    if not db_prefix:
+                        log_error("select a Dataset")
+                    else:
+                        try:
+                            project_dir = projects.select_project(st.session_state.active_project)
+                            with st.spinner("Building dashboard..."):
+                                html, path = dashboard.generate_tweets_dashboard(
+                                    project_dir, db_prefix, db_title or db_prefix, log=log,
+                                )
+                            set_result_report(html, path)
+                        except (FileNotFoundError, ValueError) as e:
+                            log_error(str(e))
+        with tab_us:
+            st.write("The users dashboard is not defined yet.")
 
     elif section == "Tools":
         tab1, tab2, tab3, tab4 = st.tabs(["Merge datasets", "Clean dataset", "Restore dataset", "Location"])
