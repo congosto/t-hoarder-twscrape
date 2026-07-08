@@ -345,29 +345,29 @@ En la parte inferior: consola para ver el progreso (un mensaje por línea, los e
 Notas de implementación:
 - Reiniciar la app tras editar cualquier módulo de scripts/ (el hot-reload de Streamlit solo afecta a app.py): usar restart_app.ps1 en la raíz del repo.
 - Descargas (historical_search, historical_timeline, get_replies_advanced):
-  control de desbordamiento por tramo (rejilla recursiva). Si un tramo
-  temporal devuelve más de 500 tweets (señal de que topa con el límite de
-  paginación y puede estar perdiendo tweets), se guardan igualmente y se
-  re-descarga ese tramo subdividido a la siguiente frecuencia más fina de
-  la escalera month > day > 8 hour > 4 hour > 2 hour > 1 hour, de forma
-  recursiva hasta que no desborde (o hasta 1 hour, el nivel más fino).
-  Solo se subdivide el tramo que desborda: los tramos con pocos tweets (o 0)
-  se quedan como una sola consulta en su nivel, así se baja a lo fino donde
-  hay densidad y se mantiene grueso donde no. Como los hijos siempre caen
-  dentro del padre, la subdivisión nunca cruza el límite del día.
-  En las ventanas menores de 1 día (8 hour y por debajo) se usa siempre
-  el product 'Top' aunque el formulario pida 'Latest', porque Latest
-  funciona mal en intervalos cortos y Top rinde mucho más en ventanas
-  estrechas; el cambio se decide por la duración de cada ventana, así cada
-  tramo de nivel superior conserva el product, from y to del formulario y
-  solo las subdivisiones sub-diarias fuerzan Top. Nota práctica: como
-  detector conviene usar Latest de base (pagina hondo, ~950/día, y cruza el
-  umbral en los picos disparando la subdivisión), y dejar que Top coseche
-  en las sub-ventanas; con Top de base las ventanas anchas devuelven un
-  'top' curado (~100-150) y no llegan a disparar el overflow.
-  El contexto de reanudación se actualiza solo al completar cada tramo de
-  nivel superior; al final se deduplica el fichero por id/url para quitar
-  los solapes que deja la re-descarga.
+  la descarga usa el product y la unidad de frecuencia del formulario tal
+  cual (no se subdivide ni se fuerza ningún product). Cada tramo temporal
+  es una consulta. Detección de desbordamiento: si una ventana devuelve
+  len(tweets) >= n (el máximo pedido a la paginación), es señal de que
+  Twitter tenía más y se cortó, así que ese rango puede estar incompleto.
+  No se re-descarga en el momento: se ANOTA en {dataset}_overflow.csv
+  (get_replies_advanced usa {dataset}_replies_advanced_overflow.csv), un
+  log append con columnas detected_at, source, since, until, product,
+  frequency, tweets, n; además se avisa en el log en el momento y con un
+  resumen al final. El usuario usa ese fichero para re-descargar esos
+  rangos con una frecuencia más fina (a un dataset nuevo) y juntar luego
+  con Merge datasets (dedup por id).
+  Nota práctica sobre el detector: Latest pagina hondo (~950/día) y cruza n
+  en los picos, así que detecta bien; Top en ventanas anchas devuelve un
+  'top' curado (~100-150) y NO llega a n, así que no detecta (para cosechar
+  los picos, Top a frecuencia fina va mejor). Además el índice de búsqueda
+  de X se degrada con la antigüedad del tweet (sobre todo Top): los picos
+  hay que cosecharlos en pocos días, no en semanas. Por qué solo se detecta
+  y no se subdivide en el momento: la búsqueda comparte la cola SearchTimeline
+  (Top y Latest gastan la misma cuota) y pagina de 20 en 20, así que subdividir
+  dispara una ráfaga de peticiones que agota el pool y hace que Twitter
+  devuelva páginas vacías (twscrape corta a las 3 vacías). Ver memoria
+  download-overflow-two-pass.
 - Charts: la lógica de graficado vive en scripts/charts_tweets.py y
   charts_profile.py (matplotlib, traducción de los antiguos cuadernos
   R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). Estilo

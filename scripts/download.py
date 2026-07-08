@@ -67,71 +67,26 @@ def _write_csv(df: pd.DataFrame, path: Path, append: bool) -> None:
     df.to_csv(path, mode="a" if append else "w", header=not append, index=False, encoding="utf-8")
 
 
-_OVERFLOW_THRESHOLD = 500
-_ONE_DAY_SECONDS = 86_400
-
-# escalera de frecuencias, de la más gruesa a la más fina (con su duración en segundos).
-# La subdivisión por desbordamiento baja por estos niveles; 1 hora es el suelo.
-_FREQ_LADDER = [
-    ("1 month", 2_592_000), ("1 day", 86_400),
-    ("8 hour", 28_800), ("4 hour", 14_400), ("2 hour", 7_200), ("1 hour", 3_600),
-]
-_UNIT_SECONDS = {
-    "min": 60, "mins": 60, "minute": 60, "minutes": 60,
-    "hour": 3600, "hours": 3600, "day": 86400, "days": 86400,
-    "week": 604800, "weeks": 604800, "month": 2592000, "months": 2592000,
-    "year": 31536000, "years": 31536000,
-}
-
-
-def _freq_seconds(frequency: str) -> int:
-    parts = frequency.strip().split()
-    n = int(parts[0]) if len(parts) == 2 else 1
-    return n * _UNIT_SECONDS[parts[-1].lower()]
-
-
-def _next_finer_frequency(frequency: str) -> str | None:
-    """Siguiente nivel más fino de la escalera de frecuencias, o None si ya es el más fino."""
-    cur = _freq_seconds(frequency)
-    for label, secs in _FREQ_LADDER:
-        if secs < cur:
-            return label
-    return None
-
-
-def _effective_product(a, b, product: str) -> str:
-    """En ventanas menores de 1 día se usa siempre 'Top', aunque el formulario
-    pida 'Latest': Latest funciona mal en intervalos cortos. Se decide por la
-    duración real de la ventana (a, b), así las subdivisiones sub-diarias que
-    genera el control de desbordamiento fuerzan Top automáticamente, mientras
-    que cada tramo de nivel superior conserva el product del formulario."""
-    if (b - a).total_seconds() < _ONE_DAY_SECONDS:
-        return "Top"
-    return product
-
-
-def _download_window(min_date, max_date, frequency, slot_fn, log) -> None:
-    """Descarga [min_date, max_date] en tramos de 'frequency' llamando slot_fn(a, b)
-    —que descarga y guarda el tramo y devuelve el nº de tweets—. Si un tramo devuelve
-    más de _OVERFLOW_THRESHOLD tweets (señal de que topa con el límite de paginación y
-    puede estar perdiendo tweets), re-descarga ese tramo subdividido a la siguiente
-    frecuencia más fina, de forma recursiva. No toca el contexto; la deduplicación
-    final quita los solapes que deja la re-descarga."""
-    seq = date_sequence(min_date, max_date, frequency)
-    finer = _next_finer_frequency(frequency)
-    for i in range(len(seq) - 1):
-        a, b = seq[i], seq[i + 1]
-        count = slot_fn(a, b)
-        if count > _OVERFLOW_THRESHOLD and finer is not None:
-            log(f"Overflow: {count} tweets in [{a:%Y-%m-%d %H:%M} .. {b:%Y-%m-%d %H:%M}] "
-                f"(> {_OVERFLOW_THRESHOLD}); retrying with finer frequency '{finer}'")
-            _download_window(a, b, finer, slot_fn, log)
-
-
-def _dedup(df: pd.DataFrame) -> pd.DataFrame:
-    """Quita duplicados (por id, o url) que deja la re-descarga de tramos desbordados."""
-    key = "id" if "id" in df.columns else ("url" if "url" in df.columns else None)
-    return df.drop_duplicates(subset=key, keep="first") if key else df
+def _record_overflow(path: Path, source: str, since, until, product: str,
+                     frequency: str, tweets: int, n: int, log) -> None:
+    """Anota un tramo que alcanzó el límite n de la paginación (len(tweets) >= n):
+    señal de que Twitter tenía más y se cortó, así que ese rango puede estar
+    incompleto. Se guarda en {prefix}_overflow.csv como log (append) para que el
+    usuario re-descargue esos rangos con una frecuencia más fina y luego haga merge.
+    No se subdivide nada: la descarga usa el product y la frecuencia del formulario."""
+    log(f"OVERFLOW: {tweets} tweets in [{since:%Y-%m-%d %H:%M} .. {until:%Y-%m-%d %H:%M}] "
+        f"reached the limit n={n}; range may be incomplete (see {path.name})")
+    row = pd.DataFrame([{
+        "detected_at": pd.Timestamp.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": source,
+        "since": f"{since:%Y-%m-%d %H:%M:%S}",
+        "until": f"{until:%Y-%m-%d %H:%M:%S}",
+        "product": product,
+        "frequency": frequency,
+        "tweets": tweets,
+        "n": n,
+    }])
+    _write_csv(row, path, append=path.exists())
 
 
 def historical_search(data_path: Path, dataset: str, prefix: str, query: str, since, until,
@@ -143,6 +98,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
         output.mkdir(parents=True, exist_ok=True)
         output_file = output / f"{prefix}.csv"
         output_raw_file = output / f"{prefix}_raw.csv"
+        overflow_file = output / f"{prefix}_overflow.csv"
 
         existing_range = context.get_context_search_range(output, prefix)
         original_since, original_until = existing_range if existing_range else (since, until)
@@ -156,6 +112,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
         sequence = date_sequence(since, until, frequency)
 
         _pacer = {"first": True}
+        overflow_count = 0
 
         def pace():
             if _pacer["first"]:
@@ -165,14 +122,16 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
                 time.sleep(sleep_time)
 
         def slot(a, b):
-            nonlocal append
+            nonlocal append, overflow_count
             pace()
             log(f"From {a} to {b}")
             query_date = f"{query} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
-            prod = _effective_product(a, b, product)
-            log(f"--> Downloading {query_date} (product={prod}) ......")
-            tweets = run_async(scraping.search_tweets(query_date, n=n, product=prod))
+            log(f"--> Downloading {query_date} (product={product}) ......")
+            tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
             log(f"Downloaded {len(tweets)} tweets")
+            if len(tweets) >= n:
+                _record_overflow(overflow_file, query, a, b, product, frequency, len(tweets), n, log)
+                overflow_count += 1
             if tweets:
                 df = _to_dataframe(tweets)
                 df = clean_text(df)
@@ -180,12 +139,9 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
                 df = clean_tweets(df, a, b)
                 _write_csv(df, output_file, append)
                 append = True
-            return len(tweets)
 
         for i in range(len(sequence) - 1):
-            # descarga el tramo, subdividiéndolo si desborda; el contexto se
-            # actualiza solo al completar cada tramo de nivel superior
-            _download_window(sequence[i], sequence[i + 1], frequency, slot, log)
+            slot(sequence[i], sequence[i + 1])
             context.log_download_tweets(
                 output, prefix, sequence[i + 1], original_since, original_until,
                 query=query, product=product, frequency=frequency,
@@ -193,10 +149,14 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
 
         total = 0
         if output_file.exists():
-            df = _dedup(clean_tweets(pd.read_csv(output_file, encoding="utf-8"),
-                                     original_since, original_until))
+            df = clean_tweets(pd.read_csv(output_file, encoding="utf-8"),
+                              original_since, original_until)
             df.to_csv(output_file, index=False, encoding="utf-8")
             total = len(df)
+        if overflow_count:
+            log(f"WARNING: {overflow_count} interval(s) reached the n={n} limit and may be "
+                f"incomplete — see {overflow_file.name}; re-download those ranges at a finer "
+                f"frequency and merge.")
         context.log_end_download(output, prefix, "search", total)
 
         log("'Historical Search' download completed")
@@ -214,6 +174,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
         output.mkdir(parents=True, exist_ok=True)
         output_file = output / f"{prefix}.csv"
         output_raw_file = output / f"{prefix}_raw.csv"
+        overflow_file = output / f"{prefix}_overflow.csv"
 
         existing_range = context.get_context_user_range(output, prefix)
         original_since, original_until = existing_range if existing_range else (since, until)
@@ -222,6 +183,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
         append = output_file.exists()
 
         _pacer = {"first": True}
+        overflow_count = 0
 
         def pace():
             if _pacer["first"]:
@@ -242,13 +204,16 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
             sequence = date_sequence(since_partial, until, frequency)
 
             def slot(a, b, _user=user):
-                nonlocal append
+                nonlocal append, overflow_count
                 pace()
                 log(f"From {a} to {b}")
                 query_date = f"from:{_user} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
-                prod = _effective_product(a, b, product)
-                tweets = run_async(scraping.search_tweets(query_date, n=n, product=prod))
+                log(f"--> Downloading {query_date} (product={product}) ......")
+                tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
                 log(f"Downloaded {len(tweets)} tweets")
+                if len(tweets) >= n:
+                    _record_overflow(overflow_file, f"from:{_user}", a, b, product, frequency, len(tweets), n, log)
+                    overflow_count += 1
                 if tweets:
                     df = _to_dataframe(tweets)
                     df = df[df["username"].str.lower() == _user.lower()]
@@ -257,10 +222,9 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                     df = clean_tweets(df, a, b)
                     _write_csv(df, output_file, append)
                     append = True
-                return len(tweets)
 
             for i in range(len(sequence) - 1):
-                _download_window(sequence[i], sequence[i + 1], frequency, slot, log)
+                slot(sequence[i], sequence[i + 1])
                 context.log_download_users(
                     output, prefix, sequence[i + 1], order, user, original_since, original_until,
                     product=product, frequency=frequency,
@@ -268,10 +232,14 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
 
         total = 0
         if output_file.exists():
-            df = _dedup(clean_tweets(pd.read_csv(output_file, encoding="utf-8"),
-                                     original_since, original_until))
+            df = clean_tweets(pd.read_csv(output_file, encoding="utf-8"),
+                              original_since, original_until)
             df.to_csv(output_file, index=False, encoding="utf-8")
             total = len(df)
+        if overflow_count:
+            log(f"WARNING: {overflow_count} interval(s) reached the n={n} limit and may be "
+                f"incomplete — see {overflow_file.name}; re-download those ranges at a finer "
+                f"frequency and merge.")
         context.log_end_download(output, prefix, "users", total)
 
         log("'Historical Timeline' download completed")
@@ -386,6 +354,7 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
         file_in = output / f"{prefix}.csv"
         output_file = output / f"{prefix}_replies_advanced.csv"
         output_raw_file = output / f"{prefix}_replies_advanced_raw.csv"
+        overflow_file = output / f"{prefix}_replies_advanced_overflow.csv"
 
         tweets = pd.read_csv(file_in, encoding="utf-8")
         tweets = tweets[tweets["reply_count"] >= min_replies]
@@ -401,6 +370,7 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
         tweet_dates = tweets["date"].tolist()
 
         _pacer = {"first": True}
+        overflow_count = 0
 
         def pace():
             if _pacer["first"]:
@@ -418,14 +388,16 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
             until_t = since_t + pd.Timedelta(days=last_days)
 
             def slot(a, b, _tid=tweet_id, _url=tweet_urls[i]):
-                nonlocal append
+                nonlocal append, overflow_count
                 pace()
                 query = (f"conversation_id:{_tid} filter:replies "
                          f"since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}")
-                prod = _effective_product(a, b, product)
-                log(f"--> Downloading {query} (product={prod}) ......")
-                replies = run_async(scraping.search_tweets(query, n=n, product=prod))
+                log(f"--> Downloading {query} (product={product}) ......")
+                replies = run_async(scraping.search_tweets(query, n=n, product=product))
                 log(f"Downloaded {len(replies)} replies")
+                if len(replies) >= n:
+                    _record_overflow(overflow_file, _url, a, b, product, frequency, len(replies), n, log)
+                    overflow_count += 1
                 if replies:
                     df = _to_dataframe(replies)
                     df["url_replied"] = _url
@@ -434,17 +406,15 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
                     df = clean_tweets(df, a, b)
                     _write_csv(df, output_file, append)
                     append = True
-                return len(replies)
 
-            # subdivide la ventana de respuestas de este tweet si desborda; el cursor
-            # (last_tweet_id) se actualiza tras completar cada tweet original
-            _download_window(since_t, until_t, frequency, slot, log)
+            seq = date_sequence(since_t, until_t, frequency)
+            for j in range(len(seq) - 1):
+                slot(seq[j], seq[j + 1])
             context.put_context_replies(output, prefix, tweet_id, kind="replies_advanced")
 
-        if output_file.exists():
-            df = _dedup(pd.read_csv(output_file, encoding="utf-8"))
-            df.to_csv(output_file, index=False, encoding="utf-8")
-
+        if overflow_count:
+            log(f"WARNING: {overflow_count} interval(s) reached the n={n} limit and may be "
+                f"incomplete — see {overflow_file.name}.")
         log("'Advanced Replies' download completed")
         return output_file
     finally:
