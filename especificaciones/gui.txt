@@ -344,6 +344,16 @@ En la parte inferior: consola para ver el progreso (un mensaje por línea, los e
 
 Notas de implementación:
 - Reiniciar la app tras editar cualquier módulo de scripts/ (el hot-reload de Streamlit solo afecta a app.py): usar restart_app.ps1 en la raíz del repo.
+- Descargas (historical_search, historical_timeline, get_replies_advanced):
+  control de desbordamiento por tramo. Si un tramo temporal devuelve más de
+  700 tweets (señal de que topa con el límite de paginación y puede estar
+  perdiendo tweets), se guardan igualmente y se re-descarga ese tramo
+  subdividido a la siguiente frecuencia más fina de la escalera
+  year > month > week > day > 3 hour > hour > 30 min > 10 min, de forma
+  recursiva hasta que no desborde (o hasta 10 min, el nivel más fino). El
+  contexto de reanudación se actualiza solo al completar cada tramo de nivel
+  superior; al final se deduplica el fichero por id/url para quitar los
+  solapes que deja la re-descarga.
 - Charts: la lógica de graficado vive en scripts/charts_tweets.py y
   charts_profile.py (matplotlib, traducción de los antiguos cuadernos
   R utils/charts.R, utils/charts_profile.R y utils/utils_charts.R). Estilo

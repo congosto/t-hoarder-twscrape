@@ -67,6 +67,61 @@ def _write_csv(df: pd.DataFrame, path: Path, append: bool) -> None:
     df.to_csv(path, mode="a" if append else "w", header=not append, index=False, encoding="utf-8")
 
 
+_OVERFLOW_THRESHOLD = 700
+
+# escalera de frecuencias, de la más gruesa a la más fina (con su duración en segundos)
+_FREQ_LADDER = [
+    ("1 year", 31_536_000), ("1 month", 2_592_000), ("1 week", 604_800),
+    ("1 day", 86_400), ("3 hour", 10_800), ("1 hour", 3_600),
+    ("30 min", 1_800), ("10 min", 600),
+]
+_UNIT_SECONDS = {
+    "min": 60, "mins": 60, "minute": 60, "minutes": 60,
+    "hour": 3600, "hours": 3600, "day": 86400, "days": 86400,
+    "week": 604800, "weeks": 604800, "month": 2592000, "months": 2592000,
+    "year": 31536000, "years": 31536000,
+}
+
+
+def _freq_seconds(frequency: str) -> int:
+    parts = frequency.strip().split()
+    n = int(parts[0]) if len(parts) == 2 else 1
+    return n * _UNIT_SECONDS[parts[-1].lower()]
+
+
+def _next_finer_frequency(frequency: str) -> str | None:
+    """Siguiente nivel más fino de la escalera de frecuencias, o None si ya es el más fino."""
+    cur = _freq_seconds(frequency)
+    for label, secs in _FREQ_LADDER:
+        if secs < cur:
+            return label
+    return None
+
+
+def _download_window(min_date, max_date, frequency, slot_fn, log) -> None:
+    """Descarga [min_date, max_date] en tramos de 'frequency' llamando slot_fn(a, b)
+    —que descarga y guarda el tramo y devuelve el nº de tweets—. Si un tramo devuelve
+    más de _OVERFLOW_THRESHOLD tweets (señal de que topa con el límite de paginación y
+    puede estar perdiendo tweets), re-descarga ese tramo subdividido a la siguiente
+    frecuencia más fina, de forma recursiva. No toca el contexto; la deduplicación
+    final quita los solapes que deja la re-descarga."""
+    seq = date_sequence(min_date, max_date, frequency)
+    finer = _next_finer_frequency(frequency)
+    for i in range(len(seq) - 1):
+        a, b = seq[i], seq[i + 1]
+        count = slot_fn(a, b)
+        if count > _OVERFLOW_THRESHOLD and finer is not None:
+            log(f"Overflow: {count} tweets in [{a:%Y-%m-%d %H:%M} .. {b:%Y-%m-%d %H:%M}] "
+                f"(> {_OVERFLOW_THRESHOLD}); retrying with finer frequency '{finer}'")
+            _download_window(a, b, finer, slot_fn, log)
+
+
+def _dedup(df: pd.DataFrame) -> pd.DataFrame:
+    """Quita duplicados (por id, o url) que deja la re-descarga de tramos desbordados."""
+    key = "id" if "id" in df.columns else ("url" if "url" in df.columns else None)
+    return df.drop_duplicates(subset=key, keep="first") if key else df
+
+
 def historical_search(data_path: Path, dataset: str, prefix: str, query: str, since, until,
                        frequency: str, sleep_time: int = 5, n: int = 900, product: str = "Top",
                        log=print) -> Path:
@@ -88,34 +143,45 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
 
         sequence = date_sequence(since, until, frequency)
 
-        for i in range(len(sequence) - 1):
-            min_date, max_date = sequence[i], sequence[i + 1]
-            log(f"From {min_date} to {max_date}")
-            query_date = f"{query} since:{min_date:%Y-%m-%d_%H:%M:%S} until:{max_date:%Y-%m-%d_%H:%M:%S}"
-            log(f"--> Downloading {query_date} ......")
+        _pacer = {"first": True}
 
+        def pace():
+            if _pacer["first"]:
+                _pacer["first"] = False
+            elif sleep_time:
+                log(f"Waiting {sleep_time} seconds before the next iteration...")
+                time.sleep(sleep_time)
+
+        def slot(a, b):
+            nonlocal append
+            pace()
+            log(f"From {a} to {b}")
+            query_date = f"{query} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
+            log(f"--> Downloading {query_date} ......")
             tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
             log(f"Downloaded {len(tweets)} tweets")
             if tweets:
                 df = _to_dataframe(tweets)
                 df = clean_text(df)
                 _write_csv(df, output_raw_file, append)
-                df = clean_tweets(df, min_date, max_date)
+                df = clean_tweets(df, a, b)
                 _write_csv(df, output_file, append)
                 append = True
+            return len(tweets)
 
+        for i in range(len(sequence) - 1):
+            # descarga el tramo, subdividiéndolo si desborda; el contexto se
+            # actualiza solo al completar cada tramo de nivel superior
+            _download_window(sequence[i], sequence[i + 1], frequency, slot, log)
             context.log_download_tweets(
-                output, prefix, max_date, original_since, original_until,
+                output, prefix, sequence[i + 1], original_since, original_until,
                 query=query, product=product, frequency=frequency,
             )
-            if i < len(sequence) - 2:
-                log(f"Waiting {sleep_time} seconds before the next iteration...")
-                time.sleep(sleep_time)
 
         total = 0
         if output_file.exists():
-            df = pd.read_csv(output_file, encoding="utf-8")
-            df = clean_tweets(df, original_since, original_until)
+            df = _dedup(clean_tweets(pd.read_csv(output_file, encoding="utf-8"),
+                                     original_since, original_until))
             df.to_csv(output_file, index=False, encoding="utf-8")
             total = len(df)
         context.log_end_download(output, prefix, "search", total)
@@ -142,6 +208,15 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
         ctx = context.get_context_user(output, prefix)
         append = output_file.exists()
 
+        _pacer = {"first": True}
+
+        def pace():
+            if _pacer["first"]:
+                _pacer["first"] = False
+            elif sleep_time:
+                log(f"Waiting {sleep_time} seconds before the next iteration...")
+                time.sleep(sleep_time)
+
         for order, user in enumerate(list_users):
             since_partial = _to_utc_timestamp(since)
             if ctx is not None:
@@ -153,34 +228,34 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
             log(f"--> download user {user}")
             sequence = date_sequence(since_partial, until, frequency)
 
-            for i in range(len(sequence) - 1):
-                min_date, max_date = sequence[i], sequence[i + 1]
-                log(f"From {min_date} to {max_date}")
-                query_date = f"from:{user} since:{min_date:%Y-%m-%d_%H:%M:%S} until:{max_date:%Y-%m-%d_%H:%M:%S}"
-
+            def slot(a, b, _user=user):
+                nonlocal append
+                pace()
+                log(f"From {a} to {b}")
+                query_date = f"from:{_user} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
                 tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
                 log(f"Downloaded {len(tweets)} tweets")
                 if tweets:
                     df = _to_dataframe(tweets)
-                    df = df[df["username"].str.lower() == user.lower()]
+                    df = df[df["username"].str.lower() == _user.lower()]
                     df = clean_text(df)
                     _write_csv(df, output_raw_file, append)
-                    df = clean_tweets(df, min_date, max_date)
+                    df = clean_tweets(df, a, b)
                     _write_csv(df, output_file, append)
                     append = True
+                return len(tweets)
 
+            for i in range(len(sequence) - 1):
+                _download_window(sequence[i], sequence[i + 1], frequency, slot, log)
                 context.log_download_users(
-                    output, prefix, max_date, order, user, original_since, original_until,
+                    output, prefix, sequence[i + 1], order, user, original_since, original_until,
                     product=product, frequency=frequency,
                 )
-                if i < len(sequence) - 2:
-                    log(f"Waiting {sleep_time} seconds before the next iteration...")
-                    time.sleep(sleep_time)
 
         total = 0
         if output_file.exists():
-            df = pd.read_csv(output_file, encoding="utf-8")
-            df = clean_tweets(df, original_since, original_until)
+            df = _dedup(clean_tweets(pd.read_csv(output_file, encoding="utf-8"),
+                                     original_since, original_until))
             df.to_csv(output_file, index=False, encoding="utf-8")
             total = len(df)
         context.log_end_download(output, prefix, "users", total)
@@ -311,37 +386,49 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
         tweet_urls = tweets["url"].tolist()
         tweet_dates = tweets["date"].tolist()
 
+        _pacer = {"first": True}
+
+        def pace():
+            if _pacer["first"]:
+                _pacer["first"] = False
+            elif sleep_time:
+                log(f"Waiting {sleep_time} seconds before the next iteration...")
+                time.sleep(sleep_time)
+
         for i, tweet_id in enumerate(tweet_ids):
             if int(tweet_id) <= last_tweet_id:
                 continue
 
             log(f"Download replies from {tweet_urls[i]} {i + 1}/{len(tweet_ids)}")
-            since = pd.Timestamp(tweet_dates[i], tz="UTC")
-            until = since + pd.Timedelta(days=last_days)
-            sequence = date_sequence(since, until, frequency)
+            since_t = pd.Timestamp(tweet_dates[i], tz="UTC")
+            until_t = since_t + pd.Timedelta(days=last_days)
 
-            for j in range(len(sequence) - 1):
-                min_date, max_date = sequence[j], sequence[j + 1]
-                query = (
-                    f"conversation_id:{tweet_id} filter:replies "
-                    f"since:{min_date:%Y-%m-%d_%H:%M:%S} until:{max_date:%Y-%m-%d_%H:%M:%S}"
-                )
+            def slot(a, b, _tid=tweet_id, _url=tweet_urls[i]):
+                nonlocal append
+                pace()
+                query = (f"conversation_id:{_tid} filter:replies "
+                         f"since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}")
                 log(f"--> Downloading {query} ......")
                 replies = run_async(scraping.search_tweets(query, n=n, product=product))
                 log(f"Downloaded {len(replies)} replies")
                 if replies:
                     df = _to_dataframe(replies)
-                    df["url_replied"] = tweet_urls[i]
+                    df["url_replied"] = _url
                     df = clean_text(df)
                     _write_csv(df, output_raw_file, append)
-                    df = clean_tweets(df, min_date, max_date)
+                    df = clean_tweets(df, a, b)
                     _write_csv(df, output_file, append)
-                    context.put_context_replies(output, prefix, tweet_id, kind="replies_advanced")
                     append = True
+                return len(replies)
 
-                if j < len(sequence) - 2:
-                    log(f"Waiting {sleep_time} seconds before the next iteration...")
-                    time.sleep(sleep_time)
+            # subdivide la ventana de respuestas de este tweet si desborda; el cursor
+            # (last_tweet_id) se actualiza tras completar cada tweet original
+            _download_window(since_t, until_t, frequency, slot, log)
+            context.put_context_replies(output, prefix, tweet_id, kind="replies_advanced")
+
+        if output_file.exists():
+            df = _dedup(pd.read_csv(output_file, encoding="utf-8"))
+            df.to_csv(output_file, index=False, encoding="utf-8")
 
         log("'Advanced Replies' download completed")
         return output_file
