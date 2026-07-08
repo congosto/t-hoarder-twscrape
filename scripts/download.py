@@ -67,14 +67,14 @@ def _write_csv(df: pd.DataFrame, path: Path, append: bool) -> None:
     df.to_csv(path, mode="a" if append else "w", header=not append, index=False, encoding="utf-8")
 
 
-_OVERFLOW_THRESHOLD = 700
+_OVERFLOW_THRESHOLD = 500
 _ONE_DAY_SECONDS = 86_400
 
-# escalera de frecuencias, de la más gruesa a la más fina (con su duración en segundos)
+# escalera de frecuencias, de la más gruesa a la más fina (con su duración en segundos).
+# La subdivisión por desbordamiento baja por estos niveles; 1 hora es el suelo.
 _FREQ_LADDER = [
-    ("1 year", 31_536_000), ("1 month", 2_592_000), ("1 week", 604_800),
-    ("1 day", 86_400), ("3 hour", 10_800), ("1 hour", 3_600),
-    ("30 min", 1_800), ("10 min", 600),
+    ("1 month", 2_592_000), ("1 day", 86_400),
+    ("8 hour", 28_800), ("4 hour", 14_400), ("2 hour", 7_200), ("1 hour", 3_600),
 ]
 _UNIT_SECONDS = {
     "min": 60, "mins": 60, "minute": 60, "minutes": 60,

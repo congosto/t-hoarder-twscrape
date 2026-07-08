@@ -345,17 +345,26 @@ En la parte inferior: consola para ver el progreso (un mensaje por línea, los e
 Notas de implementación:
 - Reiniciar la app tras editar cualquier módulo de scripts/ (el hot-reload de Streamlit solo afecta a app.py): usar restart_app.ps1 en la raíz del repo.
 - Descargas (historical_search, historical_timeline, get_replies_advanced):
-  control de desbordamiento por tramo. Si un tramo temporal devuelve más de
-  700 tweets (señal de que topa con el límite de paginación y puede estar
-  perdiendo tweets), se guardan igualmente y se re-descarga ese tramo
-  subdividido a la siguiente frecuencia más fina de la escalera
-  year > month > week > day > 3 hour > hour > 30 min > 10 min, de forma
-  recursiva hasta que no desborde (o hasta 10 min, el nivel más fino).
-  En las ventanas menores de 1 día (3 hour y por debajo) se usa siempre
+  control de desbordamiento por tramo (rejilla recursiva). Si un tramo
+  temporal devuelve más de 500 tweets (señal de que topa con el límite de
+  paginación y puede estar perdiendo tweets), se guardan igualmente y se
+  re-descarga ese tramo subdividido a la siguiente frecuencia más fina de
+  la escalera month > day > 8 hour > 4 hour > 2 hour > 1 hour, de forma
+  recursiva hasta que no desborde (o hasta 1 hour, el nivel más fino).
+  Solo se subdivide el tramo que desborda: los tramos con pocos tweets (o 0)
+  se quedan como una sola consulta en su nivel, así se baja a lo fino donde
+  hay densidad y se mantiene grueso donde no. Como los hijos siempre caen
+  dentro del padre, la subdivisión nunca cruza el límite del día.
+  En las ventanas menores de 1 día (8 hour y por debajo) se usa siempre
   el product 'Top' aunque el formulario pida 'Latest', porque Latest
-  funciona mal en intervalos cortos; el cambio se decide por la duración
-  de cada ventana, así cada tramo de nivel superior conserva el product,
-  from y to del formulario y solo las subdivisiones sub-diarias fuerzan Top.
+  funciona mal en intervalos cortos y Top rinde mucho más en ventanas
+  estrechas; el cambio se decide por la duración de cada ventana, así cada
+  tramo de nivel superior conserva el product, from y to del formulario y
+  solo las subdivisiones sub-diarias fuerzan Top. Nota práctica: como
+  detector conviene usar Latest de base (pagina hondo, ~950/día, y cruza el
+  umbral en los picos disparando la subdivisión), y dejar que Top coseche
+  en las sub-ventanas; con Top de base las ventanas anchas devuelven un
+  'top' curado (~100-150) y no llegan a disparar el overflow.
   El contexto de reanudación se actualiza solo al completar cada tramo de
   nivel superior; al final se deduplica el fichero por id/url para quitar
   los solapes que deja la re-descarga.
