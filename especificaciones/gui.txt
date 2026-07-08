@@ -203,14 +203,14 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
       navegador KPIs, gráficas y tabla.
     - Controles (todo en inglés):
       fila 1: Start date, End date, Post type (all/original/reply/quote),
-              Language, Search text, Min engagement, Top N.
-      fila 2: Sort by (engagement, retweets, replies, quotes, views, likes,
-              followers, account created, date), Direction (desc/asc),
+              Language, Search text, Min views, Top N.
+      fila 2: Sort by (views, retweets, replies, quotes, likes, followers,
+              account created, date), Direction (desc/asc),
               Actions (Reset filters, Export CSV).
-    - KPIs (fila 3): Total posts (sin filtrar), Posts (filtered), Engagement,
+    - KPIs (fila 3): Total posts (sin filtrar), Posts (filtered), Views,
       Retweets, Replies, Quotes, Peak date/hour. Todos menos Total posts se
       recalculan con los filtros. Peak date/hour = franja (día + hora) con más
-      posts. Engagement = likes + retweets + replies + quotes.
+      posts.
     - Post type se deriva de las columnas twscrape: quote si is_quote_status,
       reply si in_reply_to_tweet_id_str, si no original.
     - Gráficas (2, no se repiten las de Charts):

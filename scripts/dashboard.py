@@ -66,7 +66,6 @@ def _build_payload(df: pd.DataFrame, title: str) -> dict:
     quotes = _num(df, "quote_count")
     views = _num(df, "views_count")
     followers = _num(df, "followers_count")
-    engagement = likes + rts + replies + quotes
 
     ids = _str(df, "id")
     username = _str(df, "username")
@@ -78,13 +77,13 @@ def _build_payload(df: pd.DataFrame, title: str) -> dict:
 
     records = []
     for rec in zip(ids, username, day, label, hour, text, url, views, likes, rts,
-                   replies, quotes, engagement, followers, lang, created, ttype):
-        (rid, usr, d, lab, h, txt, u, vw, lk, rt, rp, qt, eng, fo, lg, cr, tp) = rec
+                   replies, quotes, followers, lang, created, ttype):
+        (rid, usr, d, lab, h, txt, u, vw, lk, rt, rp, qt, fo, lg, cr, tp) = rec
         records.append({
             "id": rid, "username": usr, "day": d, "label": lab, "hour": int(h),
             "text": txt, "url": u,
             "views": int(vw), "likes": int(lk), "retweets": int(rt),
-            "replies": int(rp), "quotes": int(qt), "engagement": int(eng),
+            "replies": int(rp), "quotes": int(qt),
             "followers": int(fo), "createdAt": cr, "lang": lg, "type": tp,
         })
 
@@ -202,7 +201,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
       <select id="postType"><option value="all">All</option><option value="original">Original</option><option value="reply">Reply</option><option value="quote">Quote</option></select></div>
     <div class="card control"><label for="language">Language</label><select id="language"><option value="all">All</option></select></div>
     <div class="card control"><label for="queryText">Search text</label><input id="queryText" type="search" placeholder="word or phrase"></div>
-    <div class="card control"><label for="minEngagement">Min engagement</label><input id="minEngagement" type="number" min="0" step="1" value="0"></div>
+    <div class="card control"><label for="minViews">Min views</label><input id="minViews" type="number" min="0" step="1" value="0"></div>
     <div class="card control"><label for="topN">Top N</label>
       <select id="topN"><option>10</option><option selected>20</option><option>30</option><option>50</option><option>100</option></select></div>
   </section>
@@ -210,11 +209,10 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <section class="row row2">
     <div class="card control"><label for="sortBy">Sort by</label>
       <select id="sortBy">
-        <option value="engagement" selected>Engagement</option>
+        <option value="views" selected>Views</option>
         <option value="retweets">Retweets</option>
         <option value="replies">Replies</option>
         <option value="quotes">Quotes</option>
-        <option value="views">Views</option>
         <option value="likes">Likes</option>
         <option value="followers">Followers</option>
         <option value="createdAt">Account created</option>
@@ -266,7 +264,7 @@ function currentFilters(){
     startDate:$('startDate').value, endDate:$('endDate').value,
     postType:$('postType').value, language:$('language').value,
     queryText:$('queryText').value.trim().toLowerCase(),
-    minEngagement:Number($('minEngagement').value||0),
+    minViews:Number($('minViews').value||0),
     topN:Number($('topN').value||20),
     sortBy:$('sortBy').value, sortDir:$('sortDir').value,
   };
@@ -277,7 +275,7 @@ function applyFilters(){
   let r=POSTS.filter(p=> p.day>=f.startDate && p.day<=f.endDate);
   if(f.postType!=='all') r=r.filter(p=>p.type===f.postType);
   if(f.language!=='all') r=r.filter(p=>p.lang===f.language);
-  if(f.minEngagement>0) r=r.filter(p=>p.engagement>=f.minEngagement);
+  if(f.minViews>0) r=r.filter(p=>p.views>=f.minViews);
   if(f.queryText) r=r.filter(p=>(p.text||'').toLowerCase().includes(f.queryText));
   const fac=f.sortDir==='asc'?1:-1;
   r=[...r].sort((a,b)=>{
@@ -300,7 +298,7 @@ function renderKpis(r){
   const cards=[
     ['Total posts', fmt(META.total)],
     ['Posts (filtered)', fmt(r.length)],
-    ['Engagement', fmt(sum('engagement'))],
+    ['Views', fmt(sum('views'))],
     ['Retweets', fmt(sum('retweets'))],
     ['Replies', fmt(sum('replies'))],
     ['Quotes', fmt(sum('quotes'))],
@@ -378,10 +376,10 @@ function renderTable(r,topN){
 
 function exportCsv(){
   const rows=lastFiltered; if(!rows.length) return;
-  const head=['Date','username','Content','views','Likes','Retweets','replies','quotes','engagement','Language','Type','URL'];
+  const head=['Date','username','Content','views','Likes','Retweets','replies','quotes','Language','Type','URL'];
   const q=v=>{ const s=String(v==null?'':v); return /[",\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s; };
   const lines=[head.join(',')];
-  for(const p of rows){ lines.push([p.label,p.username,p.text,p.views,p.likes,p.retweets,p.replies,p.quotes,p.engagement,p.lang,p.type,p.url].map(q).join(',')); }
+  for(const p of rows){ lines.push([p.label,p.username,p.text,p.views,p.likes,p.retweets,p.replies,p.quotes,p.lang,p.type,p.url].map(q).join(',')); }
   const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='dashboard_filtered_'+new Date().toISOString().slice(0,10)+'.csv';
@@ -396,14 +394,14 @@ function render(){
 function reset(){
   $('startDate').value=META.minDate; $('endDate').value=META.maxDate;
   $('postType').value='all'; $('language').value='all'; $('queryText').value='';
-  $('minEngagement').value='0'; $('topN').value='20'; $('sortBy').value='engagement'; $('sortDir').value='desc';
+  $('minViews').value='0'; $('topN').value='20'; $('sortBy').value='views'; $('sortDir').value='desc';
   render();
 }
 
 fillLanguages();
 $('startDate').value=META.minDate; $('startDate').min=META.minDate; $('startDate').max=META.maxDate;
 $('endDate').value=META.maxDate; $('endDate').min=META.minDate; $('endDate').max=META.maxDate;
-['startDate','endDate','postType','language','minEngagement','topN','sortBy','sortDir'].forEach(id=>$(id).addEventListener('change',render));
+['startDate','endDate','postType','language','minViews','topN','sortBy','sortDir'].forEach(id=>$(id).addEventListener('change',render));
 $('queryText').addEventListener('input',render);
 $('resetBtn').addEventListener('click',reset);
 $('exportBtn').addEventListener('click',exportCsv);
