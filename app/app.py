@@ -479,8 +479,8 @@ with left:
             utl_users_text = st.text_input(
                 "Users list (Comma-separated list of users, without @)", key="utl_users_text"
             )
-            utl_from = st.text_input("From (YYYY-mm-dd HH:MM:SS)", key="utl_from")
             utl_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="utl_product")
+            utl_from = st.text_input("From (YYYY-mm-dd HH:MM:SS)", key="utl_from")
             utl_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="utl_to")
             utl_freq = frequency_input("utl")
             if st.button("Launch TL download"):

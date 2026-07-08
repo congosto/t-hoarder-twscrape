@@ -105,10 +105,10 @@ En la parte izquierda (20% del espacio): formulario de entrada de datos según l
   User TL
     Dataset (nombre del dataset, sin extensión)
     Botón "Cargar contexto": igual que en Search, pero rellena/limpia
-      Users list/From/Product/To/Frequency
+      Users list/Product/From/To/Frequency
     Username(s) (uno o varios usuarios)
-    From (Start date of tweets YYYY-mm-dd HH:MM:SS)
     Product (Top | Latest, radio horizontal; por defecto Top)
+    From (Start date of tweets YYYY-mm-dd HH:MM:SS)
     To (End date of tweets YYYY-mm-dd HH:MM:SS)
     Frequency (Sampling frequency - min | hour | day | week | month | year)
   Retweets
