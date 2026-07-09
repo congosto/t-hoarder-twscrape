@@ -18,3 +18,4 @@ app/data/
 # notas de trabajo internas (solo local, no forman parte del repo de código)
 bitacora/
 especificaciones/
+CLAUDE.md
