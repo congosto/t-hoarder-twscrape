@@ -324,13 +324,16 @@ function renderRhythm(r){
   const step=Math.max(1,Math.ceil(n/6)); let xl='';
   for(let i=0;i<n;i+=step){ xl+='<text x="'+X(i)+'" y="'+(H-pB+18)+'" font-size="11" text-anchor="middle" fill="#475569">'+esc(days[i].slice(5))+'</text>'; }
   const dots=days.map((d,i)=>'<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(vals[i]).toFixed(1)+'" r="2.5" fill="#1d4ed8"><title>'+esc(days[i])+': '+fmt(vals[i])+'</title></circle>').join('');
+  const pk=vals.indexOf(maxV), pkX=X(pk), pkY=Y(maxV);
+  const pkAnchor= pk===0?'start' : (pk===n-1?'end':'middle');
+  const peakLabel='<text x="'+pkX.toFixed(1)+'" y="'+(pkY-8).toFixed(1)+'" font-size="11" font-weight="700" text-anchor="'+pkAnchor+'" fill="#1d4ed8">'+fmt(maxV)+'</text>';
   el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:300px;display:block">'
     +'<line x1="'+pL+'" y1="'+(pT+ih)+'" x2="'+(W-pR)+'" y2="'+(pT+ih)+'" stroke="#cbd5e1"/>'
     +'<path d="'+area+'" fill="rgba(29,78,216,.12)"/>'
     +'<path d="'+line+'" fill="none" stroke="#1d4ed8" stroke-width="2"/>'
     +'<text x="'+(pL-8)+'" y="'+(Y(0))+'" font-size="11" text-anchor="end" fill="#475569">0</text>'
     +'<text x="'+(pL-8)+'" y="'+(Y(maxV)+4)+'" font-size="11" text-anchor="end" fill="#475569">'+fmt(maxV)+'</text>'
-    +dots+xl+'</svg>';
+    +dots+peakLabel+xl+'</svg>';
 }
 
 function lerp(t){ const a=[239,246,255],b=[29,78,216]; const c=a.map((v,i)=>Math.round(v+(b[i]-v)*t)); return 'rgb('+c[0]+','+c[1]+','+c[2]+')'; }
