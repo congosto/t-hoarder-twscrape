@@ -4,7 +4,7 @@ App de Streamlit para explorar y analizar datos recogidos con twscrape (Twitter/
 
 ## Especificaciones funcionales
 
-Las especificaciones de producto (lo que debe hacer la app) viven en `especificaciones/*.txt`, no en este archivo. Léelas antes de implementar o modificar funcionalidad:
+Las especificaciones de producto (lo que debe hacer la app) viven en `especificaciones/*.txt`, no en este archivo. Son **notas internas locales** (autora + Claude): la carpeta está en `.gitignore` y no forma parte del repo público, que es solo código. Léelas antes de implementar o modificar funcionalidad:
 
 - `especificaciones/gui.txt` — comportamiento y diseño de la interfaz (Streamlit).
 - `especificaciones/metadatos.txt` — metadatos de tweets/usuarios.
@@ -13,7 +13,7 @@ Las especificaciones de producto (lo que debe hacer la app) viven en `especifica
 
 (No existe `contents.txt`: esa funcionalidad se implementó y se desechó deliberadamente, ver nota en `gui.txt`.)
 
-El repo está versionado con git. Los `.bak` que quedan junto a algunos `.txt` son históricos de antes de tener git — ya no hace falta crear nuevos, el historial de cambios vive en los commits.
+Como `especificaciones/` no se commitea, los `.bak` que quedan junto a algunos `.txt` siguen siendo el histórico local de esos archivos (git no los cubre al estar ignorados).
 
 ## Estructura del repo
 
@@ -23,4 +23,4 @@ El repo está versionado con git. Los `.bak` que quedan junto a algunos `.txt` s
 
 ## Notas de trabajo
 
-- Cuando el usuario aporte una especificación nueva o actualizada de GUI/metadatos en el chat, guárdala en el archivo `.txt` correspondiente dentro de `especificaciones/` y haz commit del cambio (ya no hace falta `.bak`, lo cubre git).
+- Cuando el usuario aporte una especificación nueva o actualizada de GUI/metadatos en el chat, guárdala en el archivo `.txt` correspondiente dentro de `especificaciones/`. Esa carpeta es local e ignorada por git, así que **no** se commitea (a diferencia de los cambios de código, que sí).

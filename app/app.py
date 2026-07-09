@@ -51,7 +51,7 @@ def parse_users_list(text: str) -> tuple[list[str], str | None]:
 
 st.set_page_config(page_title="t-hoarder-twscrape", layout="wide")
 
-LOGO_PATH = "../especificaciones/logo_t-hoarder.png"
+LOGO_PATH = str(REPO_ROOT / "logo_t-hoarder.png")
 
 # Settings al final: es la sección que menos se usa una vez configuradas las cuentas
 SECTIONS = ["Project", "Download", "Dashboard", "Tools", "Graphs", "Charts", "Settings"]

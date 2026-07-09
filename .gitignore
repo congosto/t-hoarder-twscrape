@@ -15,8 +15,6 @@ app/data/
 # configuración local de Claude Code
 .claude/settings.local.json
 
-# notas de trabajo internas (no forman parte de la release pública)
+# notas de trabajo internas (solo local, no forman parte del repo de código)
 bitacora/
 especificaciones/
-# excepto el logo, que la app carga en runtime (app.py: st.image(LOGO_PATH))
-!especificaciones/logo_t-hoarder.png
