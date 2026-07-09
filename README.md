@@ -13,6 +13,10 @@
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/License-GPLv3-blue.svg"></a>
 </p>
 
+<p align="center">
+  <b>Español</b> · <a href="README.en.md">English</a>
+</p>
+
 ---
 
 ## Qué es
