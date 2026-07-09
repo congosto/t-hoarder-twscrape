@@ -218,6 +218,7 @@ notas internas de desarrollo no forman parte del repositorio.
 
 - [**vladkens**](https://github.com/vladkens) por su librería [twscrape](https://github.com/vladkens/twscrape).
 - **Agustín Nieto** ([@agusnieto77](https://github.com/agusnieto77)) por su librería [twscraper](https://github.com/agusnieto77/twscraper), que me sirvió de base para el uso de twscrape.
+- **Marcelino Madrigal** ([@soymmadrigal](https://github.com/soymmadrigal)) y **Javier Barriuso** ([@barripdmx](https://github.com/barripdmx)) por servirme de base sus diseños de dashboards y por toda su ayuda.
 
 ## Licencia
 
