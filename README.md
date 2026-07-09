@@ -73,7 +73,7 @@ Tienes dos maneras. Si no usas git, elige la **Opción A**.
 
 **Opción A · Descargar el ZIP (la más sencilla, sin git)**
 
-1. Abre la página del proyecto en GitHub.
+1. Abre la [página del proyecto en GitHub](https://github.com/congosto/t-hoarder-twscrape).
 2. Pulsa el botón verde **« Code »** y luego **« Download ZIP »**.
 3. Descomprime el archivo `.zip` donde quieras tenerlo. Se creará una carpeta llamada algo como `t-hoarder-twscrape-main`.
 
@@ -86,7 +86,7 @@ Tienes dos maneras. Si no usas git, elige la **Opción A**.
 **Opción B · Clonar con git** (si ya usas git)
 
 ```bash
-git clone <URL-del-repo> t-hoarder-twscrape
+git clone https://github.com/congosto/t-hoarder-twscrape.git
 ```
 
 ### Paso 3 · Abrir una terminal dentro de la carpeta de la app
