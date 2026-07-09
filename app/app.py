@@ -49,9 +49,10 @@ def parse_users_list(text: str) -> tuple[list[str], str | None]:
         return [], f"Error: do not include '@' in usernames ({', '.join(with_at)})"
     return users, None
 
-st.set_page_config(page_title="t-hoarder-twscrape", layout="wide")
-
 LOGO_PATH = str(REPO_ROOT / "logo_t-hoarder.png")
+ICON_PATH = str(REPO_ROOT / "t-hoarder.ico")
+
+st.set_page_config(page_title="t-hoarder-twscrape", page_icon=ICON_PATH, layout="wide")
 
 # Settings al final: es la sección que menos se usa una vez configuradas las cuentas
 SECTIONS = ["Project", "Download", "Dashboard", "Tools", "Graphs", "Charts", "Settings"]
