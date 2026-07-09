@@ -76,7 +76,7 @@ no se filtra.
   params:
     select graph file
   acciones:
-    solo si el grafo tiene menos de 1000 nodos, tienen que nhaber generado las comunidades. 
+    sin límite de nodos (se ha probado con grafos de 60K nodos / 300K aristas: rinde lento pero funciona). Requisito: haber generado antes las comunidades.
     Leer fichero de grafo
     seleccionar las comunidades con más del 2% de usuarios
     colorearlo por comunidad
