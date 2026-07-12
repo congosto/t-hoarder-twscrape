@@ -9,7 +9,7 @@ import streamlit.components.v1 as st_components
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import accounts, context, dashboard, download, projects, scraping, utils  # noqa: E402
+import accounts, compare, context, dashboard, download, projects, scraping, utils  # noqa: E402
 from async_utils import run_async  # noqa: E402
 
 DATA_PATH = str(REPO_ROOT / "data")
@@ -585,7 +585,9 @@ with left:
                         log_error(str(e))
 
     elif section == "Tools":
-        tab1, tab2, tab3, tab4 = st.tabs(["Merge datasets", "Clean dataset", "Restore dataset", "Location"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+            ["Merge datasets", "Clean dataset", "Restore dataset", "Compare datasets", "Location"]
+        )
         with tab1:
             if not st.session_state.active_project:
                 st.write("Select or create a project in 'Project' before merging datasets.")
@@ -690,6 +692,33 @@ with left:
                         except FileNotFoundError as e:
                             log_error(str(e))
         with tab4:
+            if not st.session_state.active_project:
+                st.write("Select or create a project in 'Project' before comparing datasets.")
+            else:
+                project_dir = projects.select_project(st.session_state.active_project)
+                available_datasets = project_prefixes(project_dir)
+                if not available_datasets:
+                    st.write("No datasets in this project yet.")
+                else:
+                    cmp_selected = st.multiselect(
+                        "Datasets to compare (must be in the active project)",
+                        available_datasets, key="cmp_selected",
+                    )
+                    st.caption("Compares metrics per dataset, tweets shared by all of them "
+                               "(overlap by tweet id) and a timeline by hour/day/week/month.")
+                    if st.button("Compare datasets", key="cmp_btn"):
+                        if len(cmp_selected) < 2:
+                            log_error("select at least 2 datasets to compare")
+                        else:
+                            try:
+                                with st.spinner("Building comparison..."):
+                                    html, path = compare.generate_comparison(
+                                        project_dir, cmp_selected, log=log,
+                                    )
+                                set_result_report(html, path)
+                            except (ValueError, FileNotFoundError) as e:
+                                log_error(str(e))
+        with tab5:
             if not st.session_state.active_project:
                 st.write("Select or create a project in 'Project' before extracting locations.")
             else:
