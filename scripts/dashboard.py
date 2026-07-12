@@ -122,8 +122,12 @@ def generate_dashboard(project_dir, prefix: str, title: str | None = None,
     if not csv_path.exists():
         raise FileNotFoundError(f"{prefix}.csv does not exist in the active project.")
 
+    # regenera si el CSV o este propio módulo (plantilla/lógica) son más nuevos
+    # que el HTML: así los cambios de código se reflejan sin borrar la caché
+    code_mtime = Path(__file__).stat().st_mtime
     if (html_path.exists() and not force
-            and html_path.stat().st_mtime >= csv_path.stat().st_mtime):
+            and html_path.stat().st_mtime >= csv_path.stat().st_mtime
+            and html_path.stat().st_mtime >= code_mtime):
         log(f"Dashboard up to date, reusing {html_path.name}")
         return html_path.read_text(encoding="utf-8"), html_path
 
@@ -311,23 +315,42 @@ function renderKpis(r){
 function renderRhythm(r){
   const el=$('rhythmChart');
   if(!r.length){ el.innerHTML=emptyBox('No data for the current filter.'); $('rhythmStatus').textContent=''; return; }
-  $('rhythmStatus').textContent = fmt(r.length)+' posts';
-  const m=new Map(); for(const p of r){ m.set(p.day,(m.get(p.day)||0)+1); }
-  const days=[...m.keys()].sort(); const vals=days.map(d=>m.get(d));
-  const W=760,H=300,pL=42,pR=14,pT=14,pB=44, iw=W-pL-pR, ih=H-pT-pB;
-  const maxV=Math.max(...vals,1), n=days.length;
+  // ¿por horas o por días? si el rango con datos abarca menos de una semana, por horas
+  let minKey=null,maxKey=null;
+  for(const p of r){ if(minKey===null||p.day<minKey)minKey=p.day; if(maxKey===null||p.day>maxKey)maxKey=p.day; }
+  const spanDays=(Date.parse(maxKey+'T00:00:00Z')-Date.parse(minKey+'T00:00:00Z'))/86400000;
+  const byHour = spanDays < 7;
+  $('rhythmStatus').textContent = fmt(r.length)+' posts · '+(byHour?'by hour':'by day');
+  const m=new Map();
+  if(byHour){ for(const p of r){ const k=p.day+'T'+String(p.hour).padStart(2,'0'); m.set(k,(m.get(k)||0)+1); } }
+  else { for(const p of r){ m.set(p.day,(m.get(p.day)||0)+1); } }
+  const keys=[...m.keys()].sort(); const vals=keys.map(d=>m.get(d));
+  const labelOf=k=> byHour ? (k.slice(5,10)+' '+k.slice(11,13)+'h') : k.slice(5);
+  const tipOf=k=> byHour ? (k.slice(0,10)+' '+k.slice(11,13)+':00') : k;
+  // ancho real en px (sin preserveAspectRatio="none", que deformaba el texto)
+  const W=Math.max(320,Math.floor(el.clientWidth||760)), H=300;
+  const pL=44,pR=16,pT=30,pB=44, iw=W-pL-pR, ih=H-pT-pB;  // pT alto: aire para el número del pico
+  const maxV=Math.max(...vals,1), n=keys.length;
   const X=i=> n===1? pL+iw/2 : pL+iw*i/(n-1);
   const Y=v=> pT+ih*(1-v/maxV);
-  const pts=days.map((d,i)=>X(i).toFixed(1)+','+Y(vals[i]).toFixed(1));
+  const pts=keys.map((d,i)=>X(i).toFixed(1)+','+Y(vals[i]).toFixed(1));
   const area='M '+pL+','+(pT+ih)+' L '+pts.join(' L ')+' L '+X(n-1).toFixed(1)+','+(pT+ih)+' Z';
   const line='M '+pts.join(' L ');
-  const step=Math.max(1,Math.ceil(n/6)); let xl='';
-  for(let i=0;i<n;i+=step){ xl+='<text x="'+X(i)+'" y="'+(H-pB+18)+'" font-size="11" text-anchor="middle" fill="#475569">'+esc(days[i].slice(5))+'</text>'; }
-  const dots=days.map((d,i)=>'<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(vals[i]).toFixed(1)+'" r="2.5" fill="#1d4ed8"><title>'+esc(days[i])+': '+fmt(vals[i])+'</title></circle>').join('');
+  // etiquetas del eje X: horizontales y repartidas sin solaparse (según el ancho real)
+  const labelPx = byHour ? 64 : 48;
+  const maxLabels = Math.max(2, Math.floor(iw/labelPx));
+  const idxs=[];
+  if(n===1){ idxs.push(0); }
+  else { const st=Math.max(1,Math.ceil((n-1)/(maxLabels-1))); for(let i=0;i<n;i+=st) idxs.push(i);
+    const last=idxs[idxs.length-1]; if(last!==n-1){ if(n-1-last < st*0.5) idxs[idxs.length-1]=n-1; else idxs.push(n-1); } }
+  let xl='';
+  for(const i of idxs){ const anc= i===0?'start':(i===n-1?'end':'middle'); xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-pB+22)+'" font-size="12" text-anchor="'+anc+'" fill="#475569">'+esc(labelOf(keys[i]))+'</text>'; }
+  const dots=keys.map((d,i)=>'<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(vals[i]).toFixed(1)+'" r="2.5" fill="#1d4ed8"><title>'+esc(tipOf(d))+': '+fmt(vals[i])+'</title></circle>').join('');
   const pk=vals.indexOf(maxV), pkX=X(pk), pkY=Y(maxV);
   const pkAnchor= pk===0?'start' : (pk===n-1?'end':'middle');
-  const peakLabel='<text x="'+pkX.toFixed(1)+'" y="'+(pkY-8).toFixed(1)+'" font-size="11" font-weight="700" text-anchor="'+pkAnchor+'" fill="#1d4ed8">'+fmt(maxV)+'</text>';
-  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:300px;display:block">'
+  const pkLabelY=Math.max(18,pkY-12);
+  const peakLabel='<text x="'+pkX.toFixed(1)+'" y="'+pkLabelY.toFixed(1)+'" font-size="16" font-weight="700" text-anchor="'+pkAnchor+'" fill="#1d4ed8">'+fmt(maxV)+'</text>';
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;max-width:100%">'
     +'<line x1="'+pL+'" y1="'+(pT+ih)+'" x2="'+(W-pR)+'" y2="'+(pT+ih)+'" stroke="#cbd5e1"/>'
     +'<path d="'+area+'" fill="rgba(29,78,216,.12)"/>'
     +'<path d="'+line+'" fill="none" stroke="#1d4ed8" stroke-width="2"/>'
@@ -417,6 +440,8 @@ $('endDate').value=META.maxDate; $('endDate').min=META.minDate; $('endDate').max
 $('queryText').addEventListener('input',render);
 $('resetBtn').addEventListener('click',reset);
 $('exportBtn').addEventListener('click',exportCsv);
+// la gráfica de ritmo se dibuja al ancho real del panel: redibujar al redimensionar
+let _rz; window.addEventListener('resize',()=>{ clearTimeout(_rz); _rz=setTimeout(render,150); });
 render();
 </script>
 </body>
