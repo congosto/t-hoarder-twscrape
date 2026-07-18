@@ -42,6 +42,13 @@ The app is organized into sections (top bar):
 ✅ **Charts** — analysis charts for tweets and for user profiles.  
 ✅ **Settings** — twscrape account management (add, active, delete).
 
+## User guide
+
+The full guide, section by section (app structure, projects, downloads,
+dashboard, tools, graphs, charts and accounts), is in
+**[docs/user-guide.en.md](docs/user-guide.en.md)** — and also inside the app
+itself, under the **Help** button.
+
 ## Requirements
 
 - **Python 3.11+** (developed on 3.13).
@@ -185,22 +192,8 @@ request quota. Recommendations:
 - **Don't use your personal account**, in case Twitter/X ever blocks it.
 - It's better if the accounts have **some age and activity**.
 
-### How to get an account's cookies
-
-1. Open **Chrome** and sign in to [https://x.com](https://x.com) with the account you're going to add.
-2. Press **F12** (Developer Tools) → **Application** tab → **Cookies** → `https://x.com`.
-3. Copy the values of **`auth_token`** and **`ct0`**.
-
-### Adding the account
-
-In **Settings → New Account**, fill in:
-
-- **Username** — the account's username
-- **Password** — the account's password
-- **Email** — email associated with the account
-- **Email Password** — password of that email
-- **Auth Token** — the `auth_token` cookie obtained above
-- **ct0** — the `ct0` cookie obtained above
+The step-by-step instructions to get the cookies and register the accounts are
+in the [user guide](docs/user-guide.en.md#settings).
 
 ## Repository layout
 
@@ -208,6 +201,7 @@ In **Settings → New Account**, fill in:
 app/          Streamlit app (app.py, requirements.txt)
 scripts/      Scraping and logic modules (accounts, download, scraping,
               projects, context, graphs, charts, dashboard, utils…)
+docs/         User guide (Spanish and English)
 logo_t-hoarder.png / t-hoarder.ico   App branding
 ```
 

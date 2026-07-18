@@ -42,6 +42,13 @@ La app se organiza en secciones (barra superior):
 ✅ **Charts** — gráficas de análisis para tweets y para perfiles de usuario.  
 ✅ **Settings** — gestión de cuentas de twscrape (alta, activas, borrado).
 
+## Guía de uso
+
+La guía completa, sección por sección (estructura de la app, proyectos,
+descargas, dashboard, herramientas, grafos, gráficas y cuentas), está en
+**[docs/guia-de-uso.md](docs/guia-de-uso.md)** — y también dentro de la
+propia app, en el botón **Help**.
+
 ## Requisitos
 
 - **Python 3.11+** (desarrollada sobre 3.13).
@@ -185,22 +192,8 @@ cuota de peticiones. Recomendaciones:
 - **No usar tu cuenta personal**, por si en algún momento hubiera un bloqueo por parte de Twitter/X.
 - Es preferible que las cuentas tengan **cierta antigüedad y actividad**.
 
-### ¿Cómo obtener las cookies de una cuenta?
-
-1. Abre **Chrome** e inicia sesión en [https://x.com](https://x.com) con la cuenta que vayas a dar de alta.
-2. Pulsa **F12** (Herramientas para desarrolladores) → pestaña **Application** → **Cookies** → `https://x.com`.
-3. Copia los valores de **`auth_token`** y **`ct0`**.
-
-### Dar de alta la cuenta
-
-En **Settings → New Account**, cumplimenta:
-
-- **Username** — nombre de usuario de la cuenta
-- **Password** — contraseña de la cuenta
-- **Email** — email asociado a la cuenta
-- **Email Password** — contraseña de ese email
-- **Auth Token** — cookie `auth_token` obtenida arriba
-- **ct0** — cookie `ct0` obtenida arriba
+El paso a paso para obtener las cookies y dar de alta las cuentas está en la
+[guía de uso](docs/guia-de-uso.md#settings).
 
 ## Estructura del repo
 
@@ -208,6 +201,7 @@ En **Settings → New Account**, cumplimenta:
 app/          App Streamlit (app.py, requirements.txt)
 scripts/      Módulos de scraping y lógica (accounts, download, scraping,
               projects, context, graphs, charts, dashboard, utils…)
+docs/         Guía de uso (español e inglés)
 logo_t-hoarder.png / t-hoarder.ico   Marca de la app
 ```
 

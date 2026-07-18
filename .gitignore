@@ -13,7 +13,7 @@ app/data/
 *.log
 
 # configuración local de Claude Code
-.claude/settings.local.json
+.claude/
 
 # notas de trabajo internas (solo local, no forman parte del repo de código)
 bitacora/
