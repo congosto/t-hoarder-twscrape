@@ -55,7 +55,7 @@ ICON_PATH = str(REPO_ROOT / "t-hoarder.ico")
 st.set_page_config(page_title="t-hoarder-twscrape", page_icon=ICON_PATH, layout="wide")
 
 # Settings al final: es la sección que menos se usa una vez configuradas las cuentas
-SECTIONS = ["Project", "Download", "Dashboard", "Tools", "Graphs", "Charts", "Settings"]
+SECTIONS = ["Project", "Download", "Dashboard", "Tools", "Graphs", "Charts", "Settings", "Help"]
 
 if "section" not in st.session_state:
     st.session_state.section = "Project"
@@ -83,6 +83,11 @@ for col, name in zip(nav_cols, SECTIONS):
         is_active = st.session_state.section == name
         if st.button(name, key=f"nav_{name}", use_container_width=True,
                      type="primary" if is_active else "secondary"):
+            if name == "Help":
+                # ayuda contextual: Help se abre por el capítulo de la sección
+                # en la que estaba el usuario (los títulos de capítulo de la
+                # guía coinciden con los nombres de las secciones)
+                st.session_state.help_chapter = st.session_state.section
             st.session_state.section = name
             # sin este rerun, en la pasada del clic los botones ya se pintaron
             # con la sección anterior y el resaltado rojo se queda en la vieja
@@ -293,6 +298,61 @@ def set_result_report(html, path):
     st.session_state.chart_figures = None
 
 
+GUIDE_PATH = REPO_ROOT / "docs" / "guia-de-uso.md"
+
+
+def _load_guide():
+    """Guía de uso (docs/guia-de-uso.md) lista para st.markdown: sin la
+    cabecera HTML (logo/título, pensada para GitHub) y con las imágenes
+    relativas embebidas en base64 (st.markdown no las carga desde disco)."""
+    import base64
+    import re
+
+    try:
+        text = GUIDE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if "\n---\n" in text:
+        text = text.split("\n---\n", 1)[1]
+
+    def _embed(match):
+        src = match.group("src")
+        if src.startswith(("http://", "https://", "data:")):
+            return match.group(0)
+        path = (GUIDE_PATH.parent / src).resolve()
+        mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".gif": "image/gif", ".svg": "image/svg+xml"}.get(path.suffix.lower())
+        if not mime or not path.exists():
+            return match.group(0)
+        data = base64.b64encode(path.read_bytes()).decode()
+        return match.group(0).replace(src, f"data:{mime};base64,{data}")
+
+    text = re.sub(r"!\[[^\]]*\]\((?P<src>[^)\s]+)\)", _embed, text)
+    text = re.sub(r'<img\s[^>]*src="(?P<src>[^"]+)"', _embed, text)
+    return text
+
+
+def _guide_chapters(text):
+    """Trocea la guía por sus encabezados '## ': [(título, capítulo con encabezado)].
+    Los títulos de capítulo coinciden con los nombres de las secciones de la app
+    (Project, Download...), lo que permite abrir Help por el capítulo de la
+    sección en la que estaba el usuario."""
+    chapters, title, lines = [], None, []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if title:
+                chapters.append((title, "\n".join(lines)))
+            title, lines = line[3:].strip(), [line]
+        elif title:
+            lines.append(line)
+    if title:
+        chapters.append((title, "\n".join(lines)))
+    return chapters
+
+
+_FULL_GUIDE = "Full guide"
+
+
 with left:
     section = st.session_state.section
 
@@ -407,7 +467,12 @@ with left:
                         saved = None
                     if saved:
                         st.session_state.search_query = saved["query"]
-                        st.session_state.search_product = saved["product"] or "Top"
+                        if saved["product"] == "Optimized":
+                            st.session_state.search_mode = "Optimized"
+                            st.session_state.search_product = "Top"
+                        else:
+                            st.session_state.search_mode = "Manual"
+                            st.session_state.search_product = saved["product"] or "Top"
                         st.session_state.search_from = saved["since"]
                         st.session_state.search_to = saved["until"]
                         freq_parts = saved["frequency"].split() if saved["frequency"] else []
@@ -416,6 +481,7 @@ with left:
                         log(f"Context loaded for dataset '{search_prefix}'")
                     else:
                         st.session_state.search_query = ""
+                        st.session_state.search_mode = "Optimized"
                         st.session_state.search_product = "Top"
                         st.session_state.search_from = ""
                         st.session_state.search_to = ""
@@ -425,16 +491,34 @@ with left:
                     st.rerun()
 
             search_query = st.text_input("Query", key="search_query")
-            search_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="search_product")
             search_from = st.text_input("From (YYYY-mm-dd HH:MM:SS)", key="search_from")
             search_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="search_to")
-            search_freq = frequency_input("search")
+            search_mode = st.radio(
+                "Mode", ["Optimized", "Manual"], horizontal=True, key="search_mode",
+                help="Optimized (recommended): product and frequency are chosen automatically "
+                     "and time ranges are narrowed on overflow. Manual: you choose Product "
+                     "and Frequency yourself.",
+            )
+            if search_mode == "Manual":
+                search_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="search_product")
+                search_freq = frequency_input("search")
             if st.button("Launch search"):
                 date_error = validate_date_range(search_from, search_to)
                 if not st.session_state.active_project:
                     log_error("select or create a project before downloading")
+                elif not search_query.strip():
+                    log_error("enter a Query before downloading")
                 elif date_error:
                     log(date_error)
+                elif search_mode == "Optimized":
+                    log("Launching optimized_search (product and frequency chosen automatically)")
+                    output_file = download.optimized_search(
+                        data_path=DATA_PATH, dataset=st.session_state.active_project,
+                        prefix=search_prefix, query=search_query,
+                        since=search_from, until=search_to, log=log,
+                    )
+                    log(f"Result in {output_file}")
+                    set_result(output_file)
                 else:
                     log(f"Launching historical_search ({search_product}, frequency={search_freq})")
                     output_file = download.historical_search(
@@ -462,7 +546,12 @@ with left:
                         st.session_state.utl_users_text = saved["list_users"]
                         st.session_state.utl_from = saved["since"]
                         st.session_state.utl_to = saved["until"]
-                        st.session_state.utl_product = saved["product"] if saved.get("product") in ("Top", "Latest") else "Top"
+                        if saved.get("product") == "Optimized":
+                            st.session_state.utl_mode = "Optimized"
+                            st.session_state.utl_product = "Top"
+                        else:
+                            st.session_state.utl_mode = "Manual"
+                            st.session_state.utl_product = saved["product"] if saved.get("product") in ("Top", "Latest") else "Top"
                         freq_parts = saved["frequency"].split() if saved["frequency"] else []
                         st.session_state.utl_freq_n = int(freq_parts[0]) if len(freq_parts) == 2 else 1
                         st.session_state.utl_freq_unit = freq_parts[1] if len(freq_parts) == 2 else "hour"
@@ -471,6 +560,7 @@ with left:
                         st.session_state.utl_users_text = ""
                         st.session_state.utl_from = ""
                         st.session_state.utl_to = ""
+                        st.session_state.utl_mode = "Optimized"
                         st.session_state.utl_product = "Top"
                         st.session_state.utl_freq_n = 1
                         st.session_state.utl_freq_unit = "hour"
@@ -480,10 +570,17 @@ with left:
             utl_users_text = st.text_input(
                 "Users list (Comma-separated list of users, without @)", key="utl_users_text"
             )
-            utl_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="utl_product")
             utl_from = st.text_input("From (YYYY-mm-dd HH:MM:SS)", key="utl_from")
             utl_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="utl_to")
-            utl_freq = frequency_input("utl")
+            utl_mode = st.radio(
+                "Mode", ["Optimized", "Manual"], horizontal=True, key="utl_mode",
+                help="Optimized (recommended): product and frequency are chosen automatically "
+                     "and time ranges are narrowed on overflow. Manual: you choose Product "
+                     "and Frequency yourself.",
+            )
+            if utl_mode == "Manual":
+                utl_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="utl_product")
+                utl_freq = frequency_input("utl")
             if st.button("Launch TL download"):
                 date_error = validate_date_range(utl_from, utl_to)
                 users_list, users_error = parse_users_list(utl_users_text)
@@ -493,6 +590,16 @@ with left:
                     log(date_error)
                 elif users_error:
                     log(users_error)
+                elif utl_mode == "Optimized":
+                    log(f"Launching optimized_timeline for {len(users_list)} user(s) "
+                        "(product and frequency chosen automatically)")
+                    output_file = download.optimized_timeline(
+                        data_path=DATA_PATH, dataset=st.session_state.active_project,
+                        prefix=utl_prefix, list_users=users_list,
+                        since=utl_from, until=utl_to, log=log,
+                    )
+                    log(f"Result in {output_file}")
+                    set_result(output_file)
                 else:
                     log(f"Launching historical_timeline for {len(users_list)} user(s) (frequency={utl_freq})")
                     output_file = download.historical_timeline(
@@ -1009,6 +1116,25 @@ with left:
                         except (FileNotFoundError, ValueError) as e:
                             log_error(str(e))
 
+    elif section == "Help":
+        st.markdown("**User guide**")
+        guide_md = _load_guide()
+        if guide_md:
+            titles = [_FULL_GUIDE] + [t for t, _ in _guide_chapters(guide_md)]
+            # los botones ◀/▶ del panel de lectura no pueden tocar help_chapter
+            # directamente (el radio ya está instanciado en esa pasada): dejan
+            # el valor en _pending y se aplica aquí, antes de crear el radio
+            pending = st.session_state.pop("help_chapter_pending", None)
+            if pending in titles:
+                st.session_state.help_chapter = pending
+            if st.session_state.get("help_chapter") not in titles:
+                st.session_state.help_chapter = _FULL_GUIDE
+            st.radio("Section", titles, key="help_chapter")
+        st.caption("The guide (in Spanish) is shown in the results panel.")
+        st.markdown(
+            "[Open it on GitHub](https://github.com/congosto/t-hoarder-twscrape/blob/main/docs/guia-de-uso.md)"
+        )
+
 with context_col:
     st.markdown("### Context")
     n_accounts = sum(1 for a in st.session_state.get("active_accounts", []) if a.get("active"))
@@ -1021,15 +1147,43 @@ with context_col:
         prefixes = project_prefixes(project_dir)
         if prefixes:
             st.caption("Datasets and their context log:")
-            for prefix in prefixes:
-                with st.expander(prefix):
-                    log_df = context.get_log(project_dir, prefix)
-                    if log_df is not None and not log_df.empty:
-                        st.dataframe(log_df, use_container_width=True, hide_index=True)
-                    else:
-                        st.caption("No operations recorded.")
+            # alto fijo con scroll propio: con muchos datasets la lista alargaba
+            # toda la página y la consola quedaba lejísimos
+            with st.container(height=420):
+                for prefix in prefixes:
+                    with st.expander(prefix):
+                        log_df = context.get_log(project_dir, prefix)
+                        if log_df is not None and not log_df.empty:
+                            st.dataframe(log_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.caption("No operations recorded.")
 
 with right:
+    if st.session_state.section == "Help":
+        # La guía se muestra aquí en vez de los resultados; al volver a otra
+        # sección los resultados anteriores siguen en session_state y reaparecen
+        st.markdown("### User guide")
+        guide_md = _load_guide()
+        if guide_md is None:
+            st.error(f"Guide not found: {GUIDE_PATH}")
+        else:
+            choice = st.session_state.get("help_chapter", _FULL_GUIDE)
+            chapters = _guide_chapters(guide_md)
+            titles = [t for t, _ in chapters]
+            if choice in titles:
+                idx = titles.index(choice)
+                st.markdown(chapters[idx][1], unsafe_allow_html=True)
+                st.divider()
+                col_prev, col_next = st.columns(2)
+                if idx > 0 and col_prev.button(f"◀ {titles[idx - 1]}", key="help_prev"):
+                    st.session_state.help_chapter_pending = titles[idx - 1]
+                    st.rerun()
+                if idx < len(titles) - 1 and col_next.button(f"{titles[idx + 1]} ▶", key="help_next"):
+                    st.session_state.help_chapter_pending = titles[idx + 1]
+                    st.rerun()
+            else:
+                st.markdown(guide_md, unsafe_allow_html=True)
+        st.stop()
     st.markdown("### Results")
     error_msg = st.session_state.get("last_error")
     graph_html = st.session_state.get("graph_html")
