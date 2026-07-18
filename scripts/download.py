@@ -178,6 +178,137 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
         logger.remove(_log_handler)
 
 
+# ── Descarga optimizada ──────────────────────────────────────────────────────
+# Elige sola producto y frecuencia: Latest en ventanas de 1 día o más (alineadas
+# a medianoche, porque Latest trunca la hora del until al día) y Top en ventanas
+# intradía. Cuando una ventana desborda (>= _OPT_OVERFLOW) se re-descarga
+# subdividida con la siguiente frecuencia de la escalera, recursivamente.
+
+_OPT_LADDER = ["1 month", "1 week", "1 day", "6 hour", "3 hour", "1 hour", "30 min"]
+_OPT_OVERFLOW = 500
+
+
+def _initial_frequency(since, until) -> str:
+    days = (_to_utc_timestamp(until) - _to_utc_timestamp(since)).total_seconds() / 86400
+    if days <= 31:
+        return "1 day"
+    if days <= 183:
+        return "1 week"
+    return "1 month"
+
+
+def _record_overflow_opt(path: Path, source: str, since, until, product: str,
+                         frequency: str, tweets: int, n: int, action: str, log) -> None:
+    log(f"OVERFLOW: {tweets} tweets in [{since:%Y-%m-%d %H:%M} .. {until:%Y-%m-%d %H:%M}] "
+        f"({action}; see {path.name})")
+    row = pd.DataFrame([{
+        "detected_at": pd.Timestamp.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": source,
+        "since": f"{since:%Y-%m-%d %H:%M:%S}",
+        "until": f"{until:%Y-%m-%d %H:%M:%S}",
+        "product": product,
+        "frequency": frequency,
+        "tweets": tweets,
+        "n": n,
+        "action": action,
+    }])
+    _write_csv(row, path, append=path.exists())
+
+
+def optimized_search(data_path: Path, dataset: str, prefix: str, query: str, since, until,
+                     sleep_time: int = 5, n: int = 900, log=print) -> Path:
+    _log_handler = _start_forwarding_twscrape_logs(log)
+    try:
+        output = Path(data_path) / dataset
+        output.mkdir(parents=True, exist_ok=True)
+        output_file = output / f"{prefix}.csv"
+        output_raw_file = output / f"{prefix}_raw.csv"
+        overflow_file = output / f"{prefix}_overflow.csv"
+
+        existing_range = context.get_context_search_range(output, prefix)
+        original_since, original_until = existing_range if existing_range else (since, until)
+
+        last_date = context.get_context_search(output, prefix)
+        append = output_file.exists()
+        if last_date is not None:
+            since = last_date
+            log(f"Resuming from saved context: {since} (original range: {original_since} -> {original_until})")
+
+        frequency = _initial_frequency(original_since, original_until)
+        level0 = _OPT_LADDER.index(frequency)
+        threshold = min(n, _OPT_OVERFLOW)
+        # ventanas Latest alineadas a frontera de día; el final se recorta luego
+        start = _to_utc_timestamp(since).floor("D")
+        end = _to_utc_timestamp(until).ceil("D")
+        log(f"Optimized download: full period {pd.Timestamp(original_since):%Y-%m-%d %H:%M} -> "
+            f"{pd.Timestamp(original_until):%Y-%m-%d %H:%M}, starting at Latest / {frequency} "
+            f"(overflow threshold {threshold})")
+
+        _pacer = {"first": True}
+        overflow_count = 0
+
+        def pace():
+            if _pacer["first"]:
+                _pacer["first"] = False
+            elif sleep_time:
+                log(f"Waiting {sleep_time} seconds before the next iteration...")
+                time.sleep(sleep_time)
+
+        def window(a, b, level):
+            nonlocal append, overflow_count
+            pace()
+            freq = _OPT_LADDER[level]
+            product = "Top" if (b - a) < pd.Timedelta(days=1) else "Latest"
+            query_date = f"{query} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
+            log(f"--> Downloading {query_date} (product={product}, frequency={freq}) ......")
+            tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
+            log(f"Downloaded {len(tweets)} tweets")
+            if tweets:
+                df = _to_dataframe(tweets)
+                df = clean_text(df)
+                _write_csv(df, output_raw_file, output_raw_file.exists())
+                df = clean_tweets(df, a, b)
+                if len(df):
+                    _write_csv(df, output_file, append)
+                    append = True
+            if len(tweets) >= threshold:
+                overflow_count += 1
+                if level + 1 < len(_OPT_LADDER):
+                    finer = _OPT_LADDER[level + 1]
+                    _record_overflow_opt(overflow_file, query, a, b, product, freq,
+                                         len(tweets), n, f"overflow -> retry at {finer}", log)
+                    sub = date_sequence(a, b, finer)
+                    for j in range(len(sub) - 1):
+                        window(sub[j], sub[j + 1], level + 1)
+                else:
+                    _record_overflow_opt(overflow_file, query, a, b, product, freq,
+                                         len(tweets), n, "overflow (min frequency reached)", log)
+
+        sequence = date_sequence(start, end, frequency)
+        for i in range(len(sequence) - 1):
+            window(sequence[i], sequence[i + 1], level0)
+            context.log_download_tweets(
+                output, prefix, sequence[i + 1], original_since, original_until,
+                query=query, product="Optimized", frequency="auto",
+            )
+
+        total = 0
+        if output_file.exists():
+            df = clean_tweets(pd.read_csv(output_file, encoding="utf-8"),
+                              original_since, original_until)
+            df.to_csv(output_file, index=False, encoding="utf-8")
+            total = len(df)
+        if overflow_count:
+            log(f"{overflow_count} interval(s) overflowed and were re-downloaded at finer "
+                f"frequencies — see {overflow_file.name} for every range change.")
+        context.log_end_download(output, prefix, "search", total)
+
+        log("'Optimized Search' download completed")
+        return output_file
+    finally:
+        logger.remove(_log_handler)
+
+
 def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: list[str],
                          since, until, frequency: str, sleep_time: int = 5, n: int = 900,
                          product: str = "Top", log=print) -> Path:
@@ -256,6 +387,110 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
         context.log_end_download(output, prefix, "users", total)
 
         log("'Historical Timeline' download completed")
+        return output_file
+    finally:
+        logger.remove(_log_handler)
+
+
+def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: list[str],
+                       since, until, sleep_time: int = 5, n: int = 900, log=print) -> Path:
+    """Descarga optimizada de timelines: mismo criterio que optimized_search
+    (frecuencia inicial según el periodo, Latest en ventanas >= 1 día alineadas
+    a medianoche, Top en intradía, subdivisión recursiva al desbordar), aplicado
+    usuario a usuario con consultas from:{user}."""
+    _log_handler = _start_forwarding_twscrape_logs(log)
+    try:
+        output = Path(data_path) / dataset
+        output.mkdir(parents=True, exist_ok=True)
+        output_file = output / f"{prefix}.csv"
+        output_raw_file = output / f"{prefix}_raw.csv"
+        overflow_file = output / f"{prefix}_overflow.csv"
+
+        existing_range = context.get_context_user_range(output, prefix)
+        original_since, original_until = existing_range if existing_range else (since, until)
+
+        ctx = context.get_context_user(output, prefix)
+        append = output_file.exists()
+
+        frequency = _initial_frequency(original_since, original_until)
+        level0 = _OPT_LADDER.index(frequency)
+        threshold = min(n, _OPT_OVERFLOW)
+        log(f"Optimized download: full period {pd.Timestamp(original_since):%Y-%m-%d %H:%M} -> "
+            f"{pd.Timestamp(original_until):%Y-%m-%d %H:%M}, starting at Latest / {frequency} "
+            f"(overflow threshold {threshold})")
+
+        _pacer = {"first": True}
+        overflow_count = 0
+
+        def pace():
+            if _pacer["first"]:
+                _pacer["first"] = False
+            elif sleep_time:
+                log(f"Waiting {sleep_time} seconds before the next iteration...")
+                time.sleep(sleep_time)
+
+        def window(a, b, level, _user):
+            nonlocal append, overflow_count
+            pace()
+            freq = _OPT_LADDER[level]
+            product = "Top" if (b - a) < pd.Timedelta(days=1) else "Latest"
+            query_date = f"from:{_user} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
+            log(f"--> Downloading {query_date} (product={product}, frequency={freq}) ......")
+            tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
+            log(f"Downloaded {len(tweets)} tweets")
+            if tweets:
+                df = _to_dataframe(tweets)
+                df = df[df["username"].str.lower() == _user.lower()]
+                df = clean_text(df)
+                _write_csv(df, output_raw_file, output_raw_file.exists())
+                df = clean_tweets(df, a, b)
+                if len(df):
+                    _write_csv(df, output_file, append)
+                    append = True
+            if len(tweets) >= threshold:
+                overflow_count += 1
+                if level + 1 < len(_OPT_LADDER):
+                    finer = _OPT_LADDER[level + 1]
+                    _record_overflow_opt(overflow_file, f"from:{_user}", a, b, product, freq,
+                                         len(tweets), n, f"overflow -> retry at {finer}", log)
+                    sub = date_sequence(a, b, finer)
+                    for j in range(len(sub) - 1):
+                        window(sub[j], sub[j + 1], level + 1, _user)
+                else:
+                    _record_overflow_opt(overflow_file, f"from:{_user}", a, b, product, freq,
+                                         len(tweets), n, "overflow (min frequency reached)", log)
+
+        for order, user in enumerate(list_users):
+            since_partial = _to_utc_timestamp(since)
+            if ctx is not None:
+                row = ctx[ctx["username"] == user]
+                if not row.empty:
+                    since_partial = _to_utc_timestamp(row["last_date"].iloc[0])
+                    log(f"Resuming @{user} from saved context: {since_partial} "
+                        f"(original range: {original_since} -> {original_until})")
+
+            log(f"--> download user {user}")
+            # ventanas Latest alineadas a frontera de día; el final se recorta luego
+            sequence = date_sequence(since_partial.floor("D"), _to_utc_timestamp(until).ceil("D"), frequency)
+            for i in range(len(sequence) - 1):
+                window(sequence[i], sequence[i + 1], level0, user)
+                context.log_download_users(
+                    output, prefix, sequence[i + 1], order, user, original_since, original_until,
+                    product="Optimized", frequency="auto",
+                )
+
+        total = 0
+        if output_file.exists():
+            df = clean_tweets(pd.read_csv(output_file, encoding="utf-8"),
+                              original_since, original_until)
+            df.to_csv(output_file, index=False, encoding="utf-8")
+            total = len(df)
+        if overflow_count:
+            log(f"{overflow_count} interval(s) overflowed and were re-downloaded at finer "
+                f"frequencies — see {overflow_file.name} for every range change.")
+        context.log_end_download(output, prefix, "users", total)
+
+        log("'Optimized Timeline' download completed")
         return output_file
     finally:
         logger.remove(_log_handler)
