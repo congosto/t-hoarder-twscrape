@@ -298,18 +298,32 @@ def set_result_report(html, path):
     st.session_state.chart_figures = None
 
 
-GUIDE_PATH = REPO_ROOT / "docs" / "guia-de-uso.md"
+# la guía es bilingüe; los títulos de capítulo ('## Project'...) coinciden en
+# ambos idiomas con los nombres de las secciones, así que la ayuda contextual
+# y la navegación funcionan igual en los dos
+GUIDE_PATHS = {
+    "Español": REPO_ROOT / "docs" / "guia-de-uso.md",
+    "English": REPO_ROOT / "docs" / "user-guide.en.md",
+}
+GUIDE_URLS = {
+    "Español": "https://github.com/congosto/t-hoarder-twscrape/blob/main/docs/guia-de-uso.md",
+    "English": "https://github.com/congosto/t-hoarder-twscrape/blob/main/docs/user-guide.en.md",
+}
 
 
-def _load_guide():
-    """Guía de uso (docs/guia-de-uso.md) lista para st.markdown: sin la
+def _guide_lang():
+    return st.session_state.get("help_lang", "Español")
+
+
+def _load_guide(lang):
+    """Guía de uso (docs/, en el idioma pedido) lista para st.markdown: sin la
     cabecera HTML (logo/título, pensada para GitHub) y con las imágenes
     relativas embebidas en base64 (st.markdown no las carga desde disco)."""
     import base64
     import re
 
     try:
-        text = GUIDE_PATH.read_text(encoding="utf-8")
+        text = GUIDE_PATHS[lang].read_text(encoding="utf-8")
     except OSError:
         return None
     if "\n---\n" in text:
@@ -319,7 +333,7 @@ def _load_guide():
         src = match.group("src")
         if src.startswith(("http://", "https://", "data:")):
             return match.group(0)
-        path = (GUIDE_PATH.parent / src).resolve()
+        path = (GUIDE_PATHS[lang].parent / src).resolve()
         mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                 ".gif": "image/gif", ".svg": "image/svg+xml"}.get(path.suffix.lower())
         if not mime or not path.exists():
@@ -1118,7 +1132,8 @@ with left:
 
     elif section == "Help":
         st.markdown("**User guide**")
-        guide_md = _load_guide()
+        st.radio("Language", list(GUIDE_PATHS), horizontal=True, key="help_lang")
+        guide_md = _load_guide(_guide_lang())
         if guide_md:
             titles = [_FULL_GUIDE] + [t for t, _ in _guide_chapters(guide_md)]
             # los botones ◀/▶ del panel de lectura no pueden tocar help_chapter
@@ -1130,10 +1145,8 @@ with left:
             if st.session_state.get("help_chapter") not in titles:
                 st.session_state.help_chapter = _FULL_GUIDE
             st.radio("Section", titles, key="help_chapter")
-        st.caption("The guide (in Spanish) is shown in the results panel.")
-        st.markdown(
-            "[Open it on GitHub](https://github.com/congosto/t-hoarder-twscrape/blob/main/docs/guia-de-uso.md)"
-        )
+        st.caption("The guide is shown in the results panel.")
+        st.markdown(f"[Open it on GitHub]({GUIDE_URLS[_guide_lang()]})")
 
 with context_col:
     st.markdown("### Context")
@@ -1163,9 +1176,9 @@ with right:
         # La guía se muestra aquí en vez de los resultados; al volver a otra
         # sección los resultados anteriores siguen en session_state y reaparecen
         st.markdown("### User guide")
-        guide_md = _load_guide()
+        guide_md = _load_guide(_guide_lang())
         if guide_md is None:
-            st.error(f"Guide not found: {GUIDE_PATH}")
+            st.error(f"Guide not found: {GUIDE_PATHS[_guide_lang()]}")
         else:
             choice = st.session_state.get("help_chapter", _FULL_GUIDE)
             chapters = _guide_chapters(guide_md)
