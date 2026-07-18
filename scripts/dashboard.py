@@ -325,26 +325,54 @@ function renderRhythm(r){
   if(byHour){ for(const p of r){ const k=p.day+'T'+String(p.hour).padStart(2,'0'); m.set(k,(m.get(k)||0)+1); } }
   else { for(const p of r){ m.set(p.day,(m.get(p.day)||0)+1); } }
   const keys=[...m.keys()].sort(); const vals=keys.map(d=>m.get(d));
-  const labelOf=k=> byHour ? (k.slice(5,10)+' '+k.slice(11,13)+'h') : k.slice(5);
+  // etiquetas del eje X adaptadas a la medida de tiempo del periodo mostrado:
+  // años -> %Y, meses -> %b/%Y, días -> %d-%b/%Y, horas -> %d-%Hh/%b
+  // (dos líneas cuando hace falta, siempre en horizontal)
+  const MON=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic'];
+  const mon=k=>MON[parseInt(k.slice(5,7),10)-1];
+  const mode = byHour ? 'hour' : (spanDays<=92 ? 'day' : (spanDays<=731 ? 'month' : 'year'));
+  const labelOf=k=>{
+    if(mode==='hour') return [k.slice(8,10)+'-'+k.slice(11,13)+'h', mon(k)];
+    if(mode==='day')  return [k.slice(8,10)+'-'+mon(k), k.slice(0,4)];
+    if(mode==='month')return [mon(k), k.slice(0,4)];
+    return [k.slice(0,4), ''];
+  };
   const tipOf=k=> byHour ? (k.slice(0,10)+' '+k.slice(11,13)+':00') : k;
   // ancho real en px (sin preserveAspectRatio="none", que deformaba el texto)
   const W=Math.max(320,Math.floor(el.clientWidth||760)), H=300;
   const pL=44,pR=16,pT=30,pB=44, iw=W-pL-pR, ih=H-pT-pB;  // pT alto: aire para el número del pico
   const maxV=Math.max(...vals,1), n=keys.length;
-  const X=i=> n===1? pL+iw/2 : pL+iw*i/(n-1);
+  // eje X proporcional al TIEMPO (no al índice de días con datos): con densidad
+  // desigual o huecos, las marcas de mes/año caen donde les toca y no se juntan
+  const T=keys.map(k=> Date.parse(byHour ? k+':00:00Z' : k+'T00:00:00Z'));
+  const t0=T[0], t1=T[n-1];
+  const X=i=> (n===1||t1===t0) ? pL+iw/2 : pL+iw*(T[i]-t0)/(t1-t0);
   const Y=v=> pT+ih*(1-v/maxV);
   const pts=keys.map((d,i)=>X(i).toFixed(1)+','+Y(vals[i]).toFixed(1));
   const area='M '+pL+','+(pT+ih)+' L '+pts.join(' L ')+' L '+X(n-1).toFixed(1)+','+(pT+ih)+' Z';
   const line='M '+pts.join(' L ');
-  // etiquetas del eje X: horizontales y repartidas sin solaparse (según el ancho real)
-  const labelPx = byHour ? 64 : 48;
+  // etiquetas del eje X: horizontales y repartidas sin solaparse; en modo
+  // month/year las marcas caen en el arranque natural de cada mes/año, y en
+  // todos los modos se descarta cualquier marca a menos de labelPx px de la
+  // anterior (con eje proporcional al tiempo el reparto por índices no basta)
+  const labelPx = mode==='hour' ? 56 : (mode==='day' ? 52 : 44);
   const maxLabels = Math.max(2, Math.floor(iw/labelPx));
-  const idxs=[];
-  if(n===1){ idxs.push(0); }
-  else { const st=Math.max(1,Math.ceil((n-1)/(maxLabels-1))); for(let i=0;i<n;i+=st) idxs.push(i);
-    const last=idxs[idxs.length-1]; if(last!==n-1){ if(n-1-last < st*0.5) idxs[idxs.length-1]=n-1; else idxs.push(n-1); } }
+  let cand=[];
+  if(n===1){ cand=[0]; }
+  else if(mode==='month'||mode==='year'){
+    const cut = mode==='month' ? 7 : 4; let seen=null;
+    for(let i=0;i<n;i++){ const g=keys[i].slice(0,cut); if(g!==seen){ cand.push(i); seen=g; } }
+    if(cand.length>maxLabels){ const st=Math.ceil(cand.length/maxLabels); cand=cand.filter((_,j)=>j%st===0); }
+  }
+  else { cand=keys.map((_,i)=>i); }
+  const idxs=[]; let lastX=-1e9;
+  for(const i of cand){ const xx=X(i); if(xx-lastX>=labelPx){ idxs.push(i); lastX=xx; } }
+  if((mode==='hour'||mode==='day') && n>1 && idxs[idxs.length-1]!==n-1
+     && X(n-1)-X(idxs[idxs.length-1])>=labelPx*0.55){ idxs.push(n-1); }
   let xl='';
-  for(const i of idxs){ const anc= i===0?'start':(i===n-1?'end':'middle'); xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-pB+22)+'" font-size="12" text-anchor="'+anc+'" fill="#475569">'+esc(labelOf(keys[i]))+'</text>'; }
+  for(const i of idxs){ const anc= i===0?'start':(i===n-1?'end':'middle'); const L=labelOf(keys[i]);
+    xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-pB+20)+'" font-size="12" text-anchor="'+anc+'" fill="#475569">'+esc(L[0])+'</text>';
+    if(L[1]) xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-pB+34)+'" font-size="11" text-anchor="'+anc+'" fill="#64748b">'+esc(L[1])+'</text>'; }
   const dots=keys.map((d,i)=>'<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(vals[i]).toFixed(1)+'" r="2.5" fill="#1d4ed8"><title>'+esc(tipOf(d))+': '+fmt(vals[i])+'</title></circle>').join('');
   const pk=vals.indexOf(maxV), pkX=X(pk), pkY=Y(maxV);
   const pkAnchor= pk===0?'start' : (pk===n-1?'end':'middle');

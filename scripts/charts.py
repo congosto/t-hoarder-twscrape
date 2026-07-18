@@ -357,6 +357,11 @@ def generate_user_charts(
         f"{prefix}_tweets_by_language.png",
     )
     add(
+        "Tweets by source",
+        _charts_profile.tweets_by_source(tweets, min_date, max_date, base_title, events),
+        f"{prefix}_tweets_by_source.png",
+    )
+    add(
         "Engagement",
         _charts_profile.engagement_tweets(tweets, min_date, max_date, "#778dcf", base_title, events, slot_time),
         f"{prefix}_engagement_total.png",

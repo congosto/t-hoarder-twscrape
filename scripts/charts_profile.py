@@ -353,6 +353,72 @@ def tweets_by_language(df, ini_date, end_date, base_title, events=None):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
+# tweets_by_source
+#
+# Acumulado de tweets por fuente, mismo estilo que tweets_by_language:
+# top 10 fuentes con color propio, el resto agrupadas como "others" en gris,
+# etiqueta "fuente (total)" al final de cada línea
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+def tweets_by_source(df, ini_date, end_date, base_title, events=None):
+    df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)].copy()
+    df["source"] = df["source"].fillna("unknown") if "source" in df.columns else "unknown"
+
+    top_sources = list(df["source"].value_counts().head(10).index)
+    df["source_group"] = df["source"].where(df["source"].isin(top_sources), "others")
+    cum = (
+        df.groupby([pd.Grouper(key="date", freq="D"), "source_group"]).size().unstack(fill_value=0)
+        .reindex(pd.date_range(ini_date.floor("D"), end_date.floor("D"), freq="D"), fill_value=0)
+        .cumsum()
+    )
+    source_order = top_sources + (["others"] if "others" in cum.columns else [])
+    palette = plt.get_cmap("tab10")
+    source_colors = {s: palette(i) for i, s in enumerate(top_sources)}
+    source_colors["others"] = (0.65, 0.65, 0.65, 1.0)
+
+    limit_y = cum.values.max() if len(cum) else 1
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for s in source_order:
+        ax.plot(cum.index, cum[s].values, color=source_colors[s],
+                linewidth=2, alpha=0.85)
+
+    # etiquetas al final de cada línea; con hasta 11 líneas la separación mínima
+    # es algo menor que en idiomas para que la pila no se dispare
+    min_sep = limit_y * 0.04
+    label_y = {}
+    prev = None
+    for s in sorted(source_order, key=lambda x: cum[x].iloc[-1]):
+        y = cum[s].iloc[-1]
+        if prev is not None and y - prev < min_sep:
+            y = prev + min_sep
+        label_y[s] = y
+        prev = y
+    for s in source_order:
+        ax.annotate(f"{s} ({cum[s].iloc[-1]:,.0f})", (cum.index[-1], label_y[s]),
+                    color=source_colors[s], fontsize=9,
+                    xytext=(5, 0), textcoords="offset points", va="center")
+
+    if events is not None and not events.empty:
+        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
+        for _, e in ev.iterrows():
+            ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
+            ax.text(e["date"], limit_y, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
+
+    top_label = max(label_y.values(), default=limit_y)
+    ax.set_ylim(0, max(limit_y * 1.15, top_label + min_sep))
+    ax.set_ylabel("Accumulated tweets")
+    ax.yaxis.set_major_formatter(ENG_FMT)
+    # eje extendido a la derecha algo más que en idiomas: los nombres de fuente son largos
+    apply_date_axis(ax, ini_date, end_date + expand_time(ini_date, end_date, 25))
+
+    my_theme(ax, title=f"{base_title}: Tweets by source")
+    fig.tight_layout()
+    return fig
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
 # engagement_tweets
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
