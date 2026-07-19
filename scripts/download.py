@@ -67,6 +67,20 @@ def _write_csv(df: pd.DataFrame, path: Path, append: bool) -> None:
     df.to_csv(path, mode="a" if append else "w", header=not append, index=False, encoding="utf-8")
 
 
+def _time_operators(a: pd.Timestamp, b: pd.Timestamp, product: str) -> str:
+    """Operadores temporales de la query según ventana y product.
+
+    Latest ignora la parte horaria de since:/until: (trunca el until al día),
+    así que sus ventanas de menos de un día usan since_time:/until_time: en
+    epoch (mecanismo validado por barri en probe_window_size_recall.py). X
+    trata el epoch de forma difusa —puede devolver tweets fuera del rango—,
+    pero el recorte fino lo hace clean_tweets en local, y el raw lo guarda
+    todo. Top respeta el formato con hora y se mantiene tal cual."""
+    if product == "Latest" and (b - a) < pd.Timedelta(days=1):
+        return f"since_time:{int(a.timestamp())} until_time:{int(b.timestamp())}"
+    return f"since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
+
+
 # Umbral de aviso de desbordamiento: si una ventana devuelve >= este nº de tweets
 # se considera que topó con el techo del buscador y puede estar incompleta. Es un
 # umbral fijo porque el techo real de Latest queda por debajo de n (~700-950, y
@@ -138,7 +152,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
             nonlocal append, overflow_count
             pace()
             log(f"From {a} to {b}")
-            query_date = f"{query} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
+            query_date = f"{query} {_time_operators(a, b, product)}"
             log(f"--> Downloading {query_date} (product={product}) ......")
             tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
             log(f"Downloaded {len(tweets)} tweets")
@@ -351,7 +365,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                 nonlocal append, overflow_count
                 pace()
                 log(f"From {a} to {b}")
-                query_date = f"from:{_user} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
+                query_date = f"from:{_user} {_time_operators(a, b, product)}"
                 log(f"--> Downloading {query_date} (product={product}) ......")
                 tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
                 log(f"Downloaded {len(tweets)} tweets")
