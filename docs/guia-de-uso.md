@@ -41,6 +41,8 @@ izquierda, se lanza la operación y el resultado aparece en el centro.
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
+![La app con sus cinco zonas: menú superior, formulario a la izquierda, resultados en el centro (un dashboard), contexto a la derecha y consola abajo](img/app_overview.png)
+
 ### Parte superior · Menú de funciones
 
 Una fila de botones da acceso a las funciones de la app:
@@ -205,6 +207,8 @@ quedaron, gracias al contexto que se guarda con cada dataset.
 
 ### Las opciones, una a una
 
+![El formulario de Search: dataset, query, fechas y el modo Optimized](img/download_search.png)
+
 - **Search** — búsqueda histórica de tweets a partir de una query. Campos:
   - *Dataset*: uno existente (para continuar o ampliar una descarga) o
     «➕ nuevo dataset…» para crear uno.
@@ -268,6 +272,8 @@ citas, y el día y hora de máxima actividad), una **gráfica de actividad**
 (el ritmo de publicación a lo largo del periodo) y los **tweets más
 relevantes**, ordenables por distintos criterios (visualizaciones, retweets,
 respuestas, likes, seguidores del autor, fecha…).
+
+![El dashboard: filtros, KPIs y la gráfica de ritmo de publicación](img/dashboard.png)
 
 Toda la vista se puede **filtrar** — por rango de fechas, tipo de tweet
 (original, respuesta, cita), idioma o **palabras del texto** — y los KPIs,
