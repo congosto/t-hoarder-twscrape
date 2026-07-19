@@ -204,8 +204,6 @@ they left off, thanks to the context saved with each dataset.
 
 ### The options, one by one
 
-![The Search form: dataset, query, dates and the Optimized mode](img/download_search.png)
-
 - **Search** — historical tweet search from a query. Fields:
   - *Dataset*: an existing one (to continue or extend a download) or
     "➕ new dataset…" to create one.
@@ -269,8 +267,6 @@ quotes, and the day and hour of peak activity), an **activity chart** (the
 posting rhythm over the period) and the **most relevant tweets**, sortable
 by different criteria (views, retweets, replies, likes, author's followers,
 date…).
-
-![The dashboard: filters, KPIs and the posting-rhythm chart](img/dashboard.png)
 
 The whole view can be **filtered** — by date range, tweet type (original,
 reply, quote), language or **words in the text** — and the KPIs, the chart
