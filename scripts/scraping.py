@@ -1,3 +1,4 @@
+import twscrape_patch  # noqa: F401  parche XClIdGen issue #320 (se aplica al importar)
 from twscrape import API
 
 
