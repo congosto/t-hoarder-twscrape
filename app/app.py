@@ -364,6 +364,28 @@ def _guide_chapters(text):
     return chapters
 
 
+def _guide_parts(chapter_text):
+    """Trocea un capítulo por sus encabezados '### ': [(título, parte)]. El
+    preámbulo del capítulo (encabezado '## ' e introducción) se une a la
+    primera parte para no perderlo. Un capítulo sin '### ' devuelve [] y se
+    muestra entero; con partes, el panel de lectura muestra una parte cada
+    vez (los capítulos largos, como Download, alargaban demasiado la página)."""
+    parts, title, lines = [], None, []
+    for line in chapter_text.splitlines():
+        if line.startswith("### "):
+            parts.append((title, lines))
+            title, lines = line[4:].strip(), [line]
+        else:
+            lines.append(line)
+    parts.append((title, lines))
+    if parts and parts[0][0] is None:
+        preamble = parts.pop(0)[1]
+        if not parts:
+            return []
+        parts[0] = (parts[0][0], preamble + parts[0][1])
+    return [(t, "\n".join(ls)) for t, ls in parts]
+
+
 _FULL_GUIDE = "Full guide"
 
 
@@ -1135,16 +1157,28 @@ with left:
         st.radio("Language", list(GUIDE_PATHS), horizontal=True, key="help_lang")
         guide_md = _load_guide(_guide_lang())
         if guide_md:
-            titles = [_FULL_GUIDE] + [t for t, _ in _guide_chapters(guide_md)]
+            chapters = _guide_chapters(guide_md)
+            titles = [_FULL_GUIDE] + [t for t, _ in chapters]
             # los botones ◀/▶ del panel de lectura no pueden tocar help_chapter
             # directamente (el radio ya está instanciado en esa pasada): dejan
             # el valor en _pending y se aplica aquí, antes de crear el radio
             pending = st.session_state.pop("help_chapter_pending", None)
+            pending_part = st.session_state.pop("help_part_pending", None)
             if pending in titles:
                 st.session_state.help_chapter = pending
             if st.session_state.get("help_chapter") not in titles:
                 st.session_state.help_chapter = _FULL_GUIDE
             st.radio("Section", titles, key="help_chapter")
+            # capítulos con partes ('### '): segundo selector, misma mecánica
+            choice = st.session_state.help_chapter
+            parts = _guide_parts(dict(chapters).get(choice, "")) if choice != _FULL_GUIDE else []
+            if len(parts) > 1:
+                part_titles = [t for t, _ in parts]
+                if pending_part in part_titles:
+                    st.session_state.help_part = pending_part
+                if st.session_state.get("help_part") not in part_titles:
+                    st.session_state.help_part = part_titles[0]
+                st.radio("Part", part_titles, key="help_part")
         st.caption("The guide is shown in the results panel.")
         st.markdown(f"[Open it on GitHub]({GUIDE_URLS[_guide_lang()]})")
 
@@ -1184,15 +1218,44 @@ with right:
             chapters = _guide_chapters(guide_md)
             titles = [t for t, _ in chapters]
             if choice in titles:
-                idx = titles.index(choice)
-                st.markdown(chapters[idx][1], unsafe_allow_html=True)
+                # secuencia plana de lectura: (capítulo, parte o None, texto);
+                # ◀/▶ la recorren, cruzando de capítulo cuando se acaban las partes
+                flat = []
+                for t, chap in chapters:
+                    ps = _guide_parts(chap)
+                    if len(ps) > 1:
+                        flat += [(t, pt, ptext) for pt, ptext in ps]
+                    else:
+                        flat.append((t, None, chap))
+                parts = _guide_parts(chapters[titles.index(choice)][1])
+                if len(parts) > 1:
+                    ptitles = [t for t, _ in parts]
+                    p = st.session_state.get("help_part")
+                    pidx = ptitles.index(p) if p in ptitles else 0
+                    cur = (choice, ptitles[pidx])
+                    st.markdown(parts[pidx][1], unsafe_allow_html=True)
+                else:
+                    cur = (choice, None)
+                    st.markdown(chapters[titles.index(choice)][1], unsafe_allow_html=True)
+                fidx = [(c, p) for c, p, _ in flat].index(cur)
+
+                def _flat_label(i):
+                    c, p, _ = flat[i]
+                    return f"{c} · {p}" if p else c
+
+                def _flat_goto(i):
+                    c, p, _ = flat[i]
+                    st.session_state.help_chapter_pending = c
+                    if p:
+                        st.session_state.help_part_pending = p
+
                 st.divider()
                 col_prev, col_next = st.columns(2)
-                if idx > 0 and col_prev.button(f"◀ {titles[idx - 1]}", key="help_prev"):
-                    st.session_state.help_chapter_pending = titles[idx - 1]
+                if fidx > 0 and col_prev.button(f"◀ {_flat_label(fidx - 1)}", key="help_prev"):
+                    _flat_goto(fidx - 1)
                     st.rerun()
-                if idx < len(titles) - 1 and col_next.button(f"{titles[idx + 1]} ▶", key="help_next"):
-                    st.session_state.help_chapter_pending = titles[idx + 1]
+                if fidx < len(flat) - 1 and col_next.button(f"{_flat_label(fidx + 1)} ▶", key="help_next"):
+                    _flat_goto(fidx + 1)
                     st.rerun()
             else:
                 st.markdown(guide_md, unsafe_allow_html=True)

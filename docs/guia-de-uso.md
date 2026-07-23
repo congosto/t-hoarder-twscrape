@@ -173,33 +173,43 @@ descargas funcionan como funcionan.
   - **Top** (destacados): una selección curada de los tweets más relevantes.
   - **Latest** (recientes): el flujo cronológico.
 
-  De forma empírica hemos detectado que **Latest funciona mejor en
-  frecuencias de un día o mayores, y Top en las menores de un día, siempre
-  que la captura se realice en los últimos 7 días naturales (UTC)**. El día
-  D-7 aún se recupera completo, pero el D-8 desaparece de golpe (las
-  ventanas de menos de un día pasan a devolver ~0). Latest no tiene esa
-  caída tan brusca como Top: sigue proporcionando tweets, aunque en menos
-  cantidad que si se recolectaran en la última semana. Por eso la app
-  proporciona un **método optimizado** que usa la mejor opción en cada
-  momento:
+  Cuál conviene en cada momento depende del tamaño de la ventana y de la
+  antigüedad de los datos: es justo lo que automatiza la **descarga
+  optimizada** (siguiente apartado).
 
-  1. Según la longitud del periodo pedido, elige la frecuencia inicial
-     (hasta 1 mes → ventanas de 1 día; hasta 6 meses → de 1 semana; más → de
-     1 mes), siempre con *Latest*.
-  2. Si una ventana desborda (500 tweets o más: puede estar incompleta), la
-     **re-descarga subdividida** en la siguiente frecuencia de la escalera
-     mes → semana → día → 6 h → 3 h → 1 h → 30 min, recursivamente hasta que
-     ninguna subventana desborde o se llegue a los 30 minutos.
-  3. Al bajar de un día, cambia de *Latest* a *Top*, pero **solo si los
-     tweets descargados tienen menos de una semana de antigüedad**; en caso
-     contrario, continúa con *Latest*.
-  4. En las ventanas de un día o más anteriores a esa semana, además, lanza
-     una **petición extra con Top** para rescatar el residuo viral que
-     Latest ya no devuelve entero (los duplicados se eliminan al rematar la
-     descarga).
+### Descarga optimizada
 
-  El método respeta la pausa entre todas las consultas, también las de las
-  subdivisiones, para no quemar la cuota en ráfaga.
+De forma empírica hemos detectado que **Latest funciona mejor en
+frecuencias de un día o mayores, y Top en las menores de un día, siempre
+que la captura se realice en los últimos 7 días naturales (UTC)**. El día
+D-7 aún se recupera completo, pero el D-8 desaparece de golpe (las
+ventanas de menos de un día pasan a devolver ~0). Latest no tiene esa
+caída tan brusca como Top: sigue proporcionando tweets, aunque en menos
+cantidad que si se recolectaran en la última semana. Por eso la app
+proporciona un **método optimizado** que usa la mejor opción en cada
+momento:
+
+1. Según la longitud del periodo pedido, elige la frecuencia inicial
+   (hasta 1 mes → ventanas de 1 día; hasta 6 meses → de 1 semana; más → de
+   1 mes), siempre con *Latest*.
+2. Si una ventana desborda (500 tweets o más: puede estar incompleta), la
+   **re-descarga subdividida** en la siguiente frecuencia de la escalera
+   mes → semana → día → 6 h → 3 h → 1 h → 30 min, recursivamente hasta que
+   ninguna subventana desborde o se llegue a los 30 minutos.
+3. Al bajar de un día, cambia de *Latest* a *Top*, pero **solo si los
+   tweets descargados tienen menos de una semana de antigüedad**; en caso
+   contrario, continúa con *Latest*.
+4. En las ventanas de un día o más anteriores a esa semana, además, lanza
+   una **petición extra con Top** para rescatar el residuo viral que
+   Latest ya no devuelve entero (los duplicados se eliminan al rematar la
+   descarga).
+
+El método respeta la pausa entre todas las consultas, también las de las
+subdivisiones, para no quemar la cuota en ráfaga.
+
+### Diagrama de la descarga optimizada
+
+![Diagrama de la descarga optimizada](img/descarga-optimizada.png)
 
 ### Dos tipos de descargas
 

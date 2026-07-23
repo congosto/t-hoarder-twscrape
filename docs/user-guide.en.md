@@ -170,32 +170,42 @@ downloads work the way they do.
   - **Top**: a curated selection of the most relevant tweets.
   - **Latest**: the chronological flow.
 
-  Empirically we have found that **Latest works better at frequencies of
-  one day or longer, and Top at frequencies under one day — as long as the
-  capture happens within the last 7 calendar days (UTC)**. Day D-7 is still
-  fully retrievable, but day D-8 vanishes abruptly (sub-day windows start
-  returning ~0). Latest has no such sharp drop as Top: it keeps returning
-  tweets, although fewer than if they had been collected within the last
-  week. That is why the app provides an **optimized method** that uses the
-  best option at each moment:
+  Which one is best at each moment depends on the window size and on the
+  age of the data: that is exactly what the **optimized download**
+  automates (next part).
 
-  1. Depending on the length of the requested period, it picks the initial
-     frequency (up to 1 month → 1-day windows; up to 6 months → 1-week;
-     longer → 1-month), always with *Latest*.
-  2. If a window overflows (500 tweets or more: it may be incomplete), it
-     **re-downloads it subdivided** at the next frequency of the ladder
-     month → week → day → 6 h → 3 h → 1 h → 30 min, recursively until no
-     sub-window overflows or 30 minutes is reached.
-  3. Below one day, it switches from *Latest* to *Top*, but **only if the
-     tweets being downloaded are less than a week old**; otherwise it stays
-     with *Latest*.
-  4. On windows of one day or longer older than that week, it additionally
-     fires an **extra Top request** to rescue the viral residue that Latest
-     no longer returns in full (duplicates are removed when the download is
-     finalized).
+### Optimized download
 
-  The method respects the pause between all queries, including the
-  subdivided ones, to avoid burning the quota in a burst.
+Empirically we have found that **Latest works better at frequencies of
+one day or longer, and Top at frequencies under one day — as long as the
+capture happens within the last 7 calendar days (UTC)**. Day D-7 is still
+fully retrievable, but day D-8 vanishes abruptly (sub-day windows start
+returning ~0). Latest has no such sharp drop as Top: it keeps returning
+tweets, although fewer than if they had been collected within the last
+week. That is why the app provides an **optimized method** that uses the
+best option at each moment:
+
+1. Depending on the length of the requested period, it picks the initial
+   frequency (up to 1 month → 1-day windows; up to 6 months → 1-week;
+   longer → 1-month), always with *Latest*.
+2. If a window overflows (500 tweets or more: it may be incomplete), it
+   **re-downloads it subdivided** at the next frequency of the ladder
+   month → week → day → 6 h → 3 h → 1 h → 30 min, recursively until no
+   sub-window overflows or 30 minutes is reached.
+3. Below one day, it switches from *Latest* to *Top*, but **only if the
+   tweets being downloaded are less than a week old**; otherwise it stays
+   with *Latest*.
+4. On windows of one day or longer older than that week, it additionally
+   fires an **extra Top request** to rescue the viral residue that Latest
+   no longer returns in full (duplicates are removed when the download is
+   finalized).
+
+The method respects the pause between all queries, including the
+subdivided ones, to avoid burning the quota in a burst.
+
+### Optimized download diagram
+
+![Optimized download diagram](img/optimized-download.png)
 
 ### Two kinds of downloads
 
