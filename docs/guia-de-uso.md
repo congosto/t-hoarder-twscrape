@@ -174,15 +174,14 @@ descargas funcionan como funcionan.
   - **Latest** (recientes): el flujo cronológico.
 
   De forma empírica hemos detectado que **Latest funciona mejor en
-  frecuencias de un día o mayores, y Top en las menores de un día** — y
-  también que **el índice denso de Top solo cubre los últimos 7 días
-  naturales (UTC)**: el día D-7 aún se recupera completo, pero el D-8
-  desaparece de golpe (las ventanas de menos de un día pasan a devolver ~0).
-  De los días más antiguos Top solo conserva un **residuo de lo más viral**,
-  consultable con ventanas de un día o más; Latest no tiene ese acantilado,
-  aunque en datos viejos también devuelve bastante menos que en fresco. Por
-  eso la app proporciona un **método optimizado** que usa la mejor opción en
-  cada momento:
+  frecuencias de un día o mayores, y Top en las menores de un día, siempre
+  que la captura se realice en los últimos 7 días naturales (UTC)**. El día
+  D-7 aún se recupera completo, pero el D-8 desaparece de golpe (las
+  ventanas de menos de un día pasan a devolver ~0). Latest no tiene esa
+  caída tan brusca como Top: sigue proporcionando tweets, aunque en menos
+  cantidad que si se recolectaran en la última semana. Por eso la app
+  proporciona un **método optimizado** que usa la mejor opción en cada
+  momento:
 
   1. Según la longitud del periodo pedido, elige la frecuencia inicial
      (hasta 1 mes → ventanas de 1 día; hasta 6 meses → de 1 semana; más → de
@@ -191,11 +190,10 @@ descargas funcionan como funcionan.
      **re-descarga subdividida** en la siguiente frecuencia de la escalera
      mes → semana → día → 6 h → 3 h → 1 h → 30 min, recursivamente hasta que
      ninguna subventana desborde o se llegue a los 30 minutos.
-  3. Al bajar de un día, cambia de *Latest* a *Top* — pero **solo dentro de
-     la memoria de Top** (los últimos 7 días): en las ventanas intradía más
-     antiguas mantiene *Latest*, que ahí es la única opción que devuelve
-     datos.
-  4. En las ventanas de un día o más anteriores a esa memoria lanza además
+  3. Al bajar de un día, cambia de *Latest* a *Top*, pero **solo si los
+     tweets descargados tienen menos de una semana de antigüedad**; en caso
+     contrario, continúa con *Latest*.
+  4. En las ventanas de un día o más anteriores a esa semana, además, lanza
      una **petición extra con Top** para rescatar el residuo viral que
      Latest ya no devuelve entero (los duplicados se eliminan al rematar la
      descarga).
