@@ -81,6 +81,22 @@ def _time_operators(a: pd.Timestamp, b: pd.Timestamp, product: str) -> str:
     return f"since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
 
 
+# Memoria del índice denso de Top: cubre exactamente los últimos N días
+# naturales (UTC). El día D-N se recupera completo a cualquier hora y el D-(N+1)
+# cae a 0 con ventanas horarias (verificado con las baterías "cintora" de
+# data/prueba_descarga_2, jul-2026, replicado en dos descargas independientes).
+# Más allá solo queda un residuo de lo más viral, accesible con ventanas de
+# >= 1 día (~decenas de tweets/día); Latest no tiene acantilado pero en datos
+# viejos devuelve un subconjunto de ese residuo.
+_TOP_MEMORY_DAYS = 7
+
+
+def _top_cutoff() -> pd.Timestamp:
+    """Primer día natural (UTC) aún dentro del índice denso de Top. El corte
+    avanza a las 00:00 UTC, por eso se recalcula en cada ventana."""
+    return pd.Timestamp.now(tz="UTC").floor("D") - pd.Timedelta(days=_TOP_MEMORY_DAYS)
+
+
 # Umbral de aviso de desbordamiento: si una ventana devuelve >= este nº de tweets
 # se considera que topó con el techo del buscador y puede estar incompleta. Es un
 # umbral fijo porque el techo real de Latest queda por debajo de n (~700-950, y
@@ -137,6 +153,12 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
             log(f"Resuming from saved context: {since} (original range: {original_since} -> {original_until})")
 
         sequence = date_sequence(since, until, frequency)
+
+        if product == "Top" and _to_utc_timestamp(since) < _top_cutoff():
+            log(f"WARNING: Top's dense index only covers the last {_TOP_MEMORY_DAYS} calendar days "
+                f"(UTC); days before {_top_cutoff():%Y-%m-%d} will return only a residue of the most "
+                f"viral tweets (or nothing with sub-day windows). Consider Latest or the optimized "
+                f"download for old ranges.")
 
         _pacer = {"first": True}
         overflow_count = 0
@@ -197,6 +219,13 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
 # a medianoche, porque Latest trunca la hora del until al día) y Top en ventanas
 # intradía. Cuando una ventana desborda (>= _OPT_OVERFLOW) se re-descarga
 # subdividida con la siguiente frecuencia de la escalera, recursivamente.
+#
+# La edad del dato manda sobre el producto (ver _TOP_MEMORY_DAYS): en ventanas
+# intradía anteriores al corte, Top devolvería ~0, así que se usa Latest con
+# operadores epoch (_time_operators). Y en ventanas de >= 1 día anteriores al
+# corte se añade una petición Top extra por ventana para rescatar el residuo
+# viral que Latest ya no devuelve entero (en las pruebas añadió +75% sobre
+# Latest solo); los duplicados los elimina clean_tweets en el remate final.
 
 _OPT_LADDER = ["1 month", "1 week", "1 day", "6 hour", "3 hour", "1 hour", "30 min"]
 _OPT_OVERFLOW = 500
@@ -268,23 +297,28 @@ def optimized_search(data_path: Path, dataset: str, prefix: str, query: str, sin
                 log(f"Waiting {sleep_time} seconds before the next iteration...")
                 time.sleep(sleep_time)
 
+        def store(tweets, a, b):
+            nonlocal append
+            df = _to_dataframe(tweets)
+            df = clean_text(df)
+            _write_csv(df, output_raw_file, output_raw_file.exists())
+            df = clean_tweets(df, a, b)
+            if len(df):
+                _write_csv(df, output_file, append)
+                append = True
+
         def window(a, b, level):
-            nonlocal append, overflow_count
+            nonlocal overflow_count
             pace()
             freq = _OPT_LADDER[level]
-            product = "Top" if (b - a) < pd.Timedelta(days=1) else "Latest"
-            query_date = f"{query} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
+            recent = a >= _top_cutoff()
+            product = "Top" if recent and (b - a) < pd.Timedelta(days=1) else "Latest"
+            query_date = f"{query} {_time_operators(a, b, product)}"
             log(f"--> Downloading {query_date} (product={product}, frequency={freq}) ......")
             tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
             log(f"Downloaded {len(tweets)} tweets")
             if tweets:
-                df = _to_dataframe(tweets)
-                df = clean_text(df)
-                _write_csv(df, output_raw_file, output_raw_file.exists())
-                df = clean_tweets(df, a, b)
-                if len(df):
-                    _write_csv(df, output_file, append)
-                    append = True
+                store(tweets, a, b)
             if len(tweets) >= threshold:
                 overflow_count += 1
                 if level + 1 < len(_OPT_LADDER):
@@ -297,6 +331,15 @@ def optimized_search(data_path: Path, dataset: str, prefix: str, query: str, sin
                 else:
                     _record_overflow_opt(overflow_file, query, a, b, product, freq,
                                          len(tweets), n, "overflow (min frequency reached)", log)
+            if not recent and (b - a) >= pd.Timedelta(days=1):
+                # rescate del residuo viral (ver comentario de cabecera)
+                pace()
+                query_top = f"{query} {_time_operators(a, b, 'Top')}"
+                log(f"--> Viral-residue pass {query_top} (product=Top) ......")
+                extra = run_async(scraping.search_tweets(query_top, n=n, product="Top"))
+                log(f"Downloaded {len(extra)} tweets (viral residue)")
+                if extra:
+                    store(extra, a, b)
 
         sequence = date_sequence(start, end, frequency)
         for i in range(len(sequence) - 1):
@@ -339,6 +382,12 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
 
         ctx = context.get_context_user(output, prefix)
         append = output_file.exists()
+
+        if product == "Top" and _to_utc_timestamp(since) < _top_cutoff():
+            log(f"WARNING: Top's dense index only covers the last {_TOP_MEMORY_DAYS} calendar days "
+                f"(UTC); days before {_top_cutoff():%Y-%m-%d} will return only a residue of the most "
+                f"viral tweets (or nothing with sub-day windows). Consider Latest or the optimized "
+                f"download for old ranges.")
 
         _pacer = {"first": True}
         overflow_count = 0
@@ -410,8 +459,10 @@ def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: l
                        since, until, sleep_time: int = 5, n: int = 900, log=print) -> Path:
     """Descarga optimizada de timelines: mismo criterio que optimized_search
     (frecuencia inicial según el periodo, Latest en ventanas >= 1 día alineadas
-    a medianoche, Top en intradía, subdivisión recursiva al desbordar), aplicado
-    usuario a usuario con consultas from:{user}."""
+    a medianoche, Top solo en intradía dentro de la memoria densa de Top,
+    Latest con epoch en intradía viejo, pasada de residuo viral en ventanas
+    viejas de >= 1 día, subdivisión recursiva al desbordar), aplicado usuario
+    a usuario con consultas from:{user}."""
     _log_handler = _start_forwarding_twscrape_logs(log)
     try:
         output = Path(data_path) / dataset
@@ -443,24 +494,29 @@ def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: l
                 log(f"Waiting {sleep_time} seconds before the next iteration...")
                 time.sleep(sleep_time)
 
+        def store(tweets, a, b, _user):
+            nonlocal append
+            df = _to_dataframe(tweets)
+            df = df[df["username"].str.lower() == _user.lower()]
+            df = clean_text(df)
+            _write_csv(df, output_raw_file, output_raw_file.exists())
+            df = clean_tweets(df, a, b)
+            if len(df):
+                _write_csv(df, output_file, append)
+                append = True
+
         def window(a, b, level, _user):
-            nonlocal append, overflow_count
+            nonlocal overflow_count
             pace()
             freq = _OPT_LADDER[level]
-            product = "Top" if (b - a) < pd.Timedelta(days=1) else "Latest"
-            query_date = f"from:{_user} since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}"
+            recent = a >= _top_cutoff()
+            product = "Top" if recent and (b - a) < pd.Timedelta(days=1) else "Latest"
+            query_date = f"from:{_user} {_time_operators(a, b, product)}"
             log(f"--> Downloading {query_date} (product={product}, frequency={freq}) ......")
             tweets = run_async(scraping.search_tweets(query_date, n=n, product=product))
             log(f"Downloaded {len(tweets)} tweets")
             if tweets:
-                df = _to_dataframe(tweets)
-                df = df[df["username"].str.lower() == _user.lower()]
-                df = clean_text(df)
-                _write_csv(df, output_raw_file, output_raw_file.exists())
-                df = clean_tweets(df, a, b)
-                if len(df):
-                    _write_csv(df, output_file, append)
-                    append = True
+                store(tweets, a, b, _user)
             if len(tweets) >= threshold:
                 overflow_count += 1
                 if level + 1 < len(_OPT_LADDER):
@@ -473,6 +529,15 @@ def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: l
                 else:
                     _record_overflow_opt(overflow_file, f"from:{_user}", a, b, product, freq,
                                          len(tweets), n, "overflow (min frequency reached)", log)
+            if not recent and (b - a) >= pd.Timedelta(days=1):
+                # rescate del residuo viral (ver comentario de cabecera)
+                pace()
+                query_top = f"from:{_user} {_time_operators(a, b, 'Top')}"
+                log(f"--> Viral-residue pass {query_top} (product=Top) ......")
+                extra = run_async(scraping.search_tweets(query_top, n=n, product="Top"))
+                log(f"Downloaded {len(extra)} tweets (viral residue)")
+                if extra:
+                    store(extra, a, b, _user)
 
         for order, user in enumerate(list_users):
             since_partial = _to_utc_timestamp(since)

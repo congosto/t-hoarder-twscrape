@@ -171,9 +171,14 @@ downloads work the way they do.
   - **Latest**: the chronological flow.
 
   Empirically we have found that **Latest works better at frequencies of
-  one day or longer, and Top at frequencies under one day**. That is why
-  the app provides an **optimized method** that uses the best option at
-  each moment:
+  one day or longer, and Top at frequencies under one day** — and also that
+  **Top's dense index only covers the last 7 calendar days (UTC)**: day D-7
+  is still fully retrievable, but day D-8 vanishes abruptly (sub-day windows
+  start returning ~0). For older days Top only keeps a **residue of the most
+  viral tweets**, reachable with windows of one day or longer; Latest has no
+  such cliff, although on old data it also returns considerably less than
+  when fresh. That is why the app provides an **optimized method** that uses
+  the best option at each moment:
 
   1. Depending on the length of the requested period, it picks the initial
      frequency (up to 1 month → 1-day windows; up to 6 months → 1-week;
@@ -182,8 +187,12 @@ downloads work the way they do.
      **re-downloads it subdivided** at the next frequency of the ladder
      month → week → day → 6 h → 3 h → 1 h → 30 min, recursively until no
      sub-window overflows or 30 minutes is reached.
-  3. Below one day, it switches from *Latest* to *Top*, which is where Top
-     performs best.
+  3. Below one day, it switches from *Latest* to *Top* — but **only within
+     Top's memory** (the last 7 days): on older sub-day windows it keeps
+     *Latest*, which is the only option that still returns data there.
+  4. On windows of one day or longer that predate that memory, it fires an
+     **extra Top request** to rescue the viral residue that Latest no longer
+     returns in full (duplicates are removed when the download is finalized).
 
   The method respects the pause between all queries, including the
   subdivided ones, to avoid burning the quota in a burst.
@@ -223,7 +232,8 @@ they left off, thanks to the context saved with each dataset.
       and logged to `{dataset}_overflow.csv`; with that file, the user
       decides to re-download the incomplete stretches at a finer frequency
       (into a new dataset) and merge them afterwards with *Tools → Merge
-      datasets*.
+      datasets*. If *Top* is requested over a range that exceeds its 7-day
+      memory, the app honors it but warns in the console.
   - Files it generates: `{dataset}.csv` (the tweets of the period, without
     duplicates), `{dataset}_raw.csv` (everything collected, untrimmed), the
     context log and, if there was any, the overflow log.
