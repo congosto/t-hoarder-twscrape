@@ -344,6 +344,19 @@ saved first with a suffix carrying the operation date
   percentage), and a **timeline chart** with the tweets collected by each
   download, with an adjustable time unit (hour, day, week, month).
 
+- **Import dataset** — brings into the active project a dataset extracted with
+  **another tool** (for example Barri's) and converts it to the
+  t-hoarder-twscrape format so it can be worked on with the app. You give it the
+  **path** to the file (`.csv` or `.csv.gz`) and a **destination name**. It
+  requires at least the basic columns (id, date, username, text, counts,
+  user\_id and url) and fills the rest of the schema with default values; it
+  normalizes the dates and **checks that the tweet and user identifiers are
+  numeric text** (dropping those corrupted by *float*/scientific notation). It
+  detects on its own whether they are **tweets** (users scattered) or a **user
+  timeline** (users in blocks), though it can be forced with the *Type*
+  dropdown. The result is saved as `{destination}.csv` in the project (with the
+  same previous-version backup if it already existed).
+
 - **Location** — analyzes the location declared in the profiles of the
   dataset's authors and structures it into **country, region and city**
   (for Spain, the region is the autonomous community). Geocoding is offline

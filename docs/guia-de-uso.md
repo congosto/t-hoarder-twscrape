@@ -350,6 +350,19 @@ anterior se guarda antes con un sufijo con la fecha de la operación
   temporal** con los tweets recogidos por cada descarga, con la unidad de
   tiempo ajustable (hora, día, semana, mes).
 
+- **Import dataset** — trae al proyecto activo un dataset extraído con **otra
+  herramienta** (por ejemplo el de Barri) y lo convierte al formato de
+  t-hoarder-twscrape para poder trabajarlo con la app. Se le da la **ruta** del
+  fichero (`.csv` o `.csv.gz`) y un **nombre destino**. Exige al menos las
+  columnas básicas (id, fecha, usuario, texto, contadores, user\_id y url) y
+  rellena el resto del esquema con valores por defecto; normaliza las fechas y
+  **comprueba que los identificadores de tweet y de usuario sean texto numérico**
+  (descarta los corruptos por *float*/notación científica). Detecta solo si son
+  **tweets** (usuarios salpicados) o un **timeline de usuario** (usuarios en
+  bloques), aunque se puede forzar con el desplegable *Type*. El resultado se
+  guarda como `{destino}.csv` en el proyecto (con el mismo respaldo de la
+  versión anterior si ya existía).
+
 - **Location** — analiza la localización declarada en el perfil de los
   autores del dataset y la estructura en **país, región y ciudad** (para
   España, la región es la comunidad autónoma). La geocodificación es offline

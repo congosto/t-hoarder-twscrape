@@ -140,6 +140,135 @@ def _backup_dataset(project_dir: Path, name: str, log=print) -> None:
     log(f"Destination dataset already existed; previous version saved as {name}_prev_{stamp}.csv")
 
 
+# Esquema canónico de un dataset de tweets t-hoarder-twscrape (orden estable) y el
+# valor por defecto de cada columna al importar de otra herramienta. Debe coincidir
+# con scripts/scraping.py:_tweet_to_dict y especificaciones/metadatos.txt.
+_IMPORT_DEFAULTS = {
+    "id": "", "date": "", "username": "", "text": "", "source": "",
+    "lang": "und", "reply_count": 0, "retweet_count": 0, "like_count": 0,
+    "quote_count": 0, "views_count": 0, "in_reply_to_user_id_str": "",
+    "in_reply_to_user_username": "", "in_reply_to_tweet_id_str": "",
+    "conversation_id_str": "", "is_quote_status": False,
+    "quoted_tweet_username": "", "quoted_tweet_url": "", "user_id": "",
+    "user_displayname": "", "followers_count": 0, "friends_count": 0,
+    "statuses_count": 0, "favourites_count": 0, "listed_count": 0,
+    "location": "", "created_at": "", "user_verified": False,
+    "is_blue_verified": False, "verified_type": "", "expanded_url": "",
+    "media": "", "url": "",
+}
+_CANON_COLS = list(_IMPORT_DEFAULTS)
+# columnas mínimas que el dataset de origen DEBE traer (el resto se rellena)
+_IMPORT_REQUIRED = [
+    "id", "date", "username", "text", "reply_count", "retweet_count",
+    "like_count", "quote_count", "views_count", "user_id", "url",
+]
+
+
+def import_dataset(project_dir: Path, source, dest: str, kind: str | None = None,
+                   log=print) -> tuple:
+    """Importa un dataset externo (extraído con otra herramienta, p.ej. el de Barri)
+    al formato t-hoarder-twscrape, dentro del proyecto activo.
+
+    source: ruta al CSV / CSV.gz a importar.
+    dest:   nombre del dataset destino (prefijo). Se guarda como {dest}.csv.
+    kind:   'search' (tweets) | 'users' (TL de usuario) | None (autodetecta:
+            1 usuario distinto -> users, varios -> search).
+
+    - Exige al menos las columnas mínimas (_IMPORT_REQUIRED); el resto del esquema
+      canónico se rellena con su valor por defecto.
+    - Lee los ids como TEXTO y comprueba que id/user_id son solo dígitos (rechaza la
+      corrupción float/científica del tipo '1.2e18' o '123.0'); descarta filas con
+      'id' no numérico.
+    - Normaliza 'date' a 'YYYY-MM-DD HH:MM:SS+00:00' (UTC); descarta fechas no
+      parseables.
+    - Genera el fichero de contexto (search/users) que marca el tipo del dataset.
+
+    Devuelve (dest_path, total_importados, kind).
+    """
+    import context
+
+    source = Path(source)
+    if not source.exists():
+        raise FileNotFoundError(f"Source dataset not found: {source}")
+    if kind not in (None, "search", "users"):
+        raise ValueError("kind must be 'search', 'users' or None (autodetect)")
+
+    # leer TODO como texto: evita que pandas convierta los ids a float (y los
+    # corrompa). keep_default_na=False para no convertir vacíos en NaN.
+    df = pd.read_csv(source, dtype=str, keep_default_na=False, encoding="utf-8")
+    log(f"Read {len(df)} rows from {source.name}")
+
+    missing_req = [c for c in _IMPORT_REQUIRED if c not in df.columns]
+    if missing_req:
+        raise ValueError("Source dataset is missing required columns: "
+                         + ", ".join(missing_req))
+
+    # construir el df en el esquema canónico, rellenando las columnas ausentes
+    out = pd.DataFrame(index=df.index)
+    filled = []
+    for col, default in _IMPORT_DEFAULTS.items():
+        if col in df.columns:
+            out[col] = df[col].astype(str)
+        else:
+            out[col] = default
+            filled.append(col)
+    if filled:
+        log(f"Columns absent in source, filled with defaults: {', '.join(filled)}")
+
+    # 'id' de mensaje: obligatorio y numérico-como-texto (no float/científica)
+    id_ok = out["id"].str.strip().str.fullmatch(r"\d+")
+    if int((~id_ok).sum()):
+        corrupt = out.loc[~id_ok, "id"].str.strip()
+        ej = corrupt[corrupt != ""].unique()[:5].tolist()
+        log(f"WARNING: dropping {int((~id_ok).sum())} rows with non-numeric 'id'"
+            + (f" (e.g. {ej})" if ej else " (empty)"))
+        out = out[id_ok].copy()
+
+    # 'user_id': solo aviso si hay corrupción (no se descartan filas)
+    uid = out["user_id"].str.strip()
+    uid_bad = (uid != "") & ~uid.str.fullmatch(r"\d+")
+    if int(uid_bad.sum()):
+        ej = uid[uid_bad].unique()[:5].tolist()
+        log(f"WARNING: 'user_id' has {int(uid_bad.sum())} non-numeric values "
+            f"(possible float/scientific corruption), e.g. {ej}")
+
+    # normalizar fechas a UTC 'YYYY-MM-DD HH:MM:SS+00:00'. format="mixed" infiere el
+    # formato por elemento (admite ISO con 'Z', con espacio, solo-día, etc.).
+    dt = pd.to_datetime(out["date"], utc=True, errors="coerce", format="mixed")
+    if int(dt.isna().sum()):
+        log(f"Dropping {int(dt.isna().sum())} rows with unparseable date")
+    out = out[dt.notna()].copy()
+    out["date"] = dt[dt.notna()].dt.strftime("%Y-%m-%d %H:%M:%S+00:00")
+
+    if out.empty:
+        raise ValueError("No valid rows to import after validation")
+
+    # tipo: en un TL los tweets van en BLOQUES por usuario (todo un usuario, luego
+    # otro, y así); en una búsqueda los usuarios van salpicados. Medimos la fracción
+    # de filas consecutivas del MISMO usuario: alta -> bloques (users); baja ->
+    # search. (Se usa el orden del fichero de origen, que conserva esa estructura.)
+    if kind is None:
+        u = out["username"].to_numpy()
+        if len(u) >= 2:
+            same_frac = float((u[1:] == u[:-1]).mean())
+            kind = "users" if same_frac >= 0.5 else "search"
+            log(f"Detected type: {kind} (same-user adjacency {same_frac:.2f}, "
+                f"{out['username'].nunique()} distinct users)")
+        else:
+            kind = "users"
+            log("Detected type: users (single row)")
+
+    # guardar en el proyecto activo (respaldando el destino si ya existe)
+    _backup_dataset(project_dir, dest, log=log)
+    dest_path = project_dir / f"{dest}.csv"
+    out.reindex(columns=_CANON_COLS).to_csv(dest_path, index=False, encoding="utf-8")
+
+    context.log_import_dataset(project_dir, dest, kind, str(source), len(out))
+    log(f"Imported dataset '{dest}' ({len(out)} tweets, type {kind}) "
+        f"from {source.name} -> {dest_path.name}")
+    return dest_path, len(out), kind
+
+
 def clean_dataset(project_dir: Path, source: str, dest: str,
                   langs: list[str] | None = None, positives: list[str] | None = None,
                   false_positives: list[str] | None = None, log=print) -> tuple:

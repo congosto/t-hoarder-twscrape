@@ -27,7 +27,7 @@ _LOG_COLUMNS = [
     "operation", "last_date", "since", "until", "query", "product", "frequency",
     "order", "username", "date", "total_tweets", "merged_from", "n_datasets",
     "cleaned_from", "langs", "positives", "false_positives", "total_before", "total_after",
-    "restored_from",
+    "restored_from", "imported_from",
 ]
 
 
@@ -143,6 +143,16 @@ def log_restore_dataset(dataset, prefix, log_type, restored_from, total_tweets) 
         "operation": "restore_dataset",
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "restored_from": restored_from, "total_tweets": str(total_tweets),
+    })
+
+
+def log_import_dataset(dataset, prefix, log_type, imported_from, total_tweets) -> None:
+    """Anota la importación de un dataset externo. Crea el log del tipo indicado
+    (search/users), que es lo que marca el tipo del dataset para Charts."""
+    _record(dataset, prefix, log_type, {
+        "operation": "import_dataset",
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "imported_from": imported_from, "total_tweets": str(total_tweets),
     })
 
 

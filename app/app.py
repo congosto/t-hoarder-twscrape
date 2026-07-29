@@ -262,6 +262,27 @@ def _new_dataset_input(key):
     return name
 
 
+def _browse_source_file():
+    """Callback del botón 'Browse…': abre un diálogo nativo del sistema para elegir
+    el fichero a importar y escribe su ruta en el campo. Solo funciona con la app en
+    LOCAL (usa tkinter); si no está disponible, se teclea la ruta a mano."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes("-topmost", 1)
+        path = filedialog.askopenfilename(
+            title="Select dataset to import",
+            filetypes=[("CSV / gzip", "*.csv *.gz"), ("All files", "*.*")],
+        )
+        root.destroy()
+        if path:
+            st.session_state["imp_source"] = path
+    except Exception as e:
+        st.session_state["imp_browse_error"] = str(e)
+
+
 def prefix_input(label, key, allow_new=False, kinds=_ALL_KINDS):
     """Entrada de Dataset como desplegable con los datasets del proyecto activo,
     el más reciente preseleccionado (así se trabaja por defecto con lo último).
@@ -728,8 +749,9 @@ with left:
                         log_error(str(e))
 
     elif section == "Tools":
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(
-            ["Merge datasets", "Clean dataset", "Restore dataset", "Compare datasets", "Location"]
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+            ["Merge datasets", "Clean dataset", "Restore dataset", "Compare datasets",
+             "Import dataset", "Location"]
         )
         with tab1:
             if not st.session_state.active_project:
@@ -862,6 +884,45 @@ with left:
                             except (ValueError, FileNotFoundError) as e:
                                 log_error(str(e))
         with tab5:
+            if not st.session_state.active_project:
+                st.write("Select or create a project in 'Project' before importing a dataset.")
+            else:
+                project_dir = projects.select_project(st.session_state.active_project)
+                st.caption("Import a dataset extracted with another tool (e.g. Barri's) into the "
+                           "active project, converting it to the t-hoarder-twscrape format.")
+                st.button("Browse…", key="imp_browse", on_click=_browse_source_file,
+                          help="Open a file dialog (only when the app runs locally)")
+                _browse_err = st.session_state.pop("imp_browse_error", None)
+                if _browse_err:
+                    st.warning(f"File browser not available ({_browse_err}). Type the path manually.")
+                imp_source = st.text_input(
+                    "Source file path (.csv or .csv.gz to import) — or use Browse…", key="imp_source"
+                ).strip()
+                imp_dest = _strip_extension(st.text_input("Destination dataset", key="imp_dest").strip())
+                _imp_kinds = {"Auto-detect": None, "Tweets (search)": "search", "User TL (users)": "users"}
+                imp_kind = st.selectbox("Type", list(_imp_kinds), key="imp_kind")
+                st.caption("Auto-detect: users in blocks → User TL; scattered → Tweets. "
+                           "Requires at least id, date, username, text, reply_count, retweet_count, "
+                           "like_count, quote_count, views_count, user_id, url (missing columns are "
+                           "filled). Message/user IDs must be numeric text (float/scientific = corrupt).")
+                if st.button("Import dataset"):
+                    if not imp_source:
+                        log_error("enter the source file path")
+                    elif not imp_dest:
+                        log_error("enter the destination dataset name")
+                    else:
+                        try:
+                            with st.spinner("Importing dataset..."):
+                                output_file, total, kind = utils.import_dataset(
+                                    project_dir, imp_source, imp_dest,
+                                    kind=_imp_kinds[imp_kind], log=log,
+                                )
+                            log(f"Imported {total} tweets (type {kind}) → {output_file.name}")
+                            set_result(output_file)
+                            st.rerun()
+                        except Exception as e:
+                            log_error(str(e))
+        with tab6:
             if not st.session_state.active_project:
                 st.write("Select or create a project in 'Project' before extracting locations.")
             else:
