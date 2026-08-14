@@ -27,12 +27,13 @@ _NODE_ATTR_TYPES = {
     "user_verified": "BOOLEAN",
     "is_blue_verified": "BOOLEAN",
     "verified_type": "VARCHAR",
+    "lang": "VARCHAR",
 }
 _NODE_ATTR_COLUMNS = list(_NODE_ATTR_TYPES.keys())
 
 # Atributos y orden en que se muestran en el tooltip/panel del visor interactivo
 _TOOLTIP_ATTRS = [
-    "create_at_year", "user_verified", "is_blue_verified", "verified_type",
+    "create_at_year", "user_verified", "is_blue_verified", "verified_type", "lang",
     "log_followers_count", "log_friends_count", "log_statuses_count",
     "log_favourites_count", "log_listed_count",
     "location_country", "location_region", "location_city",
@@ -220,6 +221,12 @@ def _node_attributes_table(tweets_df: pd.DataFrame, relations_df: pd.DataFrame,
     if tprefix:
         rename = {}
         for col in _AUTHOR_COLUMNS:
+            # el username destino ya viene en la columna "target"; si ademas
+            # renombraramos <tprefix>username -> username tendriamos DOS columnas
+            # "username" en 'part' y el pd.concat de abajo falla con
+            # "Reindexing only valid with uniquely valued Index objects".
+            if col == "username":
+                continue
             src_col = tprefix + col
             if src_col in relations_df.columns:
                 rename[src_col] = col
@@ -385,6 +392,30 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
         node_attrs["location_country"] = None
         node_attrs["location_region"] = None
         node_attrs["location_city"] = None
+
+    # lang: lengua DOMINANTE (la mas frecuente) de cada usuario. 'lang' es un
+    # atributo por-tweet (ver scraping.py), asi que un usuario puede tener varias;
+    # se toma la mas usada. Empate -> orden alfabetico, para que sea determinista.
+    # Se recoge de tweets_df Y de relations_df (igual que _node_attributes_table
+    # junta los autores de ambos): en un grafo de RT/replies la mayoria de autores
+    # y su lang viven en relations_df, no en tweets_df. Los nodos sin ningun tweet
+    # en el dataset (p.ej. hubs solo-destino) se quedan sin lang (se omite, como
+    # cualquier NaN).
+    lang_frames = [df[["username", "lang"]] for df in (tweets_df, relations_df)
+                   if "username" in df.columns and "lang" in df.columns]
+    if lang_frames:
+        langs = pd.concat(lang_frames, ignore_index=True)
+        langs["username"] = _norm_username(langs["username"])
+        langs = langs.dropna(subset=["username", "lang"])
+        langs = langs[~langs["username"].isin(["", "nan"])]
+        lang_counts = langs.groupby(["username", "lang"]).size().reset_index(name="n")
+        lang_counts = lang_counts.sort_values(["n", "lang"], ascending=[False, True])
+        dominant_lang = lang_counts.drop_duplicates("username").set_index("username")["lang"]
+        node_attrs["lang"] = node_attrs.index.map(dominant_lang.to_dict())
+        n_lang = int(node_attrs["lang"].notna().sum())
+        log(f"Dominant language joined: {n_lang}/{len(node_attrs)} nodes")
+    else:
+        node_attrs["lang"] = None
 
     if output_format == "gexf":
         graph_file = project_dir / f"{prefix}_{relation}.gexf"
