@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo_t-hoarder.png" alt="t-hoarder-twscrape" width="90">
+  <img src="logo_t-hoarder.png" alt="t-hoarder_twscraper" width="90">
 </p>
 
 <h1 align="center">t-hoarder-twscrape</h1>
@@ -194,6 +194,40 @@ cuota de peticiones. Recomendaciones:
 
 El paso a paso para obtener las cookies y dar de alta las cuentas está en la
 [guía de uso](docs/guia-de-uso.md#settings).
+
+### Si tienes la app en Dropbox / OneDrive (error «disk I/O error»)
+
+La base de datos de cuentas es un fichero SQLite (`accounts.db`). Si la carpeta
+de la app está dentro de un **sincronizador de archivos** (Dropbox, OneDrive,
+Google Drive…), este puede bloquear el fichero justo mientras la app escribe en
+él. En descargas con muchas escrituras seguidas —sobre todo **Retweets**— eso
+provoca el error:
+
+```
+sqlite3.OperationalError: disk I/O error
+```
+
+**Solución:** guardar `accounts.db` en una carpeta que **no** se sincronice. Para
+ello, define la variable de entorno **`THOARDER_ACCOUNTS_DB`** con la **carpeta**
+(no el fichero) donde quieres que viva la base de datos; la app creará
+`accounts.db` dentro. Si la variable no existe, todo sigue igual que ahora
+(la base de datos se queda junto a la app).
+
+En **Windows** (PowerShell), una vez:
+
+```powershell
+setx THOARDER_ACCOUNTS_DB "C:\Users\TU_USUARIO\t-hoarder_twscraper"
+```
+
+En **macOS / Linux**, añade a `~/.bashrc` o `~/.zshrc`:
+
+```bash
+export THOARDER_ACCOUNTS_DB="$HOME/t-hoarder_twscraper"
+```
+
+Cierra y vuelve a abrir la terminal (y la app) para que tome el cambio. Si ya
+tenías cuentas dadas de alta, copia tu `accounts.db` anterior a esa carpeta para
+no tener que volver a añadirlas.
 
 ## Estructura del repo
 

@@ -1,6 +1,8 @@
 import twscrape_patch  # noqa: F401  parche XClIdGen issue #320 (se aplica al importar)
 from twscrape import API
 
+from config import ACCOUNTS_DB
+
 
 def _tweet_to_dict(tweet) -> dict:
     user = tweet.user
@@ -76,7 +78,7 @@ def _user_to_dict(user) -> dict:
 
 
 async def search_tweets(query: str, n: int = 100, product: str = "Top") -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     tweets = []
     async for tweet in api.search(query, limit=n, kv={"product": product}):
         tweets.append(_tweet_to_dict(tweet))
@@ -84,7 +86,7 @@ async def search_tweets(query: str, n: int = 100, product: str = "Top") -> list[
 
 
 async def user_tweets(username: str, n: int = 100) -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     user = await api.user_by_login(username)
     tweets = []
     async for tweet in api.user_tweets(user.id, limit=n):
@@ -93,7 +95,7 @@ async def user_tweets(username: str, n: int = 100) -> list[dict]:
 
 
 async def get_user(username: str) -> dict:
-    api = API()
+    api = API(ACCOUNTS_DB)
     user = await api.user_by_login(username)
     return _user_to_dict(user)
 
@@ -109,7 +111,7 @@ async def search_mentions(username: str, n: int = 100) -> list[dict]:
 
 
 async def tweet_replies(tweet_id: int | str, n: int = 100) -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     replies = []
     async for tweet in api.tweet_replies(int(tweet_id), limit=n):
         replies.append(_tweet_to_dict(tweet))
@@ -117,7 +119,7 @@ async def tweet_replies(tweet_id: int | str, n: int = 100) -> list[dict]:
 
 
 async def get_retweeters(tweet_id: int | str, n: int = 100) -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     retweeters = []
     async for user in api.retweeters(int(tweet_id), limit=n):
         retweeters.append(_user_to_dict(user))
@@ -125,7 +127,7 @@ async def get_retweeters(tweet_id: int | str, n: int = 100) -> list[dict]:
 
 
 async def tweet_details(tweet_id: int | str) -> dict | None:
-    api = API()
+    api = API(ACCOUNTS_DB)
     tweet = await api.tweet_details(int(tweet_id))
     if tweet is None:
         return None
@@ -133,7 +135,7 @@ async def tweet_details(tweet_id: int | str) -> dict | None:
 
 
 async def get_followers(username: str, n: int = 100) -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     user = await api.user_by_login(username)
     followers = []
     async for follower in api.followers(user.id, limit=n):
@@ -142,7 +144,7 @@ async def get_followers(username: str, n: int = 100) -> list[dict]:
 
 
 async def get_following(username: str, n: int = 100) -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     user = await api.user_by_login(username)
     following = []
     async for followee in api.following(user.id, limit=n):
@@ -168,7 +170,7 @@ async def get_retweeters_batch(
 
 
 async def user_tweets_and_replies(username: str, n: int = 100) -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     user = await api.user_by_login(username)
     tweets = []
     async for tweet in api.user_tweets_and_replies(user.id, limit=n):
@@ -177,7 +179,7 @@ async def user_tweets_and_replies(username: str, n: int = 100) -> list[dict]:
 
 
 async def user_media(username: str, n: int = 100) -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     user = await api.user_by_login(username)
     tweets = []
     async for tweet in api.user_media(user.id, limit=n):
@@ -186,7 +188,7 @@ async def user_media(username: str, n: int = 100) -> list[dict]:
 
 
 async def verified_followers(username: str, n: int = 100) -> list[dict]:
-    api = API()
+    api = API(ACCOUNTS_DB)
     user = await api.user_by_login(username)
     followers = []
     async for follower in api.verified_followers(user.id, limit=n):

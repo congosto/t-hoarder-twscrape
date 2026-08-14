@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo_t-hoarder.png" alt="t-hoarder-twscrape" width="90">
+  <img src="logo_t-hoarder.png" alt="t-hoarder_twscraper" width="90">
 </p>
 
 <h1 align="center">t-hoarder-twscrape</h1>
@@ -194,6 +194,39 @@ request quota. Recommendations:
 
 The step-by-step instructions to get the cookies and register the accounts are
 in the [user guide](docs/user-guide.en.md#settings).
+
+### If the app lives in Dropbox / OneDrive ("disk I/O error")
+
+The accounts database is a SQLite file (`accounts.db`). If the app folder is
+inside a **file sync service** (Dropbox, OneDrive, Google Drive…), it may lock
+the file right as the app is writing to it. During downloads with many
+consecutive writes —especially **Retweets**— this triggers:
+
+```
+sqlite3.OperationalError: disk I/O error
+```
+
+**Fix:** keep `accounts.db` in a folder that is **not** synced. Set the
+environment variable **`THOARDER_ACCOUNTS_DB`** to the **folder** (not the file)
+where the database should live; the app will create `accounts.db` inside it. If
+the variable is not set, everything stays as before (the database sits next to
+the app).
+
+On **Windows** (PowerShell), once:
+
+```powershell
+setx THOARDER_ACCOUNTS_DB "C:\Users\YOUR_USER\t-hoarder_twscraper"
+```
+
+On **macOS / Linux**, add to `~/.bashrc` or `~/.zshrc`:
+
+```bash
+export THOARDER_ACCOUNTS_DB="$HOME/t-hoarder_twscraper"
+```
+
+Close and reopen the terminal (and the app) for the change to take effect. If
+you already had accounts registered, copy your previous `accounts.db` into that
+folder so you don't have to add them again.
 
 ## Repository layout
 

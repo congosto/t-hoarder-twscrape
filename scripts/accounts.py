@@ -2,7 +2,7 @@ import sqlite3
 
 from twscrape import API
 
-DEFAULT_DB_FILE = "accounts.db"
+from config import ACCOUNTS_DB as DEFAULT_DB_FILE
 
 
 async def add_account(username: str, password: str, email: str, email_password: str,
