@@ -469,7 +469,19 @@ publicación. Se generan dos conjuntos, uno por cada tipo de dataset:
     gráficas por comunidad — cuánto publica y qué palabras usa cada polo de
     la conversación.
   - **Añadir un fichero de topics**, para seguir la presencia de esos temas
-    en los tweets.
+    en los tweets. Los temas se escriben **en tu idioma**: si los tweets están
+    en otro, la app traduce cada tema al idioma mayoritario del dataset para
+    buscarlo, y sigue etiquetando las gráficas en el tuyo. Las traducciones se
+    guardan en `{dataset}_topics_aliases.csv`, así que se traducen una sola vez
+    y el fichero queda a la vista para corregir a mano lo que el traductor no
+    acierte —los topónimos y los nombres propios son justo lo que peor lleva—.
+    Si prefieres escribir tú las variantes, el fichero de topics admite una
+    tercera columna opcional, `aliases`, con sinónimos separados por `|`
+    (`Argelia,#F50202,الجزائر|algérie`); un tema que ya la trae no se traduce.
+    La traducción necesita la librería `deep-translator`: sin ella los temas se
+    buscan tal como estén escritos. En árabe la búsqueda tiene en cuenta que el
+    artículo, las conjunciones y los sufijos van pegados a la palabra, de modo
+    que *Marruecos* encuentra también «marroquí».
   - **Añadir un fichero de events**, para anotar las gráficas en posiciones
     específicas del tiempo (el «qué pasó ese día» que explica un pico).
   - **Hacer zoom**: restringir todas las gráficas al tramo entre dos fechas

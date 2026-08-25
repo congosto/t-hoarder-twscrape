@@ -460,7 +460,19 @@ sets are generated, one per dataset type:
     per-community charts — how much each pole of the conversation posts
     and which words it uses.
   - **Add a topics file**, to track the presence of those topics in the
-    tweets.
+    tweets. Topics are written **in your own language**: if the tweets are in
+    another one, the app translates each topic into the dataset's majority
+    language to search for it, and keeps labeling the charts in yours. The
+    translations are stored in `{dataset}_topics_aliases.csv`, so they happen
+    only once and the file stays in plain sight to fix by hand whatever the
+    translator gets wrong — place names and proper nouns are exactly what it
+    handles worst. If you would rather write the variants yourself, the topics
+    file takes an optional third column, `aliases`, with synonyms separated by
+    `|` (`Algeria,#F50202,الجزائر|algérie`); a topic that already has one is
+    not translated. Translation needs the `deep-translator` library: without it
+    topics are searched as written. In Arabic the search accounts for the
+    article, conjunctions and suffixes being glued to the word, so *Morocco*
+    also finds "Moroccan".
   - **Add an events file**, to annotate the charts at specific points in
     time (the "what happened that day" that explains a spike).
   - **Zoom**: restrict all the charts to the stretch between two given

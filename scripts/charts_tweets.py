@@ -760,14 +760,47 @@ def draw_media_acumulate(df, ini_date, end_date, media, RTs, base_title, slot_ti
 # chart line acumulado por topic
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+def _topic_terms(row):
+    """Terminos que cuentan como un topic: el nombre con el que se etiqueta la
+    grafica mas los sinonimos de la columna opcional "aliases", separados por
+    "|". Asi se busca en los idiomas del corpus y se etiqueta en el propio:
+    topics,color,aliases -> Argelia,#F50202,الجزائر|algérie|algeria"""
+    aliases = row.get("aliases", "")
+    aliases = "" if aliases is None or pd.isna(aliases) else str(aliases)
+    return [str(row["topics"])] + [a.strip() for a in aliases.split("|") if a.strip()]
+
+
+def _topic_pattern(term):
+    """En arabe el articulo y los procliticos van pegados a la palabra (sbth,
+    wsbth, baljzayr): exigir frontera de palabra por delante, como en las
+    lenguas latinas, dejaria fuera todas esas formas. Se admiten delante hasta
+    dos procliticos y el articulo, y por detras los sufijos de _AR_SUFFIXES,
+    que es lo que hace que "Marruecos" cuente tambien "marroqui"."""
+    if _AR_RE.search(term):
+        suffixes = "|".join(_normalize_ar(x) for x in _AR_SUFFIXES)
+        return re.compile(
+            f"(?<![{_AR_LETTERS}])[{_AR_PROCLITICS}]{{0,2}}(?:{_AR_ARTICLE})?"
+            f"{re.escape(_normalize_ar(term))}(?:{suffixes})?(?![{_AR_LETTERS}])"
+        )
+    return re.compile(rf"\b{re.escape(term.lower())}\b")
+
+
 def draw_topics_acumulate(df, topics, ini_date, end_date, RTs, base_title, events=None, slot_time="1h"):
     df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)][["date_slot", "text", "retweet_count"]].copy()
 
+    # el texto se prepara una vez, no una por topic (eran diez pasadas sobre
+    # cientos de miles de filas); la version normalizada solo si hay arabe
+    terms = {str(t["topics"]): _topic_terms(t) for _, t in topics.iterrows()}
+    text = df["text"].fillna("").astype(str).str.lower()
+    text_ar = (text.map(_normalize_ar)
+               if any(_AR_RE.search(w) for ws in terms.values() for w in ws) else text)
+
     frames = []
-    for _, t in topics.iterrows():
-        topic = t["topics"]
-        pattern = re.compile(rf"\b{re.escape(topic.lower())}\b")
-        mask = df["text"].str.lower().apply(lambda s: bool(pattern.search(s)) if isinstance(s, str) else False)
+    for topic, words in terms.items():
+        mask = pd.Series(False, index=df.index)
+        for word in words:
+            source = text_ar if _AR_RE.search(word) else text
+            mask |= source.str.contains(_topic_pattern(word), regex=True)
         aux = df[mask].copy()
         aux["topics"] = topic
         aux["retweet_count"] = aux["retweet_count"].fillna(0)
