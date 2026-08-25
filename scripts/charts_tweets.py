@@ -461,43 +461,188 @@ def draw_comments_vs_RTs(df, ini_date, end_date, base_title):
 _URL_RE = re.compile(r"http\S+\s*")
 _RT_RE = re.compile(r"RT @\w+:")
 _MENTION_RE = re.compile(r"@\w+")
-_WORD_RE = re.compile(r"[a-zA-ZáéíóúñÁÉÍÓÚÑàèìòùçÀÈÌÒÙÇ]{2,}")
+# Dos escrituras: latina (en, es, ca, fr; el rango cubre todos los acentos y
+# ligaduras de Latin-1 y deja fuera los signos × ÷) y arabe. Los datasets
+# mezclan idiomas, asi que la palabra se reconoce por como esta escrita, no
+# por el campo lang del tweet
+_WORD_RE = re.compile(r"[a-zA-ZÀ-ÖØ-öø-ÿŒœ]{2,}|[\u0621-\u0655\u0670\u066E-\u06D3]{2,}")
+
+# Signos que no son letra: harakat (vocales cortas), tanwin, shadda, sukun,
+# hamza suelta sobre/bajo la linea, alef superscript y tatweel (el guion de
+# alargamiento tipografico). Estorban para agrupar y para casar con stopwords
+_AR_DIACRITICS_RE = re.compile(r"[\u064B-\u0655\u0640\u0670]")
+_AR_RE = re.compile(r"[\u0600-\u06FF]")
+# Variantes de una misma letra: alef con hamza/madda/wasla, alef maqsura, ta
+# marbuta, hamza sobre waw/ya y las formas persas de kaf y ya. Sin unificarlas
+# la misma palabra se cuenta dos veces
+_AR_NORMALIZE = str.maketrans({
+    "أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا",
+    "ى": "ي", "ة": "ه", "ؤ": "و", "ئ": "ي",
+    "ک": "ك", "ی": "ي",
+})
+# Romanizacion letra a letra al estilo ALA-LC simplificado (sin puntos ni
+# subrayados, que en una nube de palabras solo ensucian). El arabe se escribe
+# sin vocales cortas, asi que salen palabras consonanticas tipo "almghrb": no
+# es una transcripcion fonetica, es una etiqueta legible y buscable
+_AR_TO_LATIN = {
+    "ا": "a", "ب": "b", "ت": "t", "ث": "th", "ج": "j", "ح": "h", "خ": "kh",
+    "د": "d", "ذ": "dh", "ر": "r", "ز": "z", "س": "s", "ش": "sh", "ص": "s",
+    "ض": "d", "ط": "t", "ظ": "z", "ع": "'", "غ": "gh", "ف": "f", "ق": "q",
+    "ك": "k", "ل": "l", "م": "m", "ن": "n", "ه": "h", "و": "w", "ي": "y",
+    "ء": "",
+    # persa/urdu: aparecen en textos escritos en alfabeto arabe
+    "پ": "p", "چ": "ch", "ژ": "zh", "گ": "g",
+}
+# Articulo definido y procliticos de una letra (wa-, bi-, ka-, fa-, li-, y la
+# contraccion li+al). "almghrb", "walmghrb" y "balmghrb" son la misma palabra y
+# sin quitarles el articulo se reparten por la nube. La conjuncion "wa" suelta
+# NO se quita (en muchisimas palabras es letra raiz: wzyr ministro, wald padre),
+# pero delante del articulo solo puede ser proclitico, asi que ahi se va con el
+_AR_ARTICLE = "ال"
+_AR_PROCLITICS = "وبكفل"
+_AR_LI_AL = "لل"
+_AR_LETTERS = "\u0621-\u064A"
+# Sufijos pegados de uso corriente: nisba (-y, -yh: "marroqui" de "Marruecos"),
+# plurales y pronombres posesivos. Un topic geografico sin ellos pierde la
+# mitad de las menciones, y una lista cerrada no abre la puerta a los falsos
+# positivos que traeria buscar el termino como simple subcadena
+_AR_SUFFIXES = ("ية", "ي", "ات", "ون", "ين", "ها", "هما", "هم", "ه", "ا")
+
+
+def _clean_ar(word):
+    """Quita solo lo que no es letra (harakat, tatweel). La palabra sigue
+    escrita en arabe correcto, que es lo que necesita un traductor: unificar
+    ademas las variantes de letra la estropea (الجزائري -> الجزايري deja de ser
+    "argelino" y pasa a transcribirse como "Jazairy")."""
+    return _AR_DIACRITICS_RE.sub("", word)
+
+
+def _normalize_ar(word):
+    """_clean_ar + unificacion de variantes de letra. Es la forma con la que se
+    cuenta, se agrupa y se casan las stopwords, no la que se traduce."""
+    return _clean_ar(word).translate(_AR_NORMALIZE)
+
+
+def _strip_ar_article(word):
+    if word.startswith(_AR_ARTICLE):
+        stem = word[2:]
+    elif len(word) > 3 and word[0] in _AR_PROCLITICS and word[1:3] == _AR_ARTICLE:
+        stem = word[3:]
+    elif word.startswith(_AR_LI_AL):
+        stem = word[2:]
+    else:
+        return word
+    # si lo que queda no llega a 3 letras no es una palabra: esas dos letras son
+    # parte de la raiz, no un articulo (allh -> lh, alf -> f, balwn -> wn)
+    return stem if len(stem) >= 3 else word
+
+
+def _romanize_ar(word):
+    """Palabra arabe (ya normalizada) -> grafia latina. WordCloud dibuja las
+    letras arabes sueltas y de izquierda a derecha (no hace el shaping ni el
+    bidi), y la fuente por defecto ni siquiera las tiene: en la nube saldrian
+    cuadraditos. Romanizar es lo que hace legible el resultado."""
+    return "".join(_AR_TO_LATIN.get(ch, ch) for ch in word)
 
 
 _STOPWORDS_CACHE = None
+_AR_STOPWORDS_CACHE = None
+
+
+def _nltk_stopwords():
+    import nltk
+    from nltk.corpus import stopwords
+    try:
+        stopwords.words("english")
+    except LookupError:
+        nltk.download("stopwords", quiet=True)
+    return stopwords
 
 
 def _stopwords():
-    """Stopwords en, es, ca, equivalente a stop_words + tm::stopwords().
-    Cacheadas a nivel de módulo: cargar el corpus de nltk en cada gráfica
-    encarecía visiblemente los wordclouds."""
+    """Stopwords en escritura latina (en, es, fr, ca), equivalente a
+    stop_words + tm::stopwords(). Cacheadas a nivel de módulo: cargar el
+    corpus de nltk en cada gráfica encarecía visiblemente los wordclouds."""
     global _STOPWORDS_CACHE
     if _STOPWORDS_CACHE is not None:
         return _STOPWORDS_CACHE
-    import nltk
-    try:
-        from nltk.corpus import stopwords
-        words = set(stopwords.words("english")) | set(stopwords.words("spanish"))
-    except LookupError:
-        nltk.download("stopwords", quiet=True)
-        from nltk.corpus import stopwords
-        words = set(stopwords.words("english")) | set(stopwords.words("spanish"))
+    sw = _nltk_stopwords()
+    words = set()
+    for lang in ("english", "spanish", "french"):
+        words |= {w.lower() for w in sw.words(lang)}
+    # la lista francesa de nltk (snowball) es solo pronombres y conjugaciones
+    # de avoir/etre: se completa con las funcionales mas frecuentes, con y sin
+    # acento (en Twitter se escriben de las dos formas)
+    french = {
+        "où", "ou", "ça", "ca", "cet", "cette", "celui", "celle", "ceux", "celles",
+        "cela", "dont", "donc", "alors", "aussi", "autre", "autres", "avant",
+        "après", "apres", "bien", "chez", "comme", "comment", "contre", "depuis",
+        "déjà", "deja", "dès", "encore", "être", "etre", "faire", "fait", "ici",
+        "jamais", "juste", "là", "leurs", "moins", "non", "oui", "peu", "plus",
+        "plusieurs", "pendant", "pourquoi", "quand", "quel", "quelle", "quels",
+        "quelles", "quelque", "quelques", "rien", "sans", "sauf", "selon", "sinon",
+        "sous", "souvent", "tant", "tel", "telle", "toujours", "tous", "tout",
+        "toute", "toutes", "très", "tres", "trop", "vers", "voici", "voilà",
+        "voila", "vraiment",
+    }
     # nltk no incluye catalan: lista minima de uso frecuente
     catalan = {
         "el", "la", "els", "les", "de", "del", "dels", "un", "una", "uns",
         "unes", "i", "o", "que", "no", "en", "amb", "per", "es", "se", "al",
         "als", "com", "ja", "molt", "pero", "si", "aquest", "aquesta", "te",
     }
-    _STOPWORDS_CACHE = words | catalan
+    _STOPWORDS_CACHE = words | french | catalan
     return _STOPWORDS_CACHE
 
 
-def _tokenize(text):
+def _ar_stopwords():
+    """Stopwords arabes normalizadas igual que los tokens. Se filtran en arabe,
+    antes de romanizar, a proposito: sus transcripciones ("ala", "ana", "ant",
+    "bat"...) colisionan con palabras latinas corrientes y las borrarian de las
+    nubes de datasets que no tienen nada de arabe."""
+    global _AR_STOPWORDS_CACHE
+    if _AR_STOPWORDS_CACHE is not None:
+        return _AR_STOPWORDS_CACHE
+    sw = _nltk_stopwords()
+    _AR_STOPWORDS_CACHE = {_normalize_ar(w) for w in sw.words("arabic")}
+    return _AR_STOPWORDS_CACHE
+
+
+def _tokenize_src(text):
+    """[(token, forma original)]. El token es lo que se cuenta y se dibuja; la
+    forma original es la palabra tal como aparecia en el tweet (normalizada) y
+    es la unica que un traductor puede entender: a "almghrb" no hay quien le
+    saque nada. En escritura latina las dos coinciden."""
     text = _URL_RE.sub("", text)
     text = _RT_RE.sub("", text)
     text = text.replace("&amp;", "&")
     text = _MENTION_RE.sub("", text)
-    return [w.lower() for w in _WORD_RE.findall(text)]
+    words = []
+    for word in _WORD_RE.findall(text):
+        if not _AR_RE.search(word):
+            words.append((word.lower(), word.lower()))
+            continue
+        ar_stop = _ar_stopwords()
+        source = _clean_ar(word)
+        norm = source.translate(_AR_NORMALIZE)
+        if norm in ar_stop:
+            continue
+        # el articulo se quita despues de filtrar: las stopwords arabes de
+        # nltk lo llevan puesto (alty, aldhy, allaty...) y sin el no casan
+        word = _strip_ar_article(norm)
+        if word in ar_stop:
+            continue
+        word = _romanize_ar(word)
+        if len(word) < 2:
+            continue
+        # la forma original conserva el articulo: "almghrb" es Marruecos y
+        # "mghrb" a secas es el poniente, y el traductor lo nota
+        words.append((word.lower(), source))
+    return words
+
+
+def _tokenize(text):
+    return [word for word, _ in _tokenize_src(text)]
 
 
 def word_frequency_table(df, ini_date, end_date, RTs):
