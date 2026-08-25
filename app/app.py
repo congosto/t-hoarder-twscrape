@@ -16,6 +16,14 @@ DATA_PATH = str(REPO_ROOT / "data")
 
 FREQ_UNITS = ["min", "hour", "day", "week", "month", "year"]
 
+# Zonas horarias de las graficas (la primera es la de por defecto). Los cuatro
+# husos continentales de Estados Unidos van de este a oeste. Casablanca es
+# UTC+1 todo el año salvo en Ramadan, que atrasa a UTC+0
+TIME_ZONES = [
+    "Europe/Berlin", "Africa/Casablanca", "America/New_York", "America/Chicago",
+    "America/Denver", "America/Los_Angeles", "America/Caracas",
+]
+
 
 def frequency_input(key_prefix: str) -> str:
     col_n, col_unit = st.columns(2)
@@ -1055,9 +1063,7 @@ with left:
                 with col_title:
                     tg_title = st.text_input("Base title", key="tg_title")
 
-                tg_tz = st.selectbox(
-                    "Time zone", ["Europe/Berlin", "America/Chicago", "America/Caracas"], key="tg_tz"
-                )
+                tg_tz = st.selectbox("Time zone", TIME_ZONES, key="tg_tz")
 
                 st.markdown("Show influencers with values equal or higher")
                 col_reach, col_rts = st.columns(2)
@@ -1157,8 +1163,14 @@ with left:
                     ug_username = st.text_input("Username", key="ug_username").strip()
 
                 ug_title = st.text_input("Base title", key="ug_title")
-                ug_tz = st.selectbox(
-                    "Time zone", ["Europe/Berlin", "America/Chicago", "America/Caracas"], key="ug_tz"
+                ug_tz = st.selectbox("Time zone", TIME_ZONES, key="ug_tz")
+
+                ug_translate = st.checkbox(
+                    "Translate word clouds", key="ug_translate",
+                    help="Translates the words the cloud draws into Spanish, using the "
+                         "dataset's majority language as the source. Needs a connection "
+                         "the first time; after that it reuses "
+                         "{dataset}_word_translations.csv",
                 )
 
                 col_topics_chk, col_topics_file = st.columns([1, 2])
