@@ -25,6 +25,7 @@ Ref. issue: https://github.com/vladkens/twscrape/issues/320
 """
 
 import asyncio
+import re
 from urllib.parse import urlparse
 
 import bs4
@@ -35,6 +36,32 @@ from twscrape.http import make_client as _make_http_client
 from twscrape.logger import logger
 
 _MARK = "_thoarder_xclid_cookies_patch"
+
+
+# Los hashes de los chunks del build "responsive-web" pasaron de 7 a 16 hex en
+# agosto de 2026 (vendor.edd667a49fc639b3a.js). twscrape busca exactamente 7,
+# no encuentra ninguno y aborta con "Failed to parse scripts". Se aceptan 7 o
+# mas: los nombres de chunk llevan puntos y guiones ("ondemand.countries-zh"),
+# asi que nunca se confunden con un hash
+_HASH_RE = re.compile(r'(\d+):"([0-9a-f]{7,})"')
+_ANY_RE = re.compile(r'(\d+):"([^"]+)"')
+
+
+def _get_scripts_list(text):
+    """Como xclid.get_scripts_list, pero sin atarse a hashes de 7 caracteres."""
+    urls = list(dict.fromkeys(_xclid.ASSET_URL_RE.findall(text)))
+    if urls:
+        return urls
+
+    hash_map = {m.group(1): m.group(2) for m in _HASH_RE.finditer(text)}
+    if not hash_map:
+        raise Exception("Failed to parse scripts")
+
+    name_map = {m.group(1): m.group(2) for m in _ANY_RE.finditer(text)
+                if not _HASH_RE.fullmatch(m.group(0))}
+
+    return [_xclid.script_url(name_map.get(cid, cid), h + "a")
+            for cid, h in hash_map.items()]
 
 
 async def _create(cookies=None):
@@ -99,6 +126,7 @@ def apply():
     """Aplica el parche una sola vez (idempotente)."""
     if getattr(_qc.XClIdGenStore, _MARK, False):
         return
+    _xclid.get_scripts_list = _get_scripts_list
     _xclid.XClIdGen.create = staticmethod(_create)
     _qc.XClIdGenStore.get = classmethod(_store_get)
     _qc.Ctx.req = _ctx_req
