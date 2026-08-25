@@ -839,15 +839,26 @@ def draw_topics_acumulate(df, topics, ini_date, end_date, RTs, base_title, event
     label_y, prev = {}, None
     for topic in sorted(topic_order, key=lambda t: finals[t][1]):
         y = finals[topic][1]
+        # la primera etiqueta no se pega al eje: ahi se corta por la mitad
+        y = max(y, limit_y * 0.02) if prev is None else y
         if prev is not None and y - prev < min_sep:
             y = prev + min_sep
         label_y[topic] = y
         prev = y
+
+    # linea guia del final de cada curva hasta su etiqueta. Con un topic
+    # dominante el resto se apelotona abajo y las etiquetas, ya separadas para
+    # no pisarse, acaban muy lejos de su curva: sin la guia parece que ese
+    # topic no tiene linea
+    dx = expand_time(ini_date, end_date, 3)
     for topic in topic_order:
         x_last, y_real = finals[topic]
-        ax.annotate(f"{topic} ({y_real:,.0f} ref.)", (x_last, label_y[topic]),
+        if abs(label_y[topic] - y_real) > min_sep / 2:
+            ax.plot([x_last, x_last + dx], [y_real, label_y[topic]],
+                    linewidth=0.6, alpha=0.5, color=color_map.get(topic))
+        ax.annotate(f"{topic} ({y_real:,.0f} ref.)", (x_last + dx, label_y[topic]),
                     fontsize=8, color=color_map.get(topic),
-                    xytext=(5, 0), textcoords="offset points", va="center")
+                    xytext=(3, 0), textcoords="offset points", va="center")
 
     if events is not None and not events.empty:
         ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
