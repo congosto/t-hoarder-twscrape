@@ -7,3 +7,4 @@ matplotlib
 adjustText
 wordcloud
 nltk
+deep-translator

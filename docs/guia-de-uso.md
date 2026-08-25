@@ -502,6 +502,29 @@ el panel de resultados en modo carrusel y se guardan como PNG en
 autocontenido** con todas ellas (imágenes embebidas, cabecera e índice): un
 único archivo que se puede compartir y abrir en cualquier navegador.
 
+Las **nubes de palabras** descartan las palabras vacías (artículos,
+preposiciones, pronombres…) en inglés, español, catalán, francés y árabe. El
+árabe se transcribe al alfabeto latino, letra a letra y sin vocales cortas
+(*al-Maghrib* sale como *mghrb*), porque la librería que dibuja las nubes no
+sabe unir ni ordenar de derecha a izquierda la escritura árabe: en su grafía
+original saldría en letras sueltas, del revés y sin fuente que las represente.
+De paso se le quita el artículo *al-* —y sus formas contraídas *wa-l-*,
+*bi-l-*, *li-l-*—, que si no reparten la misma palabra por la nube en cuatro
+variantes distintas.
+
+Con la casilla **Translate word clouds**, las palabras que la nube dibuja se
+traducen al español antes de pintarlas: una nube de una cuenta árabe pasa de
+decir *mghrbyh, qwat, mlkyh* a decir *marroquí, fuerzas, militar*. No se
+traducen los tweets —serían cientos de miles— sino las cien palabras que salen
+en la imagen, y el resultado se guarda en `{dataset}_word_translations.csv`,
+así que solo hace falta conexión la primera vez. Las variantes que coinciden al
+traducir suman sus frecuencias, de modo que la nube gana peso en vez de
+repartirlo. El CSV de frecuencias conserva la columna `word_src` con la palabra
+original, para poder comprobar de dónde sale cada término; y como toda
+traducción automática de palabras sueltas, tiene fallos de contexto: en esa
+misma nube الملكية («reales», de *Fuerzas Armadas Reales*) sale como
+*propiedad*. Se corrigen editando el fichero de traducciones.
+
 ## Settings
 
 Gestión de las cuentas de twscrape. Es lo primero que hay que configurar

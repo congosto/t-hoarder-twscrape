@@ -1082,6 +1082,14 @@ with left:
                         label_visibility="collapsed",
                     )
 
+                tg_translate = st.checkbox(
+                    "Translate word clouds", key="tg_translate",
+                    help="Translates the words the cloud draws into Spanish, using the "
+                         "dataset's majority language as the source. Needs a connection "
+                         "the first time; after that it reuses "
+                         "{dataset}_word_translations.csv",
+                )
+
                 col_topics_chk, col_topics_file = st.columns([1, 2])
                 with col_topics_chk:
                     tg_topics = st.checkbox("Show topics", key="tg_topics")
@@ -1129,6 +1137,7 @@ with left:
                             chart_args = dict(
                                 min_reach=tg_reach, min_RTs=tg_rts,
                                 show_topics=tg_topics, topics_file=tg_topics_file,
+                                translate_words=tg_translate,
                                 show_events=tg_events, events_file=tg_events_file,
                                 show_communities=tg_communities, communities_relation=tg_comm_relation,
                                 min_date_zoom=tg_zoom_min if tg_zoom else None,
@@ -1204,6 +1213,7 @@ with left:
                             project_dir = projects.select_project(st.session_state.active_project)
                             chart_args = dict(
                                 show_topics=ug_topics, topics_file=ug_topics_file,
+                                translate_words=ug_translate,
                                 show_events=ug_events, events_file=ug_events_file,
                                 log=log,
                             )

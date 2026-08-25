@@ -654,22 +654,33 @@ def word_frequency_table(df, ini_date, end_date, RTs):
     texts = df["text"].fillna("") if "text" in df.columns else []
     rts = (pd.to_numeric(df["retweet_count"], errors="coerce").fillna(0)
            if "retweet_count" in df.columns else pd.Series(0, index=df.index))
+    # forma original de cada token, para poder traducirlo despues: de las
+    # variantes que se funden en un mismo token se guarda la mas usada
+    sources = {}
     for text, rt in zip(texts, rts):
         weight = 1 + int(rt) if RTs else 1
-        for word in _tokenize(str(text)):
+        for word, source in _tokenize_src(str(text)):
             if word in stop_words:
                 continue
             counts[word] = counts.get(word, 0) + weight
+            seen = sources.setdefault(word, {})
+            seen[source] = seen.get(source, 0) + 1
     freq = (
         pd.DataFrame(sorted(counts.items(), key=lambda kv: -kv[1]), columns=["word", "freq"])
         .head(1000)
     )
+    freq["word_src"] = [max(sources[w].items(), key=lambda kv: kv[1])[0] for w in freq["word"]]
     return freq
 
 
-def draw_word_frequency(df, ini_date, end_date, RTs, base_title, data_path=None, prefix=None):
+def draw_word_frequency(df, ini_date, end_date, RTs, base_title, data_path=None, prefix=None,
+                       translate=None):
     freq = word_frequency_table(df, ini_date, end_date, RTs)
+    if translate is not None:
+        freq = translate(freq)
 
+    # el CSV se guarda ya traducido y con la columna word_src: la nube dice
+    # "fuerzas" y el fichero dice de que palabra arabe ha salido
     if not RTs and data_path and prefix:
         freq.to_csv(f"{data_path}/{prefix}_frequency_word.csv", index=False)
 
@@ -681,7 +692,10 @@ def draw_word_frequency(df, ini_date, end_date, RTs, base_title, data_path=None,
     fig, ax = plt.subplots(figsize=(10, 7))
     ax.imshow(wc, interpolation="bilinear")
     ax.axis("off")
-    subtitle = "(Adding retweet amplification)" if RTs else None
+    notes = ["Adding retweet amplification"] if RTs else []
+    if freq.attrs.get("translated"):
+        notes.append("words machine-translated {0} -> {1}".format(*freq.attrs["translated"]))
+    subtitle = f"({'; '.join(notes)})" if notes else None
     # my_theme para que el titulo tenga el mismo tamano que el resto de graficas
     my_theme(ax, title=f"{base_title}: most frequent words", subtitle=subtitle)
     fig.tight_layout()
@@ -883,7 +897,7 @@ def draw_topics_acumulate(df, topics, ini_date, end_date, RTs, base_title, event
 # Word cloud de cada comunidad en una rejilla
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-def words_frequency_by_community(df, communities, base_title):
+def words_frequency_by_community(df, communities, base_title, translate=None):
     stop_words = _stopwords()
     merged = df.merge(communities, on="community", how="left")
     merged = merged[merged["community"].isin(communities["community"])]
@@ -898,13 +912,20 @@ def words_frequency_by_community(df, communities, base_title):
     for i, (_, comm) in enumerate(communities.iterrows()):
         ax = axes[i // ncols][i % ncols]
         sub = merged[merged["community"] == comm["community"]]
-        counts = {}
+        counts, sources = {}, {}
         for text in sub["text"].dropna():
-            for word in _tokenize(text):
+            for word, source in _tokenize_src(text):
                 if word in stop_words:
                     continue
                 counts[word] = counts.get(word, 0) + 1
+                seen = sources.setdefault(word, {})
+                seen[source] = seen.get(source, 0) + 1
         top = dict(sorted(counts.items(), key=lambda kv: -kv[1])[:15])
+        if translate is not None and top:
+            table = pd.DataFrame({"word": list(top), "freq": list(top.values())})
+            table["word_src"] = [max(sources[w].items(), key=lambda kv: kv[1])[0] for w in table["word"]]
+            table = translate(table)
+            top = dict(zip(table["word"], table["freq"]))
         if top:
             wc = WordCloud(width=800, height=500, background_color="white",
                             colormap="Dark2").generate_from_frequencies(top)

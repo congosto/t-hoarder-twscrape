@@ -493,6 +493,29 @@ shown in the results panel in carousel mode and saved as PNG in
 report** with all of them (embedded images, header and index): a single
 file you can share and open in any browser.
 
+**Word clouds** drop the stop words (articles, prepositions, pronouns…) of
+English, Spanish, Catalan, French and Arabic. Arabic is transliterated into
+the Latin alphabet, letter by letter and without short vowels (*al-Maghrib*
+comes out as *mghrb*), because the library that draws the clouds cannot
+join or right-to-left order the Arabic script: in its original spelling it
+would come out as loose letters, backwards and with no font to render them.
+The *al-* article —and its contracted forms *wa-l-*, *bi-l-*, *li-l-*— is
+stripped along the way: otherwise the same word is scattered across the
+cloud in four different variants.
+
+With the **Translate word clouds** checkbox, the words the cloud draws are
+translated into Spanish before being painted: an Arabic account's cloud goes
+from saying *mghrbyh, qwat, mlkyh* to saying *marroquí, fuerzas, militar*. The
+tweets are not translated — there would be hundreds of thousands of them — only
+the hundred words that make it into the image, and the result is stored in
+`{dataset}_word_translations.csv`, so a connection is only needed the first
+time. Variants that collide when translated add up their frequencies, so the
+cloud gains weight instead of splitting it. The frequency CSV keeps a
+`word_src` column with the original word, to check where each term comes from;
+and like any machine translation of isolated words, it has context failures: in
+that same cloud الملكية ("royal", from *Royal Armed Forces*) comes out as
+*propiedad*. Those are fixed by editing the translations file.
+
 ## Settings
 
 twscrape account management. It is the first thing to configure after

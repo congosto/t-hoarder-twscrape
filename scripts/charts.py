@@ -8,6 +8,7 @@ import pandas as pd
 
 import charts_tweets as _charts
 import charts_profile as _charts_profile
+import translate as _translate
 from utils_charts import savefig
 
 
@@ -92,6 +93,7 @@ def generate_tweet_charts(
     min_RTs: int = 0,
     show_topics: bool = False,
     topics_file: str = "",
+    translate_words: bool = False,
     show_events: bool = False,
     events_file: str = "",
     show_communities: bool = False,
@@ -151,6 +153,17 @@ def generate_tweet_charts(
     topics = None
     if show_topics and topics_file:
         topics = pd.read_csv(project_dir / topics_file)
+        # los topics se escriben en español y se buscan en el idioma de los
+        # tweets: la traduccion va a la columna aliases (ver scripts/translate.py)
+        topics = _translate.resolve_topic_aliases(topics, tweets, project_dir, prefix, log=log)
+
+    # traductor de las nubes de palabras: se pasa a las graficas como funcion
+    # para que cada una traduzca solo las palabras que llega a dibujar, y la
+    # cache haga que la segunda nube no vuelva a pedir nada
+    word_translator = None
+    if translate_words:
+        def word_translator(freq):
+            return _translate.translate_words(freq, tweets, project_dir, prefix, log=log)
 
     figs = {}
 
@@ -188,12 +201,13 @@ def generate_tweet_charts(
     )
     add(
         "Most frequent words",
-        _charts.draw_word_frequency(tweets, min_date, max_date, False, base_title, str(project_dir), prefix),
+        _charts.draw_word_frequency(tweets, min_date, max_date, False, base_title,
+                                    str(project_dir), prefix, translate=word_translator),
         f"{prefix}_word_cloud.png",
     )
     add(
         "Most frequent words (with amplification)",
-        _charts.draw_word_frequency(tweets, min_date, max_date, True, base_title),
+        _charts.draw_word_frequency(tweets, min_date, max_date, True, base_title, translate=word_translator),
         f"{prefix}_word_cloud_RTs.png",
     )
 
@@ -226,7 +240,7 @@ def generate_tweet_charts(
     if communities is not None and not communities.empty:
         add(
             "Most frequent words by community",
-            _charts.words_frequency_by_community(tweets, communities, base_title),
+            _charts.words_frequency_by_community(tweets, communities, base_title, translate=word_translator),
             f"{prefix}_{communities_relation}_words_by_community.png",
         )
         add(
@@ -260,6 +274,7 @@ def generate_user_charts(
     time_zone: str = "Europe/Berlin",
     show_topics: bool = False,
     topics_file: str = "",
+    translate_words: bool = False,
     show_events: bool = False,
     events_file: str = "",
     log=print,
@@ -297,6 +312,17 @@ def generate_user_charts(
     topics = None
     if show_topics and topics_file:
         topics = pd.read_csv(project_dir / topics_file)
+        # los topics se escriben en español y se buscan en el idioma de los
+        # tweets: la traduccion va a la columna aliases (ver scripts/translate.py)
+        topics = _translate.resolve_topic_aliases(topics, tweets, project_dir, prefix, log=log)
+
+    # traductor de las nubes de palabras: se pasa a las graficas como funcion
+    # para que cada una traduzca solo las palabras que llega a dibujar, y la
+    # cache haga que la segunda nube no vuelva a pedir nada
+    word_translator = None
+    if translate_words:
+        def word_translator(freq):
+            return _translate.translate_words(freq, tweets, project_dir, prefix, log=log)
 
     figs = {}
 
@@ -373,12 +399,13 @@ def generate_user_charts(
     )
     add(
         "Most frequent words",
-        _charts.draw_word_frequency(tweets, min_date, max_date, False, base_title, str(project_dir), prefix),
+        _charts.draw_word_frequency(tweets, min_date, max_date, False, base_title,
+                                    str(project_dir), prefix, translate=word_translator),
         f"{prefix}_word_cloud.png",
     )
     add(
         "Most frequent words (with amplification)",
-        _charts.draw_word_frequency(tweets, min_date, max_date, True, base_title),
+        _charts.draw_word_frequency(tweets, min_date, max_date, True, base_title, translate=word_translator),
         f"{prefix}_word_cloud_RTs.png",
     )
 
