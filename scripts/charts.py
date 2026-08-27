@@ -2,6 +2,7 @@
 Generacion de graficas de tweets para la app real (Charts > Tweets).
 Envoltorio sobre charts_tweets.py y charts_profile.py.
 """
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -84,6 +85,38 @@ def _load_tweets(project_dir: Path, prefix: str, communities_relation: str | Non
     return tweets, communities
 
 
+def _load_events(events_path, time_zone):
+    """Lee el csv de eventos (columnas date, event) y prepara el texto.
+
+    Deja dos versiones del rotulo:
+      - event: en varias lineas, para las graficas de eje X temporal, donde el
+        texto va pegado a su linea vertical y en horizontal invadiria la
+        grafica. Si el csv trae saltos escritos (barra n) se parte por ahi,
+        que es como se controla un rotulo largo; si no, cada espacio es salto.
+      - event_plain: de una linea, para las rutinas diarias, donde el evento es
+        una linea horizontal y el texto va al margen izquierdo.
+    """
+    events = pd.read_csv(events_path, usecols=["date", "event"], dtype={"date": str, "event": str})
+    plain = (
+        events["event"].astype(str)
+        .str.replace(r"\\n", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+    events["event_plain"] = plain
+
+    def split_lines(text):
+        text = str(text).strip()
+        if r"\n" in text:
+            return re.sub(r"\s*\\n\s*", "\n", text)
+        return re.sub(r"\s+", "\n", text)
+
+    events["event"] = events["event"].astype(str).map(split_lines)
+    events["date"] = pd.to_datetime(events["date"], utc=True, errors="coerce")
+    events["date"] = events["date"].dt.tz_convert(time_zone).dt.tz_localize(None)
+    return events
+
+
 def generate_tweet_charts(
     project_dir: Path,
     prefix: str,
@@ -145,10 +178,7 @@ def generate_tweet_charts(
     events = None
     if show_events and events_file:
         events_path = project_dir / events_file
-        events = pd.read_csv(events_path, usecols=["date", "event"], dtype={"date": str, "event": str})
-        events["event"] = events["event"].str.replace(r"\\n", "\n", regex=True)
-        events["date"] = pd.to_datetime(events["date"], utc=True, errors="coerce")
-        events["date"] = events["date"].dt.tz_convert(time_zone).dt.tz_localize(None)
+        events = _load_events(events_path, time_zone)
 
     topics = None
     if show_topics and topics_file:
@@ -304,10 +334,7 @@ def generate_user_charts(
     events = None
     if show_events and events_file:
         events_path = project_dir / events_file
-        events = pd.read_csv(events_path)
-        events["event_plain"] = events["event"]
-        events["date"] = pd.to_datetime(events["date"], utc=True, errors="coerce")
-        events["date"] = events["date"].dt.tz_convert(time_zone).dt.tz_localize(None)
+        events = _load_events(events_path, time_zone)
 
     topics = None
     if show_topics and topics_file:

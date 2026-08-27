@@ -15,7 +15,8 @@ import pandas as pd
 from matplotlib.ticker import EngFormatter
 from wordcloud import WordCloud
 
-from utils_charts import apply_date_axis, expand_time, my_theme, my_theme_colored_title, style_twin_axis
+from utils_charts import (apply_date_axis, draw_events, expand_time, my_theme,
+                          my_theme_colored_title, style_twin_axis)
 
 try:
     from adjustText import adjust_text
@@ -874,14 +875,10 @@ def draw_topics_acumulate(df, topics, ini_date, end_date, RTs, base_title, event
                     fontsize=8, color=color_map.get(topic),
                     xytext=(3, 0), textcoords="offset points", va="center")
 
-    if events is not None and not events.empty:
-        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
-        for _, e in ev.iterrows():
-            ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
-            ax.text(e["date"], limit_y * 1.4, e["event"], color=COLOR_TEXTO, fontsize=9, va="top")
+    head_room = max(1.6, draw_events(ax, events, ini_date, end_date, limit_y))
 
     apply_date_axis(ax, ini_date, end_date + expand_time(ini_date, end_date, 40))
-    ax.set_ylim(0, limit_y * 1.6)
+    ax.set_ylim(0, limit_y * head_room)
     ax.yaxis.set_major_formatter(ENG_FMT)
     ax.set_ylabel(f"Accumulated topics per {slot_time}")
     subtitle = "(Adding retweet amplification)" if RTs else ""
@@ -976,10 +973,7 @@ def tweets_by_community(df, ini_date, end_date, communities, base_title, events=
                 linewidth=2, alpha=0.85)
         finals[community] = cum[community].iloc[-1]
 
-    if events is not None and not events.empty:
-        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
-        for _, e in ev.iterrows():
-            ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
+    head_room = max(1.15, draw_events(ax, events, ini_date, end_date, limit_y))
 
     # etiqueta "comunidad (total)" al final de cada línea, separadas verticalmente
     # un mínimo para que no se pisen, del color de su línea
@@ -997,7 +991,7 @@ def tweets_by_community(df, ini_date, end_date, communities, base_title, events=
                     xytext=(5, 0), textcoords="offset points", va="center",
                     color=color_map.get(community))
 
-    ax.set_ylim(0, limit_y * 1.15)
+    ax.set_ylim(0, limit_y * head_room)
     ax.yaxis.set_major_formatter(ENG_FMT)
     ax.set_ylabel("Accumulated tweets")
     apply_date_axis(ax, ini_date, end_date + expand_time(ini_date, end_date, 18))

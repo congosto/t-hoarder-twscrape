@@ -10,7 +10,8 @@ import pandas as pd
 
 from charts_tweets import COLOR_TEXTO, ENG_FMT, _repel, color_tweets
 from utils_charts import expand_time
-from utils_charts import apply_date_axis, legend_top, my_theme, my_theme_colored_title, style_twin_axis
+from utils_charts import (apply_date_axis, draw_events, legend_top, my_theme,
+                          my_theme_colored_title, style_twin_axis)
 
 _WEEKDAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 _MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -267,11 +268,8 @@ def impact_tweets(df, ini_date, end_date, indicator, impact_color, base_title, e
     ax2.yaxis.set_major_formatter(ENG_FMT)
     apply_date_axis(ax, ini_date, end_date)
 
-    if events is not None and not events.empty:
-        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
-        for _, e in ev.iterrows():
-            ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
-            ax.text(e["date"], max_tweets, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
+    # el eje ya llega a max_tweets * 1.5: el texto cabe sin recalcular el tope
+    draw_events(ax, events, ini_date, end_date, max_tweets, base=1.15)
 
     my_theme_colored_title(ax, [
         (f"{base_title}: ", None),
@@ -334,13 +332,10 @@ def tweets_by_language(df, ini_date, end_date, base_title, events=None):
                     color=lang_colors[lang], fontsize=9,
                     xytext=(5, 0), textcoords="offset points", va="center")
 
-    if events is not None and not events.empty:
-        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
-        for _, e in ev.iterrows():
-            ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
-            ax.text(e["date"], limit_y, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
+    # sin eventos basta un 15% de aire arriba; con ellos, el que pida el texto
+    head_room = max(1.15, draw_events(ax, events, ini_date, end_date, limit_y))
 
-    ax.set_ylim(0, limit_y * 1.15)
+    ax.set_ylim(0, limit_y * head_room)
     ax.set_ylabel("Accumulated tweets")
     ax.yaxis.set_major_formatter(ENG_FMT)
     # eje extendido a la derecha para que quepan las etiquetas de los idiomas
@@ -399,14 +394,11 @@ def tweets_by_source(df, ini_date, end_date, base_title, events=None):
                     color=source_colors[s], fontsize=9,
                     xytext=(5, 0), textcoords="offset points", va="center")
 
-    if events is not None and not events.empty:
-        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
-        for _, e in ev.iterrows():
-            ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
-            ax.text(e["date"], limit_y, e["event"], color=COLOR_TEXTO, fontsize=9, va="bottom")
+    # sin eventos basta un 15% de aire arriba; con ellos, el que pida el texto
+    head_room = max(1.15, draw_events(ax, events, ini_date, end_date, limit_y))
 
     top_label = max(label_y.values(), default=limit_y)
-    ax.set_ylim(0, max(limit_y * 1.15, top_label + min_sep))
+    ax.set_ylim(0, max(limit_y * head_room, top_label + min_sep))
     ax.set_ylabel("Accumulated tweets")
     ax.yaxis.set_major_formatter(ENG_FMT)
     # eje extendido a la derecha algo más que en idiomas: los nombres de fuente son largos
@@ -451,11 +443,8 @@ def engagement_tweets(df, ini_date, end_date, my_color, base_title, events=None,
     ax.set_ylabel(f"engagement per {slot_time}")
     apply_date_axis(ax, ini_date, end_date)
 
-    if events is not None and not events.empty:
-        ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
-        for _, e in ev.iterrows():
-            ax.axvline(e["date"], linestyle="--", color=COLOR_TEXTO)
-            ax.text(e["date"], max_engagement * 1.25, e["event"], color=COLOR_TEXTO, fontsize=9, va="center")
+    # el eje ya llega a max_engagement * 1.5: el texto cabe sin recalcular el tope
+    draw_events(ax, events, ini_date, end_date, max_engagement, base=1.25)
 
     my_theme(ax, title=f"{base_title}: engagement per {slot_time}",
              subtitle="engagement = (Sum(RTs) * 100) / impresions")

@@ -195,6 +195,37 @@ def apply_date_axis(ax, ini_date, end_date):
     return ax
 
 
+def event_ha(date, ini_date, end_date):
+    """Lado por el que se rotula un evento: los del final, hacia la izquierda.
+
+    El texto va por defecto a la derecha de su linea vertical; en los ultimos
+    dias del rango se pasa a la izquierda para que no se salga por el borde.
+    """
+    return "right" if date > end_date - (end_date - ini_date) * 0.08 else "left"
+
+
+def draw_events(ax, events, ini_date, end_date, limit_y, base=1.08,
+                color=BASE_COLOR, fontsize=9):
+    """Dibuja la linea vertical y el texto de cada evento del rango.
+
+    El texto (ya partido en varias lineas por el cargador, ver charts.py) se
+    ancla en limit_y * base y crece hacia arriba, para no taparse con los datos
+    ni con las etiquetas del final de las curvas. Devuelve el factor de tope de
+    eje que hace falta para que quepa el evento de mas lineas.
+    """
+    if events is None or events.empty:
+        return base
+    ev = events[(events["date"] >= ini_date) & (events["date"] <= end_date)]
+    if ev.empty:
+        return base
+    for _, e in ev.iterrows():
+        ax.axvline(e["date"], linestyle="--", color=color)
+        ax.text(e["date"], limit_y * base, e["event"], color=color, fontsize=fontsize,
+                va="bottom", ha=event_ha(e["date"], ini_date, end_date))
+    max_lines = ev["event"].astype(str).str.count("\n").max() + 1
+    return base + 0.09 * max_lines
+
+
 def savefig(fig, path):
     """Equivalente a ggsave(): guarda la figura y la cierra."""
     fig.savefig(path, bbox_inches="tight", dpi=150)
