@@ -173,39 +173,46 @@ descargas funcionan como funcionan.
   - **Top** (destacados): una selección curada de los tweets más relevantes.
   - **Latest** (recientes): el flujo cronológico.
 
-  Cuál conviene en cada momento depende del tamaño de la ventana y de la
-  antigüedad de los datos: es justo lo que automatiza la **descarga
-  optimizada** (siguiente apartado).
+  **Top solo es fiable en caliente.** Su índice denso cubre los últimos 7
+  días naturales (UTC): el día D-7 aún se recupera completo y el D-8
+  desaparece de golpe (las ventanas de menos de un día pasan a devolver
+  ~0). Pasados unos días, Top se vuelve errático y lo que devuelve es
+  basura: tweets fuera del rango pedido, irrelevantes o simplemente nada.
+  Latest no tiene esa caída tan brusca: sigue proporcionando tweets,
+  aunque en menos cantidad que si se recolectaran en la última semana. Por
+  eso la **descarga optimizada** usa siempre Latest (siguiente apartado) y
+  Top queda solo en el modo manual, para quien capture en caliente y sepa
+  lo que hace.
 
 ### Descarga optimizada
 
-De forma empírica hemos detectado que **Latest funciona mejor en
-frecuencias de un día o mayores, y Top en las menores de un día, siempre
-que la captura se realice en los últimos 7 días naturales (UTC)**. El día
-D-7 aún se recupera completo, pero el D-8 desaparece de golpe (las
-ventanas de menos de un día pasan a devolver ~0). Latest no tiene esa
-caída tan brusca como Top: sigue proporcionando tweets, aunque en menos
-cantidad que si se recolectaran en la última semana. Por eso la app
-proporciona un **método optimizado** que usa la mejor opción en cada
-momento:
+La descarga optimizada usa **siempre *Latest*** y automatiza lo único que
+de verdad hace falta decidir: **el tamaño de la ventana**.
 
 1. Según la longitud del periodo pedido, elige la frecuencia inicial
    (hasta 1 mes → ventanas de 1 día; hasta 6 meses → de 1 semana; más → de
-   1 mes), siempre con *Latest*.
+   1 mes). Las ventanas de un día o más se alinean a medianoche UTC,
+   porque Latest trunca al día la hora del `until:`.
 2. Si una ventana desborda (500 tweets o más: puede estar incompleta), la
    **re-descarga subdividida** en la siguiente frecuencia de la escalera
    mes → semana → día → 6 h → 3 h → 1 h → 30 min, recursivamente hasta que
    ninguna subventana desborde o se llegue a los 30 minutos.
-3. Al bajar de un día, cambia de *Latest* a *Top*, pero **solo si los
-   tweets descargados tienen menos de una semana de antigüedad**; en caso
-   contrario, continúa con *Latest*.
-4. En las ventanas de un día o más anteriores a esa semana, además, lanza
-   una **petición extra con Top** para rescatar el residuo viral que
-   Latest ya no devuelve entero (los duplicados se eliminan al rematar la
-   descarga).
+3. En las ventanas de menos de un día, la consulta usa `since_time:` /
+   `until_time:` en epoch, que es la forma de que Latest respete la hora;
+   el recorte fino al rango pedido lo hace la app en local, al rematar la
+   descarga, junto con la eliminación de duplicados.
 
 El método respeta la pausa entre todas las consultas, también las de las
 subdivisiones, para no quemar la cuota en ráfaga.
+
+> **Cambio (3-9-2026): fuera Top de la descarga optimizada.** Hasta esta
+> versión, la descarga optimizada cambiaba a *Top* en las ventanas
+> intradía de menos de una semana y lanzaba además una **petición extra
+> con Top** en las ventanas viejas de un día o más, para rescatar el
+> residuo viral. Ambas cosas se han quitado: el comportamiento errático de
+> Top con datos de más de unos días aportaba sobre todo ruido y gastaba
+> cuota en peticiones que no compensaban. Si necesitas Top, úsalo desde el
+> modo **Manual**.
 
 ### Diagrama de la descarga optimizada
 
@@ -238,9 +245,9 @@ quedaron, gracias al contexto que se guarda con cada dataset.
   - *From / To*: el periodo, en formato `YYYY-mm-dd HH:MM:SS`.
   - *Mode*: la decisión clave del formulario.
     - **Optimized** (recomendado): no pide nada más. Aplica el **método
-      optimizado** descrito en los conceptos previos: la app elige sola el
-      product y la frecuencia y subdivide las ventanas que desbordan hasta
-      capturar cada tramo completo.
+      optimizado** descrito en los conceptos previos: siempre Latest, la
+      app elige sola la frecuencia y subdivide las ventanas que desbordan
+      hasta capturar cada tramo completo.
     - **Manual**: pide además *Product* (Top | Latest) y *Frequency*, y los
       usa tal cual. El overflow aquí solo se avisa en consola y se anota en
       `{dataset}_overflow.csv`; con ese fichero, el usuario decide

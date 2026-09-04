@@ -560,9 +560,9 @@ with left:
             search_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="search_to")
             search_mode = st.radio(
                 "Mode", ["Optimized", "Manual"], horizontal=True, key="search_mode",
-                help="Optimized (recommended): product and frequency are chosen automatically "
-                     "and time ranges are narrowed on overflow. Manual: you choose Product "
-                     "and Frequency yourself.",
+                help="Optimized (recommended): always Latest, the frequency is chosen "
+                     "automatically and time ranges are narrowed on overflow. Manual: you "
+                     "choose Product and Frequency yourself.",
             )
             if search_mode == "Manual":
                 search_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="search_product")
@@ -576,7 +576,7 @@ with left:
                 elif date_error:
                     log(date_error)
                 elif search_mode == "Optimized":
-                    log("Launching optimized_search (product and frequency chosen automatically)")
+                    log("Launching optimized_search (always Latest, frequency chosen automatically)")
                     output_file = download.optimized_search(
                         data_path=DATA_PATH, dataset=st.session_state.active_project,
                         prefix=search_prefix, query=search_query,
@@ -639,9 +639,9 @@ with left:
             utl_to = st.text_input("To (YYYY-mm-dd HH:MM:SS)", key="utl_to")
             utl_mode = st.radio(
                 "Mode", ["Optimized", "Manual"], horizontal=True, key="utl_mode",
-                help="Optimized (recommended): product and frequency are chosen automatically "
-                     "and time ranges are narrowed on overflow. Manual: you choose Product "
-                     "and Frequency yourself.",
+                help="Optimized (recommended): always Latest, the frequency is chosen "
+                     "automatically and time ranges are narrowed on overflow. Manual: you "
+                     "choose Product and Frequency yourself.",
             )
             if utl_mode == "Manual":
                 utl_product = st.radio("Product", ["Top", "Latest"], horizontal=True, key="utl_product")
@@ -657,7 +657,7 @@ with left:
                     log(users_error)
                 elif utl_mode == "Optimized":
                     log(f"Launching optimized_timeline for {len(users_list)} user(s) "
-                        "(product and frequency chosen automatically)")
+                        "(always Latest, frequency chosen automatically)")
                     output_file = download.optimized_timeline(
                         data_path=DATA_PATH, dataset=st.session_state.active_project,
                         prefix=utl_prefix, list_users=users_list,

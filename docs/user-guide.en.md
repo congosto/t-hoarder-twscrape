@@ -170,38 +170,45 @@ downloads work the way they do.
   - **Top**: a curated selection of the most relevant tweets.
   - **Latest**: the chronological flow.
 
-  Which one is best at each moment depends on the window size and on the
-  age of the data: that is exactly what the **optimized download**
-  automates (next part).
+  **Top is only reliable while the data is hot.** Its dense index covers
+  the last 7 calendar days (UTC): day D-7 is still fully retrievable, but
+  day D-8 vanishes abruptly (sub-day windows start returning ~0). Once the
+  data is a few days old, Top turns erratic and what it returns is junk:
+  tweets outside the requested range, irrelevant ones, or nothing at all.
+  Latest has no such sharp drop: it keeps returning tweets, although fewer
+  than if they had been collected within the last week. That is why the
+  **optimized download** always uses Latest (next part) and Top is left to
+  the manual mode, for whoever captures hot data and knows what they are
+  doing.
 
 ### Optimized download
 
-Empirically we have found that **Latest works better at frequencies of
-one day or longer, and Top at frequencies under one day — as long as the
-capture happens within the last 7 calendar days (UTC)**. Day D-7 is still
-fully retrievable, but day D-8 vanishes abruptly (sub-day windows start
-returning ~0). Latest has no such sharp drop as Top: it keeps returning
-tweets, although fewer than if they had been collected within the last
-week. That is why the app provides an **optimized method** that uses the
-best option at each moment:
+The optimized download always uses ***Latest*** and automates the one
+thing that really needs deciding: **the window size**.
 
 1. Depending on the length of the requested period, it picks the initial
    frequency (up to 1 month → 1-day windows; up to 6 months → 1-week;
-   longer → 1-month), always with *Latest*.
+   longer → 1-month). Windows of one day or longer are aligned to UTC
+   midnight, because Latest truncates the `until:` time to the day.
 2. If a window overflows (500 tweets or more: it may be incomplete), it
    **re-downloads it subdivided** at the next frequency of the ladder
    month → week → day → 6 h → 3 h → 1 h → 30 min, recursively until no
    sub-window overflows or 30 minutes is reached.
-3. Below one day, it switches from *Latest* to *Top*, but **only if the
-   tweets being downloaded are less than a week old**; otherwise it stays
-   with *Latest*.
-4. On windows of one day or longer older than that week, it additionally
-   fires an **extra Top request** to rescue the viral residue that Latest
-   no longer returns in full (duplicates are removed when the download is
-   finalized).
+3. On windows shorter than a day, the query uses `since_time:` /
+   `until_time:` in epoch, which is how Latest honours the time of day;
+   the fine trim to the requested range is done locally when the download
+   is finalized, together with the removal of duplicates.
 
 The method respects the pause between all queries, including the
 subdivided ones, to avoid burning the quota in a burst.
+
+> **Change (2026-09-03): Top is out of the optimized download.** Until
+> this version, the optimized download switched to *Top* on sub-day
+> windows less than a week old, and also fired an **extra Top request** on
+> older windows of one day or longer to rescue the viral residue. Both are
+> gone: Top's erratic behaviour on data more than a few days old mostly
+> added noise and spent quota on requests that did not pay off. If you
+> need Top, use it from **Manual** mode.
 
 ### Optimized download diagram
 
@@ -234,9 +241,9 @@ they left off, thanks to the context saved with each dataset.
   - *From / To*: the period, in `YYYY-mm-dd HH:MM:SS` format.
   - *Mode*: the key decision of the form.
     - **Optimized** (recommended): asks for nothing else. It applies the
-      **optimized method** described in the key concepts: the app picks the
-      product and the frequency by itself and subdivides overflowing
-      windows until each stretch is fully captured.
+      **optimized method** described in the key concepts: always Latest,
+      with the app picking the frequency by itself and subdividing
+      overflowing windows until each stretch is fully captured.
     - **Manual**: also asks for *Product* (Top | Latest) and *Frequency*,
       and uses them as given. Overflow here is only reported in the console
       and logged to `{dataset}_overflow.csv`; with that file, the user
