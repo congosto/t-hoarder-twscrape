@@ -114,7 +114,7 @@ Necesitas abrir una terminal **situada en la carpeta** que acabas de descargar
 En la misma terminal del Paso 3, copia y pega este comando:
 
 ```bash
-pip install -r app/requirements.txt
+pip install -r requirements.txt
 ```
 
 Esto descarga e instala las librerías que la app necesita (Streamlit, pandas,
@@ -232,10 +232,11 @@ no tener que volver a añadirlas.
 ## Estructura del repo
 
 ```
-app/          App Streamlit (app.py, requirements.txt)
+app/          App Streamlit (app.py)
 scripts/      Módulos de scraping y lógica (accounts, download, scraping,
               projects, context, graphs, charts, dashboard, utils…)
 docs/         Guía de uso (español e inglés)
+requirements.txt   Dependencias de Python
 logo_t-hoarder.png / t-hoarder.ico   Marca de la app
 ```
 

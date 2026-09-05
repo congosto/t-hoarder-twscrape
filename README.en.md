@@ -114,7 +114,7 @@ one containing the `app` and `scripts` folders).
 In the same terminal from Step 3, copy and paste this command:
 
 ```bash
-pip install -r app/requirements.txt
+pip install -r requirements.txt
 ```
 
 This downloads and installs the libraries the app needs (Streamlit, pandas,
@@ -231,10 +231,11 @@ folder so you don't have to add them again.
 ## Repository layout
 
 ```
-app/          Streamlit app (app.py, requirements.txt)
+app/          Streamlit app (app.py)
 scripts/      Scraping and logic modules (accounts, download, scraping,
               projects, context, graphs, charts, dashboard, utils…)
 docs/         User guide (Spanish and English)
+requirements.txt   Python dependencies
 logo_t-hoarder.png / t-hoarder.ico   App branding
 ```
 
