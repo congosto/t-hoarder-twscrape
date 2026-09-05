@@ -1,6 +1,6 @@
 streamlit
 pandas
-twscrape>=0.19.0
+twscrape>=0.20.1
 networkx>=3.6
 geonamescache
 matplotlib
