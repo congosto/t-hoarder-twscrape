@@ -13,16 +13,23 @@ from pathlib import Path
 import networkx as nx
 import pandas as pd
 
+# Además de los atributos derivados (log_*, create_at_year, location_*) se
+# trasladan tal cual los metadatos de usuario que traen el fichero de RTs y el
+# de tweets (id, location y created_at): en Gephi sirven para identificar
+# la cuenta o para ver la localización aunque no se haya resuelto en país/región/ciudad.
 _NODE_ATTR_TYPES = {
+    "user_id": "VARCHAR",
     "community": "VARCHAR",
     "log_followers_count": "INT",
     "log_friends_count": "INT",
     "log_statuses_count": "INT",
     "log_favourites_count": "INT",
     "log_listed_count": "INT",
+    "location": "VARCHAR",
     "location_country": "VARCHAR",
     "location_region": "VARCHAR",
     "location_city": "VARCHAR",
+    "created_at": "VARCHAR",
     "create_at_year": "INT",
     "user_verified": "BOOLEAN",
     "is_blue_verified": "BOOLEAN",
@@ -36,17 +43,21 @@ _TOOLTIP_ATTRS = [
     "create_at_year", "user_verified", "is_blue_verified", "verified_type", "lang",
     "log_followers_count", "log_friends_count", "log_statuses_count",
     "log_favourites_count", "log_listed_count",
-    "location_country", "location_region", "location_city",
+    "location", "location_country", "location_region", "location_city",
 ]
 
 _AUTHOR_COLUMNS = [
-    "username", "followers_count", "friends_count", "statuses_count",
+    "username", "user_id", "followers_count", "friends_count", "statuses_count",
     "favourites_count", "listed_count", "location", "created_at",
     "user_verified", "is_blue_verified", "verified_type",
 ]
 
 _COUNT_COLUMNS = ["followers_count", "friends_count", "statuses_count",
                   "favourites_count", "listed_count"]
+
+# user_id se lee como texto: los ids de X no caben en float64 y, si la columna
+# tiene algún hueco, pandas la leería como float y perdería los últimos dígitos.
+_READ_DTYPES = {"user_id": str}
 
 # Prefijos de columnas con metadatos del usuario DESTINO de la relación, si el CSV
 # los trae (p.ej. "user_retweeted_followers_count"). Permite dar atributos a los
@@ -92,7 +103,7 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
         path = project_dir / f"{prefix}_RTs.csv"
         if not path.exists():
             raise FileNotFoundError(f"{path} does not exist. Download the Retweets first.")
-        df = pd.read_csv(path, encoding="utf-8")
+        df = pd.read_csv(path, encoding="utf-8", dtype=_READ_DTYPES)
         # Descarta RTs huérfanos: los que retuitean (url_rt) un tweet original que
         # ya no está en {prefix}.csv, p.ej. porque el dataset se limpió por idioma o
         # palabras después de bajar los RTs. Equivale al right_join con los tweets
@@ -113,14 +124,14 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
         path = project_dir / f"{prefix}_replies_advanced.csv"
         if not path.exists():
             raise FileNotFoundError(f"{path} does not exist. Download the Advanced Comments first.")
-        df = pd.read_csv(path, encoding="utf-8")
+        df = pd.read_csv(path, encoding="utf-8", dtype=_READ_DTYPES)
         df["source"] = df["username"]
         df["target"] = df["in_reply_to_user_username"]
     elif relation == "replies":
         path = project_dir / f"{prefix}_replies.csv"
         if not path.exists():
             raise FileNotFoundError(f"{path} does not exist. Download the Comments first.")
-        df = pd.read_csv(path, encoding="utf-8")
+        df = pd.read_csv(path, encoding="utf-8", dtype=_READ_DTYPES)
         df["source"] = df["username"]
         df["target"] = df["in_reply_to_user_username"]
     else:
@@ -351,7 +362,7 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     tweets_file = project_dir / f"{prefix}.csv"
     if not tweets_file.exists():
         raise FileNotFoundError(f"{tweets_file} does not exist")
-    tweets_df = pd.read_csv(tweets_file, encoding="utf-8")
+    tweets_df = pd.read_csv(tweets_file, encoding="utf-8", dtype=_READ_DTYPES)
 
     node_attrs = _node_attributes_table(tweets_df, relations_df, relation)
     node_attrs = node_attrs.reindex(list(G_giant.nodes()))
@@ -364,7 +375,8 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
             node_attrs["created_at"], errors="coerce", utc=True).dt.year
     else:
         node_attrs["create_at_year"] = None
-    for col in ("user_verified", "is_blue_verified", "verified_type"):
+    for col in ("user_id", "location", "created_at",
+                "user_verified", "is_blue_verified", "verified_type"):
         if col not in node_attrs.columns:
             node_attrs[col] = None
 
@@ -401,6 +413,18 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     # y su lang viven en relations_df, no en tweets_df. Los nodos sin ningun tweet
     # en el dataset (p.ej. hubs solo-destino) se quedan sin lang (se omite, como
     # cualquier NaN).
+    # Los RTs no traen lang (el fichero de RTs es la lista de retuiteadores, sin
+    # tweet), pero un RT es una copia del mensaje original y está en su mismo
+    # idioma: se hereda del tweet retuiteado uniendo url_rt con la url de
+    # {prefix}.csv. Sin esto los usuarios que solo retuitean (casi todos los
+    # nodos de un grafo de RT) se quedaban sin lang.
+    if (relation == "RT" and "lang" not in relations_df.columns
+            and "url_rt" in relations_df.columns
+            and {"url", "lang"} <= set(tweets_df.columns)):
+        url_lang = tweets_df.dropna(subset=["url", "lang"]).drop_duplicates("url")
+        url_lang = url_lang.set_index(url_lang["url"].astype(str))["lang"]
+        relations_df = relations_df.assign(
+            lang=relations_df["url_rt"].astype(str).map(url_lang))
     lang_frames = [df[["username", "lang"]] for df in (tweets_df, relations_df)
                    if "username" in df.columns and "lang" in df.columns]
     if lang_frames:
@@ -467,7 +491,14 @@ def _export_gexf(G: nx.DiGraph, node_attrs: pd.DataFrame, path: Path) -> None:
                 # los NaN se omiten en vez de escribir "": networkx infiere el tipo
                 # del atributo del primer valor y mezclar int con "" corrompe el tipado
                 if not pd.isna(value):
-                    G.nodes[node][col] = _to_native(value)
+                    value = _to_native(value)
+                    # los contadores llegan como float si la columna tiene huecos;
+                    # en el GEXF deben ser enteros, como en el GDF
+                    if _NODE_ATTR_TYPES[col] == "INT":
+                        value = int(value)
+                    elif _NODE_ATTR_TYPES[col] == "VARCHAR":
+                        value = str(value)
+                    G.nodes[node][col] = value
     nx.write_gexf(G, path)
 
 
@@ -477,7 +508,13 @@ def _gdf_value(value, col_type: str) -> str:
     if col_type == "VARCHAR":
         # sin apóstrofes (delimitador de VARCHAR) ni saltos de línea (el formato
         # GDF es una línea por nodo/arista; un \n en una bio/location lo rompería)
-        clean = str(value).replace("'", "").replace("\r", " ").replace("\n", " ")
+        # ni barras invertidas: Gephi lee \' como comilla escapada, y un nombre
+        # que acaba en \ (p.ej. 'Business\') desplaza todas las columnas siguientes
+        # Tampoco comas al principio o al final: Gephi toma ,' como separador de
+        # campo aunque esté dentro de las comillas, y un location como 'Wales,'
+        # también desplaza las columnas. Las comas interiores ('Madrid, España') no molestan.
+        clean = (str(value).replace("'", "").replace("\\", "")
+                 .replace("\r", " ").replace("\n", " ").strip(" ,"))
         return "'" + clean + "'"
     if col_type == "BOOLEAN":
         return "true" if value else "false"
