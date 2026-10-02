@@ -35,10 +35,10 @@ with twscrape.
 The app is organized into sections (top bar):
 
 ✅ **Project** — create and select the working project; each project groups its datasets.  
-✅ **Download** — downloads with twscrape: historical search (*Search*), user timeline (*User TL*), retweets and replies of a dataset.  
+✅ **Download** — downloads with twscrape: historical search (*Search*), user timeline (*User TL*), retweets and replies of a dataset, and the *About* page of profiles (country the account is based in, how it connects, username changes, identity verification) of its authors or retweeters.  
 ✅ **Dashboard** — interactive dashboard (self-contained HTML) to explore a dataset: KPIs, posting rhythm, metrics heatmap and a filterable table.  
-✅ **Tools** — *Merge datasets* (join and deduplicate) and *Clean dataset* (cleanup by language/criteria), with an append-only context log that preserves history.  
-✅ **Graphs** — community detection, graph generation (GDF/GEXF), tweet classification by community and an interactive viewer with ForceAtlas2 running in the browser.  
+✅ **Tools** — *Merge datasets* (join and deduplicate), *Clean dataset* (cleanup by language/criteria), *Restore dataset* (go back to a previous version), *Compare datasets*, *Import dataset* (from other tools), *Location* (offline geocoding of profiles) and *About accounts* (add the *About* data to the dataset), with an append-only context log that preserves history.  
+✅ **Graphs** — community detection, graph generation (GDF/GEXF) with node attributes (community, user metadata, language, location and *About* data), tweet classification by community and an interactive viewer with ForceAtlas2 running in the browser.  
 ✅ **Charts** — analysis charts for tweets and for user profiles.  
 ✅ **Settings** — twscrape account management (add, active, delete).
 
@@ -191,6 +191,7 @@ request quota. Recommendations:
 - A **pool of 5 accounts or more**.
 - **Don't use your personal account**, in case Twitter/X ever blocks it.
 - It's better if the accounts have **some age and activity**.
+- **Each account with its own session**: if two accounts are added with the same cookies, X sees them as one and they share the quota, so the pool yields less than it seems. After copying an account's cookies, **do not log out** in the browser (just close the window, ideally a private one): logging out invalidates those cookies.
 
 The step-by-step instructions to get the cookies and register the accounts are
 in the [user guide](docs/user-guide.en.md#settings).

@@ -1,24 +1,52 @@
+import queue
 import time
 from pathlib import Path
 
 import pandas as pd
 from loguru import logger
 
-from async_utils import run_async
+from async_utils import add_waiter, remove_waiter, run_async
 import context
 import scraping
 from utils import clean_text, clean_tweets
 
 
+_forwarders: dict[int, tuple] = {}
+
+
 def _start_forwarding_twscrape_logs(log):
     """Reenvía a la consola de la app los avisos de rate-limit/cuentas que twscrape
-    emite por su propio logger (loguru) y que de otro modo solo se ven en la terminal."""
+    emite por su propio logger (loguru) y que de otro modo solo se ven en la terminal.
+
+    twscrape corre en el hilo del event loop (async_utils), y desde ahí no se puede
+    tocar Streamlit: el sink solo encola, y el hilo de la sesión vuelca la cola
+    mientras espera en run_async (add_waiter) y al terminar."""
+    pending = queue.Queue()
+
     def sink(message):
         record = message.record
         if record["name"].startswith("twscrape"):
-            log(f"[twscrape] {record['message']}")
+            pending.put(f"[twscrape] {record['message']}")
 
-    return logger.add(sink, level="INFO")
+    def drain():
+        while True:
+            try:
+                log(pending.get_nowait())
+            except queue.Empty:
+                return
+
+    handler = logger.add(sink, level="INFO")
+    add_waiter(drain)
+    _forwarders[handler] = drain
+    return handler
+
+
+def _stop_forwarding_twscrape_logs(handler) -> None:
+    logger.remove(handler)
+    drain = _forwarders.pop(handler, None)
+    if drain:
+        remove_waiter(drain)
+        drain()
 
 _FREQ_UNITS = {
     "min": "minutes", "mins": "minutes", "minute": "minutes", "minutes": "minutes",
@@ -211,7 +239,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
         log("'Historical Search' download completed")
         return output_file
     finally:
-        logger.remove(_log_handler)
+        _stop_forwarding_twscrape_logs(_log_handler)
 
 
 # ── Descarga optimizada ──────────────────────────────────────────────────────
@@ -354,7 +382,7 @@ def optimized_search(data_path: Path, dataset: str, prefix: str, query: str, sin
         log("'Optimized Search' download completed")
         return output_file
     finally:
-        logger.remove(_log_handler)
+        _stop_forwarding_twscrape_logs(_log_handler)
 
 
 def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: list[str],
@@ -443,7 +471,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
         log("'Historical Timeline' download completed")
         return output_file
     finally:
-        logger.remove(_log_handler)
+        _stop_forwarding_twscrape_logs(_log_handler)
 
 
 def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: list[str],
@@ -551,7 +579,7 @@ def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: l
         log("'Optimized Timeline' download completed")
         return output_file
     finally:
-        logger.remove(_log_handler)
+        _stop_forwarding_twscrape_logs(_log_handler)
 
 
 def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
@@ -603,7 +631,7 @@ def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
         log("'Retweets' download completed")
         return output_file
     finally:
-        logger.remove(_log_handler)
+        _stop_forwarding_twscrape_logs(_log_handler)
 
 
 def get_replies(data_path: Path, dataset: str, prefix: str, min_replies: int = 1,
@@ -648,7 +676,7 @@ def get_replies(data_path: Path, dataset: str, prefix: str, min_replies: int = 1
         log("'Replies' download completed")
         return output_file
     finally:
-        logger.remove(_log_handler)
+        _stop_forwarding_twscrape_logs(_log_handler)
 
 
 def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies: int = 1,
@@ -724,7 +752,7 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
         log("'Advanced Replies' download completed")
         return output_file
     finally:
-        logger.remove(_log_handler)
+        _stop_forwarding_twscrape_logs(_log_handler)
 
 
 # ── About (x.com/{user}/about) ───────────────────────────────────────────────
@@ -737,10 +765,50 @@ ABOUT_FILE_COLS = [
 ]
 
 
-def get_about(data_path: Path, dataset: str, prefix: str, sleep_time: float = 1,
-              retries: int = 3, retry_wait: int = 60, log=print) -> Path:
-    """Descarga la página "About this account" de cada autor de {prefix}.csv en
-    {prefix}_about.csv (una fila por usuario, en orden de user_id).
+def _about_users(output: Path, prefix: str, source: str, min_rts: int, log=print) -> pd.DataFrame:
+    """Usuarios (user_id, username) cuyo about se descarga, en el orden de descarga.
+
+    source="authors": autores de {prefix}.csv, en orden de user_id.
+    source="retweeters": para el grafo de RTs. Primero los autores retuiteados
+    (los nodos destino, todos, sin umbral), sacados del dataset cruzando url_rt
+    con url porque _RTs.csv solo guarda su nombre; después los retuiteadores con
+    al menos min_rts RTs, de más a menos activos (si se corta, los importantes ya
+    están)."""
+    file_in = output / f"{prefix}.csv"
+    tweets = pd.read_csv(file_in, encoding="utf-8", dtype=str, usecols=["user_id", "username", "url"])
+    if source == "authors":
+        users = (tweets.dropna(subset=["user_id", "username"])
+                       .drop_duplicates(subset="user_id", keep="last")
+                       .assign(_uid=lambda d: d["user_id"].astype(int))
+                       .sort_values("_uid"))
+        log(f"Authors in {file_in.name}: {len(users)}")
+        return users[["user_id", "username"]]
+
+    rts_file = output / f"{prefix}_RTs.csv"
+    if not rts_file.exists():
+        raise FileNotFoundError(f"{rts_file.name} does not exist. Download the retweets first (Retweets).")
+    rts = pd.read_csv(rts_file, encoding="utf-8", dtype=str, usecols=["user_id", "username", "url_rt"])
+    authors = (tweets[tweets["url"].isin(rts["url_rt"])]
+                     .dropna(subset=["user_id", "username"])
+                     .drop_duplicates(subset="user_id", keep="last"))
+    counts = rts.dropna(subset=["user_id", "username"]).groupby("user_id").agg(
+        username=("username", "last"), n=("username", "size"))
+    retweeters = counts[counts["n"] >= min_rts].sort_values("n", ascending=False).reset_index()
+    log(f"Retweeted authors: {len(authors)} — retweeters with >= {min_rts} RTs: "
+        f"{len(retweeters)} of {len(counts)} ({retweeters['n'].sum() / max(len(rts), 1):.0%} of the RTs)")
+    users = pd.concat([authors[["user_id", "username"]], retweeters[["user_id", "username"]]],
+                      ignore_index=True)
+    return users.drop_duplicates(subset="user_id", keep="first")
+
+
+def get_about(data_path: Path, dataset: str, prefix: str, source: str = "authors",
+              min_rts: int = 1, sleep_time: float = 1, retries: int = 3, retry_wait: int = 60,
+              log=print) -> Path:
+    """Descarga la página "About this account" de los usuarios de un dataset en
+    {prefix}_about.csv (una fila por usuario). source="authors": autores de
+    {prefix}.csv; source="retweeters": autores retuiteados + retuiteadores de
+    {prefix}_RTs.csv con >= min_rts RTs (ver _about_users). Las dos fuentes
+    comparten el mismo _about.csv y nadie se descarga dos veces.
 
     Reanudación: el cursor (último user_id procesado) va en {prefix}_about_context.csv
     como en RTs/replies, y además se saltan los user_id que ya están en la salida, así
@@ -762,21 +830,14 @@ def get_about(data_path: Path, dataset: str, prefix: str, sleep_time: float = 1,
     _log_handler = _start_forwarding_twscrape_logs(log)
     try:
         output = Path(data_path) / dataset
-        file_in = output / f"{prefix}.csv"
         output_file = output / f"{prefix}_about.csv"
-
-        tweets = pd.read_csv(file_in, encoding="utf-8", dtype={"user_id": str},
-                             usecols=["user_id", "username"])
-        users = (tweets.dropna()
-                       .drop_duplicates(subset="user_id", keep="last")
-                       .assign(_uid=lambda d: d["user_id"].astype(int))
-                       .sort_values("_uid"))
+        users = _about_users(output, prefix, source, min_rts, log=log)
         done = (set(pd.read_csv(output_file, encoding="utf-8", dtype={"user_id": str},
                                 usecols=["user_id"])["user_id"])
                 if output_file.exists() else set())
         last_user_id = context.get_context_about(output, prefix)
         pending = users[~users["user_id"].isin(done)]
-        log(f"Users in {file_in.name}: {len(users)} — already downloaded: {len(users) - len(pending)} "
+        log(f"Users: {len(users)} — already downloaded: {len(users) - len(pending)} "
             f"— to download: {len(pending)}"
             + (f" (resuming after user_id {last_user_id})" if last_user_id else ""))
 
@@ -804,7 +865,8 @@ def get_about(data_path: Path, dataset: str, prefix: str, sleep_time: float = 1,
                        "about_checked_at": row["about_checked_at"]}
             _write_csv(pd.DataFrame([row]).reindex(columns=ABOUT_FILE_COLS), output_file, append)
             append = True
-            context.put_context_about(output, prefix, user_id)
+            context.put_context_about(output, prefix, user_id, source=source,
+                                      min_rts=min_rts if source == "retweeters" else "")
             if i % 25 == 0 or i == len(pending):
                 log(f"Downloaded about of {i}/{len(pending)} users")
             if i < len(pending):
@@ -816,4 +878,4 @@ def get_about(data_path: Path, dataset: str, prefix: str, sleep_time: float = 1,
         log("'About' download completed")
         return output_file
     finally:
-        logger.remove(_log_handler)
+        _stop_forwarding_twscrape_logs(_log_handler)

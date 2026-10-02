@@ -291,8 +291,8 @@ quedaron, gracias al contexto que se guarda con cada dataset.
   (`{dataset}_replies_advanced_overflow.csv`) y genera
   `{dataset}_replies_advanced.csv`.
 
-- **About** — para cada autor del dataset descarga lo que X muestra en la
-  página *About this account* de su perfil (`x.com/{usuario}/about`): el
+- **About** — descarga lo que X muestra en la página *About this account*
+  del perfil de cada usuario (`x.com/{usuario}/about`): el
   **país en el que está la cuenta** (y si X lo considera preciso), **desde
   dónde se conecta** (p. ej. «Spain Android App», «Spain App Store»), cuántas
   veces **cambió de nombre de usuario** y cuándo fue la última, si tiene la
@@ -301,6 +301,20 @@ quedaron, gracias al contexto que se guarda con cada dataset.
   `about_status`: `ok`, `not_found` (la cuenta ya no existe), `unavailable`
   (suspendida) o `renamed` (el nombre de usuario pertenece ahora a otra
   cuenta, así que no se le asignan datos ajenos).
+  - *Source* elige de quién se descarga:
+    - **Authors**: los autores de los tweets del dataset. Es lo que luego se
+      añade al dataset con *Tools → About accounts*.
+    - **Retweeters**: los usuarios del grafo de RTs (requiere haber hecho
+      antes *Retweets*). Incluye siempre a **todos los autores retuiteados**
+      (los nodos destino del grafo) y, además, a los **retuiteadores con al
+      menos *Min RTs* retweets**, del más al menos activo. Como unos pocos
+      usuarios muy activos hacen buena parte de los RTs, un umbral alto
+      cubre mucho en poco tiempo: en un dataset de 115.000 RTs y casi 40.000
+      retuiteadores, con *Min RTs* = 20 bastan ~730 usuarios (media hora)
+      para cubrir un tercio de los RTs, cuando todos llevarían más de un día.
+    - Las dos opciones comparten el mismo `{dataset}_about.csv` y nadie se
+      descarga dos veces: da igual el orden, y se puede empezar con un umbral
+      alto y bajarlo después, que solo se piden los que faltan.
   - Es **una petición por usuario** y X limita esta consulta a unas **50 por
     cuenta cada 15 minutos**: con varias cuentas se avanza a unos cientos de
     usuarios por hora, así que en datasets grandes es una descarga larga.
@@ -463,7 +477,12 @@ El flujo típico es: **Detect communities** → **Generate graph** →
   métricas — seguidores, seguidos, tweets, favoritos y listas — en escala
   logarítmica. Dos casillas permiten añadir además la **comunidad** (de
   Detect communities) y la **localización** (de Tools → Location), muy
-  útiles para colorear o filtrar el grafo.
+  útiles para colorear o filtrar el grafo. Con *Include about* añade también
+  los datos de *Download → About*: país de la cuenta
+  (`about_account_based_in`), desde dónde se conecta (`about_source`),
+  cambios de nombre de usuario (`about_username_changes`) e identidad
+  verificada (`about_identity_verified`). Para el grafo de RTs conviene
+  descargarlos con *Source = Retweeters*; los nodos sin datos quedan vacíos.
 
 - **Classify tweets** — requiere haber ejecutado previamente *Detect
   communities*. Dado un dataset y una relación, clasifica cada tweet con la
@@ -592,6 +611,11 @@ repartir la cuota de peticiones (el *pool de cuentas* explicado en
 2. Pulsa **F12** (Herramientas para desarrolladores) → pestaña
    **Application** → **Cookies** → `https://x.com`.
 3. Copia los valores de **`auth_token`** y **`ct0`**.
+4. **No cierres la sesión** después: cerrar sesión invalida esas cookies y la
+   cuenta dejará de funcionar en la app. Para pasar a la siguiente cuenta, lo
+   más cómodo es usar una **ventana privada** por cuenta y cerrarla sin más.
+   Cada cuenta debe tener sus propias cookies: si dos cuentas se dan de alta
+   con las mismas, para X son una sola y comparten la cuota.
 
 ### Las opciones
 

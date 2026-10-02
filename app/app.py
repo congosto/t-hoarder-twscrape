@@ -1,5 +1,6 @@
 """Interfaz de t-hoarder-twscrape. Settings>New Account y Download>Search ya están conectados a scripts reales."""
 
+import faulthandler
 import sys
 from pathlib import Path
 
@@ -8,6 +9,13 @@ import streamlit as st
 import streamlit.components.v1 as st_components
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Si Python muere por un error fatal (crash nativo, sin traceback normal), deja la
+# pila de todos los hilos en streamlit_fatal.log: la consola donde se lanzó la app
+# puede no existir ya. Una vez por proceso (Streamlit re-ejecuta este fichero).
+if not faulthandler.is_enabled():
+    faulthandler.enable(open(REPO_ROOT / "streamlit_fatal.log", "a", encoding="utf-8"),
+                        all_threads=True)
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import accounts, compare, context, dashboard, download, projects, scraping, utils  # noqa: E402
 from async_utils import run_async  # noqa: E402
@@ -739,11 +747,24 @@ with left:
                         log_error(f"{acm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
         with tab6:
             ab_prefix = prefix_input("Dataset", "ab_prefix")
-            st.caption("Downloads x.com/{user}/about of every author of {dataset}.csv into "
-                       "{dataset}_about.csv (country the account is based in, how it connects, "
-                       "username changes, identity verification). One request per author; "
-                       "resumes where it stopped and later only asks for new authors. "
-                       "Add the columns to the dataset in Tools > About accounts.")
+            st.caption("Downloads x.com/{user}/about into {dataset}_about.csv (country the "
+                       "account is based in, how it connects, username changes, identity "
+                       "verification). One request per user; resumes where it stopped and never "
+                       "asks twice for the same user, whatever the source.")
+            _ab_sources = {"Authors (tweets of the dataset)": "authors",
+                           "Retweeters (RT graph: retweeted authors + retweeters)": "retweeters"}
+            ab_source = _ab_sources[st.radio("Source", list(_ab_sources), key="ab_source")]
+            if ab_source == "authors":
+                st.caption("Add the columns to the dataset afterwards in Tools > About accounts.")
+                ab_min_rts = 1
+            else:
+                ab_min_rts = st.number_input(
+                    "Min RTs (per retweeter)", min_value=1, value=20, key="ab_min_rts",
+                    help="Retweeted authors are always included. Retweeters are downloaded from "
+                         "the most to the least active, only those with at least this many RTs "
+                         "in {dataset}_RTs.csv: a few very active users make most of the RTs.",
+                )
+                st.caption("Requires {dataset}_RTs.csv (Download > Retweets).")
             ab_sleep = st.number_input(
                 "Pause between requests (s)", min_value=0.0, value=1.0, step=0.5, key="ab_sleep",
                 help="X allows ~50 requests per account every 15 min, so the overall pace "
@@ -757,16 +778,19 @@ with left:
                 elif not ab_prefix:
                     log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Launching get_about (pause={ab_sleep:g} s)")
+                    log(f"Launching get_about (source={ab_source}"
+                        + (f", min_rts={int(ab_min_rts)}" if ab_source == "retweeters" else "")
+                        + f", pause={ab_sleep:g} s)")
                     try:
                         output_file = download.get_about(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
-                            prefix=ab_prefix, sleep_time=ab_sleep, log=log,
+                            prefix=ab_prefix, source=ab_source, min_rts=int(ab_min_rts),
+                            sleep_time=ab_sleep, log=log,
                         )
                         log(f"Result in {output_file}")
                         set_result(output_file)
-                    except FileNotFoundError:
-                        log_error(f"{ab_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
+                    except FileNotFoundError as e:
+                        log_error(str(e))
                     except RuntimeError as e:
                         log_error(str(e))
 
@@ -1043,6 +1067,11 @@ with left:
                     "Include locations (requires {prefix}_loc.csv, generated in Tools > Location)",
                     value=False, key="gg_include_locations",
                 )
+                gg_include_about = st.checkbox(
+                    "Include about (requires {prefix}_about.csv, downloaded in Download > About; "
+                    "for the RT graph use Source = Retweeters)",
+                    value=False, key="gg_include_about",
+                )
                 if st.button("Generate graph"):
                     if not gg_prefix:
                         log_error("enter the Dataset")
@@ -1051,7 +1080,8 @@ with left:
                             graph_file = graphs_mod.generate_graph(
                                 project_dir, gg_prefix, gg_relation, output_format=gg_format,
                                 include_communities=gg_include_communities,
-                                include_locations=gg_include_locations, log=log,
+                                include_locations=gg_include_locations,
+                                include_about=gg_include_about, log=log,
                             )
                             log(f"Graph in {graph_file}")
                             set_result(graph_file)

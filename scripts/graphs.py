@@ -35,6 +35,11 @@ _NODE_ATTR_TYPES = {
     "is_blue_verified": "BOOLEAN",
     "verified_type": "VARCHAR",
     "lang": "VARCHAR",
+    # de {prefix}_about.csv (Download > About), con include_about
+    "about_account_based_in": "VARCHAR",
+    "about_source": "VARCHAR",
+    "about_username_changes": "INT",
+    "about_identity_verified": "BOOLEAN",
 }
 _NODE_ATTR_COLUMNS = list(_NODE_ATTR_TYPES.keys())
 
@@ -44,7 +49,12 @@ _TOOLTIP_ATTRS = [
     "log_followers_count", "log_friends_count", "log_statuses_count",
     "log_favourites_count", "log_listed_count",
     "location", "location_country", "location_region", "location_city",
+    "about_account_based_in", "about_source", "about_username_changes",
+    "about_identity_verified",
 ]
+
+_ABOUT_NODE_COLS = ["about_account_based_in", "about_source", "about_username_changes",
+                    "about_identity_verified"]
 
 _AUTHOR_COLUMNS = [
     "username", "user_id", "followers_count", "friends_count", "statuses_count",
@@ -337,7 +347,7 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
 
 def generate_graph(project_dir: Path, prefix: str, relation: str, output_format: str = "gdf",
                    include_communities: bool = True, include_locations: bool = False,
-                   min_component_size: int | None = None, filter_orphan_rts: bool = True,
+                   include_about: bool = False, min_component_size: int | None = None, filter_orphan_rts: bool = True,
                    log=print) -> Path:
     """Genera el fichero de grafo (gdf/gexf) de la relación indicada con los atributos de nodo.
 
@@ -345,6 +355,8 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     (generado antes con 'Detect communities'; falla si no existe).
     include_locations: añade location_country/region/city desde {prefix}_loc.csv
     (generado antes en Tools > Localización; falla si no existe).
+    include_about: añade about_account_based_in/source/username_changes/
+    identity_verified desde {prefix}_about.csv (Download > About; falla si no existe).
     min_component_size: debe coincidir con el usado en 'Detect communities' para
     ese mismo prefix/relation (ver _build_giant_graph) — si no, algunos nodos no
     tendrán comunidad asignada porque no estaban en el grafo con el que se calculó.
@@ -404,6 +416,33 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
         node_attrs["location_country"] = None
         node_attrs["location_region"] = None
         node_attrs["location_city"] = None
+
+    if include_about:
+        about_file = project_dir / f"{prefix}_about.csv"
+        if not about_file.exists():
+            raise FileNotFoundError(f"{about_file} does not exist. Download it first in Download > About.")
+        about_df = pd.read_csv(about_file, encoding="utf-8", dtype=str)
+        about_df = about_df[about_df["about_status"] == "ok"]
+        # por user_id (estable aunque la cuenta cambie de nombre); si el nodo no
+        # tiene user_id (p.ej. hubs solo-destino), por username normalizado
+        by_id = about_df.drop_duplicates("user_id").set_index("user_id")
+        by_name = about_df.assign(username=_norm_username(about_df["username"]))                           .drop_duplicates("username").set_index("username")
+        node_ids = node_attrs["user_id"].astype("string")
+        for col in _ABOUT_NODE_COLS:
+            values = node_ids.map(by_id[col].to_dict())
+            values = values.fillna(pd.Series(node_attrs.index.map(by_name[col].to_dict()),
+                                             index=node_attrs.index))
+            if _NODE_ATTR_TYPES[col] == "INT":
+                values = pd.to_numeric(values, errors="coerce")
+            elif _NODE_ATTR_TYPES[col] == "BOOLEAN":
+                values = values.map({"True": True, "False": False, True: True, False: False})
+            node_attrs[col] = values
+        n_about = int((node_attrs["about_account_based_in"].notna()
+                       | node_attrs["about_source"].notna()).sum())
+        log(f"About data joined from {about_file.name}: {n_about}/{len(node_attrs)} nodes")
+    else:
+        for col in _ABOUT_NODE_COLS:
+            node_attrs[col] = None
 
     # lang: lengua DOMINANTE (la mas frecuente) de cada usuario. 'lang' es un
     # atributo por-tweet (ver scraping.py), asi que un usuario puede tener varias;

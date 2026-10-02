@@ -287,8 +287,8 @@ they left off, thanks to the context saved with each dataset.
   (`{dataset}_replies_advanced_overflow.csv`) and generates
   `{dataset}_replies_advanced.csv`.
 
-- **About** — for each author of the dataset, downloads what X shows on the
-  *About this account* page of their profile (`x.com/{user}/about`): the
+- **About** — downloads what X shows on the *About this account* page of
+  each user's profile (`x.com/{user}/about`): the
   **country the account is based in** (and whether X considers it
   accurate), **how it connects** (e.g. "Spain Android App", "Spain App
   Store"), how many times it **changed its username** and when it last did,
@@ -297,6 +297,20 @@ they left off, thanks to the context saved with each dataset.
   an `about_status` column: `ok`, `not_found` (the account no longer exists),
   `unavailable` (suspended) or `renamed` (the username now belongs to
   another account, so no foreign data is assigned).
+  - *Source* chooses whose data is downloaded:
+    - **Authors**: the authors of the dataset's tweets. This is what is later
+      added to the dataset with *Tools → About accounts*.
+    - **Retweeters**: the users of the RT graph (requires *Retweets* first).
+      It always includes **every retweeted author** (the graph's target
+      nodes) plus the **retweeters with at least *Min RTs* retweets**, from
+      the most to the least active. Since a few very active users make a
+      large share of the RTs, a high threshold covers a lot in little time:
+      in a dataset with 115,000 RTs and almost 40,000 retweeters, *Min RTs* =
+      20 needs only ~730 users (half an hour) to cover a third of the RTs,
+      whereas all of them would take more than a day.
+    - Both options share the same `{dataset}_about.csv` and nobody is
+      downloaded twice: the order does not matter, and you can start with a
+      high threshold and lower it later, only the missing users are asked.
   - It is **one request per user**, and X limits this query to about **50
     per account every 15 minutes**: with several accounts it advances a few
     hundred users per hour, so on large datasets it is a long download. When
@@ -457,7 +471,11 @@ The typical flow is: **Detect communities** → **Generate graph** →
   — followers, following, tweets, favorites and lists — in logarithmic
   scale. Two checkboxes also allow adding the **community** (from Detect
   communities) and the **location** (from Tools → Location), very useful to
-  color or filter the graph.
+  color or filter the graph. With *Include about* it also adds the data from
+  *Download → About*: the account's country (`about_account_based_in`), how
+  it connects (`about_source`), username changes (`about_username_changes`)
+  and verified identity (`about_identity_verified`). For the RT graph,
+  download it with *Source = Retweeters*; nodes without data are left empty.
 
 - **Classify tweets** — requires having run *Detect communities* first.
   Given a dataset and a relation, it classifies each tweet with its
@@ -584,6 +602,11 @@ Recommendations:
 2. Press **F12** (Developer tools) → **Application** tab → **Cookies** →
    `https://x.com`.
 3. Copy the values of **`auth_token`** and **`ct0`**.
+4. **Do not log out** afterwards: logging out invalidates those cookies and
+   the account will stop working in the app. To move on to the next account,
+   the easiest way is a **private window** per account, simply closed when
+   done. Each account must have its own cookies: if two accounts are added
+   with the same ones, X sees them as one and they share the quota.
 
 ### The options
 
