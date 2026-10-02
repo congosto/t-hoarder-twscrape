@@ -103,8 +103,13 @@ def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print)
 
     dfs = {ds: pd.read_csv(p, encoding="utf-8") for ds, p in paths.items()}
     ref_ds, ref_df = next(iter(dfs.items()))
-    ref_cols = set(ref_df.columns)
-    mismatched = [ds for ds, df in dfs.items() if set(df.columns) != ref_cols]
+    # las columnas about_* (Tools > About accounts) son opcionales: un dataset
+    # enriquecido se puede unir con otro que no lo esté (quedan vacías)
+    def _base_cols(df):
+        return {c for c in df.columns if not c.startswith(ABOUT_PREFIX)}
+
+    ref_cols = _base_cols(ref_df)
+    mismatched = [ds for ds, df in dfs.items() if _base_cols(df) != ref_cols]
     if mismatched:
         raise ValueError(f"Columns do not match {ref_ds}.csv in: {', '.join(mismatched)}")
 
@@ -564,3 +569,52 @@ def extract_locations(project_dir: Path, prefix: str, log=print) -> Path:
     output_path = project_dir / f"{prefix}_loc.csv"
     result.to_csv(output_path, index=False, encoding="utf-8")
     return output_path
+
+
+# Columnas de la página x.com/{user}/about (descargadas en Download > About como
+# {prefix}_about.csv) que Tools > About accounts añade al final de {dataset}.csv (al
+# final para que las descargas incrementales, que añaden filas sin cabecera, sigan
+# encajando por posición).
+ABOUT_PREFIX = "about_"
+
+
+def add_about_to_dataset(project_dir: Path, prefix: str, log=print) -> Path:
+    """Añade a {prefix}.csv las columnas about_* de {prefix}_about.csv, unidas por
+    user_id (los autores sin fila en _about quedan vacíos). Si el dataset ya las
+    tenía se sustituyen. Respalda el dataset (_prev_) y anota la operación
+    add_about en su log de contexto; si no cambia nada no reescribe ni anota."""
+    import context
+
+    tweets_file = project_dir / f"{prefix}.csv"
+    about_file = project_dir / f"{prefix}_about.csv"
+    for f in (tweets_file, about_file):
+        if not f.exists():
+            raise FileNotFoundError(f"{f.name} does not exist")
+    df = pd.read_csv(tweets_file, encoding="utf-8", dtype=str)  # texto: se reescribe tal cual
+    about = (pd.read_csv(about_file, encoding="utf-8", dtype=str)
+               .drop(columns="username").drop_duplicates(subset="user_id", keep="last"))
+    about_cols = [c for c in about.columns if c.startswith(ABOUT_PREFIX)]
+
+    base = df.drop(columns=[c for c in df.columns if c.startswith(ABOUT_PREFIX)])
+    out = base.merge(about, on="user_id", how="left")[list(base.columns) + about_cols]
+
+    def _norm(d):
+        return d.astype(object).where(d.notna(), None).astype(str)
+
+    if list(df.columns) == list(out.columns) and _norm(df).equals(_norm(out)):
+        log(f"{tweets_file.name} already has the about columns of {about_file.name}")
+        return tweets_file
+
+    users = base["user_id"].dropna().unique()
+    status = (about.loc[about["user_id"].isin(users), "about_status"]
+                   .value_counts().to_dict())
+    n_missing = len(users) - int(about["user_id"].isin(users).sum())
+    log(f"Authors with about data: {len(users) - n_missing}/{len(users)} "
+        f"({', '.join(f'{k}={v}' for k, v in status.items())})")
+
+    _backup_dataset(project_dir, prefix, log=log)
+    out.to_csv(tweets_file, index=False, encoding="utf-8")
+    context.log_add_about(project_dir, prefix, context.dataset_log_type(project_dir, prefix) or "search",
+                          about_file.name, len(users), len(users) - n_missing, status, len(out))
+    log(f"Added {len(about_cols)} about_* columns to {tweets_file.name}")
+    return tweets_file

@@ -516,7 +516,9 @@ with left:
                 st.write("No deactivated projects.")
 
     elif section == "Download":
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Search", "User TL", "Retweets", "Comments", "Advanced Comments"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+            ["Search", "User TL", "Retweets", "Comments", "Advanced Comments", "About"]
+        )
         with tab1:
             search_prefix = prefix_input("Dataset", "search_prefix", allow_new=True, kinds=("search",))
             if st.button("Load context", key="search_load_ctx"):
@@ -735,6 +737,38 @@ with left:
                         set_result(output_file)
                     except FileNotFoundError:
                         log_error(f"{acm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
+        with tab6:
+            ab_prefix = prefix_input("Dataset", "ab_prefix")
+            st.caption("Downloads x.com/{user}/about of every author of {dataset}.csv into "
+                       "{dataset}_about.csv (country the account is based in, how it connects, "
+                       "username changes, identity verification). One request per author; "
+                       "resumes where it stopped and later only asks for new authors. "
+                       "Add the columns to the dataset in Tools > About accounts.")
+            ab_sleep = st.number_input(
+                "Pause between requests (s)", min_value=0.0, value=1.0, step=0.5, key="ab_sleep",
+                help="X allows ~50 requests per account every 15 min, so the overall pace "
+                     "(~200 users per account and hour) is set by the accounts, not by this "
+                     "pause. Without any pause, bursts from your IP may be blocked by "
+                     "Cloudflare with a 429 error.",
+            )
+            if st.button("Launch about download"):
+                if not st.session_state.active_project:
+                    log_error("select or create a project before downloading")
+                elif not ab_prefix:
+                    log_error("enter the Dataset of the file with the original tweets")
+                else:
+                    log(f"Launching get_about (pause={ab_sleep:g} s)")
+                    try:
+                        output_file = download.get_about(
+                            data_path=DATA_PATH, dataset=st.session_state.active_project,
+                            prefix=ab_prefix, sleep_time=ab_sleep, log=log,
+                        )
+                        log(f"Result in {output_file}")
+                        set_result(output_file)
+                    except FileNotFoundError:
+                        log_error(f"{ab_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
+                    except RuntimeError as e:
+                        log_error(str(e))
 
     elif section == "Dashboard":
         if not st.session_state.active_project:
@@ -757,9 +791,9 @@ with left:
                         log_error(str(e))
 
     elif section == "Tools":
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
             ["Merge datasets", "Clean dataset", "Restore dataset", "Compare datasets",
-             "Import dataset", "Location"]
+             "Import dataset", "Location", "About accounts"]
         )
         with tab1:
             if not st.session_state.active_project:
@@ -945,6 +979,25 @@ with left:
                         project_dir = projects.select_project(st.session_state.active_project)
                         try:
                             output_file = utils.extract_locations(project_dir, loc_prefix, log=log)
+                            log(f"Result in {output_file}")
+                            set_result(output_file)
+                        except FileNotFoundError as e:
+                            log_error(str(e))
+        with tab7:
+            if not st.session_state.active_project:
+                st.write("Select or create a project in 'Project' before adding about data.")
+            else:
+                about_prefix = prefix_input(
+                    "Dataset (adds the about_* columns of {dataset}_about.csv, from Download > About)",
+                    "about_prefix",
+                )
+                if st.button("Add about data"):
+                    if not about_prefix:
+                        log_error("enter the Dataset")
+                    else:
+                        project_dir = projects.select_project(st.session_state.active_project)
+                        try:
+                            output_file = utils.add_about_to_dataset(project_dir, about_prefix, log=log)
                             log(f"Result in {output_file}")
                             set_result(output_file)
                         except FileNotFoundError as e:

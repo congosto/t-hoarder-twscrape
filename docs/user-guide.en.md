@@ -62,7 +62,7 @@ choose (or create) the project you are going to work on.
 ### Left · Sub-functions and form
 
 Each function is divided into **sub-functions** (for example, Download
-offers Search, User TL, Retweets, Comments and Advanced Comments). When you
+offers Search, User TL, Retweets, Comments, Advanced Comments and About). When you
 pick a sub-function, this zone shows its **input form** and, at the end,
 the **button that launches the operation**.
 
@@ -219,10 +219,11 @@ subdivided ones, to avoid burning the quota in a burst.
 - The **main ones** — *Search* and *User TL*. These create a dataset: they
   download tweets bounded between two dates, from a query or from a list
   of users.
-- The **complementary ones** — *Retweets*, *Comments* and *Advanced
-  Comments*. They start from an already-downloaded dataset and enrich it:
-  who retweeted its tweets and what replies they received. They are the raw
-  material for the graphs of the *Graphs* section.
+- The **complementary ones** — *Retweets*, *Comments*, *Advanced
+  Comments* and *About*. They start from an already-downloaded dataset and
+  enrich it: who retweeted its tweets, what replies they received and what X
+  says about their authors. The first three are the raw material for the
+  graphs of the *Graphs* section.
 
 All downloads are **resumable**: if they are interrupted (or stopped on
 purpose), just relaunch them with the same dataset and they continue where
@@ -285,6 +286,35 @@ they left off, thanks to the context saved with each dataset.
   its own overflow detection
   (`{dataset}_replies_advanced_overflow.csv`) and generates
   `{dataset}_replies_advanced.csv`.
+
+- **About** — for each author of the dataset, downloads what X shows on the
+  *About this account* page of their profile (`x.com/{user}/about`): the
+  **country the account is based in** (and whether X considers it
+  accurate), **how it connects** (e.g. "Spain Android App", "Spain App
+  Store"), how many times it **changed its username** and when it last did,
+  whether its **identity is verified** and since when, and its affiliate
+  account if any. It generates `{dataset}_about.csv`, one row per user, with
+  an `about_status` column: `ok`, `not_found` (the account no longer exists),
+  `unavailable` (suspended) or `renamed` (the username now belongs to
+  another account, so no foreign data is assigned).
+  - It is **one request per user**, and X limits this query to about **50
+    per account every 15 minutes**: with several accounts it advances a few
+    hundred users per hour, so on large datasets it is a long download. When
+    every account has used up its quota the console says so and the download
+    waits on its own until they are released. To avoid bursts from the same
+    IP (which Cloudflare cuts off with a 429 error, not fixed by switching
+    accounts), requests are spaced by an adjustable pause (*Pause between
+    requests*, 1 second by default). Shortening it does not speed up the
+    download: the pace is set by the accounts' limit.
+  - It is **resumable**: the context (`{dataset}_about_context.csv`) stores
+    the last user downloaded, and when relaunched it only asks for the
+    authors not yet in `{dataset}_about.csv` (including new ones, if the
+    dataset has grown since).
+  - If X stops answering, it retries the same user and, if there is still no
+    answer, it stops without recording it, so a temporary block is not
+    mistaken for a non-existent account; just relaunch it later.
+  - To have this data as columns of the dataset, use *Tools → About
+    accounts* afterwards.
 
 ## Dashboard
 
@@ -369,6 +399,14 @@ saved first with a suffix carrying the operation date
   (for Spain, the region is the autonomous community). Geocoding is offline
   (it consumes no quota) and generates `{dataset}_loc.csv`. It is useful,
   above all, to add location as a node attribute in the *Graphs* section.
+
+- **About accounts** — adds to the dataset, as `about_*` columns at the end
+  of each tweet, its author's data downloaded in *Download → About*
+  (`{dataset}_about.csv`), joined by user id. Authors not downloaded yet are
+  left empty; it can be repeated as the download progresses and the columns
+  are replaced. Like Merge and Clean, it first saves the previous version of
+  the dataset with the date suffix, and it records the operation
+  (`add_about`) in its context.
 
 ## Graphs
 

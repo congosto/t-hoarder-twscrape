@@ -62,7 +62,7 @@ elegir (o crear) el proyecto sobre el que se va a trabajar.
 ### Parte izquierda · Sub-funciones y formulario
 
 Cada función se divide en **sub-funciones** (por ejemplo, Download ofrece
-Search, User TL, Retweets, Comments y Advanced Comments). Al elegir una
+Search, User TL, Retweets, Comments, Advanced Comments y About). Al elegir una
 sub-función, esta zona muestra su **formulario de entrada de datos** y, al
 final, el **botón que lanza la operación**.
 
@@ -223,10 +223,10 @@ subdivisiones, para no quemar la cuota en ráfaga.
 - Las **principales** — *Search* y *User TL*. Son las que crean un dataset:
   descargan tweets delimitados entre dos fechas, a partir de una query o de
   una lista de usuarios.
-- Las **complementarias** — *Retweets*, *Comments* y *Advanced Comments*.
-  Parten de un dataset ya descargado y lo enriquecen: quién retuiteó sus
-  tweets y qué respuestas recibieron. Son la materia prima de los grafos de
-  la sección *Graphs*.
+- Las **complementarias** — *Retweets*, *Comments*, *Advanced Comments* y
+  *About*. Parten de un dataset ya descargado y lo enriquecen: quién retuiteó
+  sus tweets, qué respuestas recibieron y qué dice X de sus autores. Las tres
+  primeras son la materia prima de los grafos de la sección *Graphs*.
 
 Todas las descargas son **reanudables**: si se interrumpen (o se cortan a
 propósito), basta relanzarlas con el mismo dataset y continúan donde se
@@ -290,6 +290,35 @@ quedaron, gracias al contexto que se guarda con cada dataset.
   Tiene su propia detección de overflow
   (`{dataset}_replies_advanced_overflow.csv`) y genera
   `{dataset}_replies_advanced.csv`.
+
+- **About** — para cada autor del dataset descarga lo que X muestra en la
+  página *About this account* de su perfil (`x.com/{usuario}/about`): el
+  **país en el que está la cuenta** (y si X lo considera preciso), **desde
+  dónde se conecta** (p. ej. «Spain Android App», «Spain App Store»), cuántas
+  veces **cambió de nombre de usuario** y cuándo fue la última, si tiene la
+  **identidad verificada** y desde cuándo, y la cuenta afiliada si la hay.
+  Genera `{dataset}_about.csv`, con una fila por usuario y la columna
+  `about_status`: `ok`, `not_found` (la cuenta ya no existe), `unavailable`
+  (suspendida) o `renamed` (el nombre de usuario pertenece ahora a otra
+  cuenta, así que no se le asignan datos ajenos).
+  - Es **una petición por usuario** y X limita esta consulta a unas **50 por
+    cuenta cada 15 minutos**: con varias cuentas se avanza a unos cientos de
+    usuarios por hora, así que en datasets grandes es una descarga larga.
+    Cuando todas las cuentas agotan su cupo, la consola lo avisa y la
+    descarga espera sola a que se liberen. Para no lanzar ráfagas desde la
+    misma IP (que Cloudflare corta con un error 429, y que no se arregla
+    cambiando de cuenta), las peticiones se espacian con una pausa ajustable
+    (*Pause between requests*, 1 segundo por defecto). Reducirla no acelera
+    la descarga: el ritmo lo marca el límite de las cuentas.
+  - Es **reanudable**: el contexto (`{dataset}_about_context.csv`) guarda el
+    último usuario descargado, y al relanzarla solo se piden los autores que
+    aún no están en `{dataset}_about.csv` (también los nuevos, si el dataset
+    se ha ampliado después).
+  - Si X deja de responder, reintenta el mismo usuario y, si sigue sin
+    respuesta, se detiene sin anotarlo, para no confundir un bloqueo temporal
+    con una cuenta inexistente; basta relanzarla más tarde.
+  - Para tener estos datos como columnas del dataset, se usa después
+    *Tools → About accounts*.
 
 ## Dashboard
 
@@ -376,6 +405,14 @@ anterior se guarda antes con un sufijo con la fecha de la operación
   (no consume cuota) y genera `{dataset}_loc.csv`. Es útil, sobre todo, para
   añadir la localización como atributo de los nodos en los grafos de
   *Graphs*.
+
+- **About accounts** — añade al dataset, como columnas `about_*` al final de
+  cada tweet, los datos de su autor descargados en *Download → About*
+  (`{dataset}_about.csv`), unidos por el identificador de usuario. Los
+  autores que aún no se han descargado quedan vacíos; se puede repetir
+  cuando la descarga avance y las columnas se sustituyen. Como Merge y
+  Clean, guarda antes la versión anterior del dataset con el sufijo de fecha
+  y anota la operación (`add_about`) en su contexto.
 
 ## Graphs
 

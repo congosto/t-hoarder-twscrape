@@ -725,3 +725,95 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
         return output_file
     finally:
         logger.remove(_log_handler)
+
+
+# ── About (x.com/{user}/about) ───────────────────────────────────────────────
+
+ABOUT_FILE_COLS = [
+    "user_id", "username", "about_account_based_in", "about_location_accurate",
+    "about_created_country_accurate", "about_source", "about_affiliate_username",
+    "about_username_changes", "about_username_last_changed", "about_identity_verified",
+    "about_verified_since", "about_status", "about_checked_at",
+]
+
+
+def get_about(data_path: Path, dataset: str, prefix: str, sleep_time: float = 1,
+              retries: int = 3, retry_wait: int = 60, log=print) -> Path:
+    """Descarga la página "About this account" de cada autor de {prefix}.csv en
+    {prefix}_about.csv (una fila por usuario, en orden de user_id).
+
+    Reanudación: el cursor (último user_id procesado) va en {prefix}_about_context.csv
+    como en RTs/replies, y además se saltan los user_id que ya están en la salida, así
+    que tras una descarga nueva solo se piden los autores nuevos. Si X no responde
+    (petición abortada por twscrape) se reintenta el mismo usuario; si sigue sin
+    responder se para SIN avanzar el cursor, para no anotar cuentas como not_found
+    por error.
+
+    sleep_time espacia las peticiones. Sin pausa, al liberarse las cuentas salían
+    ~250 peticiones en ráfaga desde la misma IP y Cloudflare respondía 429 (bloqueo
+    por IP, que no se arregla rotando cuentas). El ritmo total lo marca el límite de
+    X (~50 por cuenta cada 15 min): medido ~790 usuarios/h con 4-5 cuentas tanto
+    con 4 s como con 1 s, y con 1 s sin ningún 429."""
+    from datetime import datetime, timezone
+
+    from twscrape import API
+    from config import ACCOUNTS_DB
+
+    _log_handler = _start_forwarding_twscrape_logs(log)
+    try:
+        output = Path(data_path) / dataset
+        file_in = output / f"{prefix}.csv"
+        output_file = output / f"{prefix}_about.csv"
+
+        tweets = pd.read_csv(file_in, encoding="utf-8", dtype={"user_id": str},
+                             usecols=["user_id", "username"])
+        users = (tweets.dropna()
+                       .drop_duplicates(subset="user_id", keep="last")
+                       .assign(_uid=lambda d: d["user_id"].astype(int))
+                       .sort_values("_uid"))
+        done = (set(pd.read_csv(output_file, encoding="utf-8", dtype={"user_id": str},
+                                usecols=["user_id"])["user_id"])
+                if output_file.exists() else set())
+        last_user_id = context.get_context_about(output, prefix)
+        pending = users[~users["user_id"].isin(done)]
+        log(f"Users in {file_in.name}: {len(users)} — already downloaded: {len(users) - len(pending)} "
+            f"— to download: {len(pending)}"
+            + (f" (resuming after user_id {last_user_id})" if last_user_id else ""))
+
+        api = API(ACCOUNTS_DB)
+        append = output_file.exists()
+        for i, (user_id, username) in enumerate(pending[["user_id", "username"]].itertuples(index=False), 1):
+            for attempt in range(1, retries + 1):
+                try:
+                    about = run_async(scraping.user_about(username, api=api))
+                    break
+                except RuntimeError as e:
+                    if attempt == retries:
+                        raise RuntimeError(
+                            f"@{username}: {e} after {retries} attempts; stopped at {i}/{len(pending)}. "
+                            f"Progress saved in {output_file.name}: launch it again later to resume."
+                        )
+                    log(f"@{username}: {e}; retrying in {retry_wait} seconds ({attempt}/{retries})...")
+                    time.sleep(retry_wait)
+
+            row = {**about, "user_id": user_id, "username": username,
+                   "about_checked_at": str(datetime.now(timezone.utc).replace(microsecond=0))}
+            # si la cuenta cambió de nombre, el screen_name puede ser ya de otra cuenta
+            if about["about_status"] == "ok" and about["user_id"] != user_id:
+                row = {"user_id": user_id, "username": username, "about_status": "renamed",
+                       "about_checked_at": row["about_checked_at"]}
+            _write_csv(pd.DataFrame([row]).reindex(columns=ABOUT_FILE_COLS), output_file, append)
+            append = True
+            context.put_context_about(output, prefix, user_id)
+            if i % 25 == 0 or i == len(pending):
+                log(f"Downloaded about of {i}/{len(pending)} users")
+            if i < len(pending):
+                time.sleep(sleep_time)
+
+        if output_file.exists():
+            status = pd.read_csv(output_file, encoding="utf-8")["about_status"].value_counts().to_dict()
+            log("About status: " + ", ".join(f"{k}={v}" for k, v in status.items()))
+        log("'About' download completed")
+        return output_file
+    finally:
+        logger.remove(_log_handler)

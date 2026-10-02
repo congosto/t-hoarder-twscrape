@@ -27,7 +27,7 @@ _LOG_COLUMNS = [
     "operation", "last_date", "since", "until", "query", "product", "frequency",
     "order", "username", "date", "total_tweets", "merged_from", "n_datasets",
     "cleaned_from", "langs", "positives", "false_positives", "total_before", "total_after",
-    "restored_from", "imported_from",
+    "restored_from", "imported_from", "about_from", "n_users", "n_with_about", "about_status",
 ]
 
 
@@ -133,6 +133,17 @@ def log_clean_dataset(dataset, prefix, log_type, source, langs, positives,
         "langs": "|".join(langs or []), "positives": "|".join(positives or []),
         "false_positives": "|".join(false_positives or []),
         "total_before": str(total_before), "total_after": str(total_after),
+    })
+
+
+def log_add_about(dataset, prefix, log_type, about_from, n_users, n_with_about, status,
+                  total_tweets) -> None:
+    _record(dataset, prefix, log_type, {
+        "operation": "add_about",
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "about_from": about_from, "n_users": str(n_users), "n_with_about": str(n_with_about),
+        "about_status": " ".join(f"{k}={v}" for k, v in status.items()),
+        "total_tweets": str(total_tweets),
     })
 
 
@@ -308,3 +319,19 @@ def get_context_RTs(dataset: Path, prefix: str) -> str | None:
         return None
     context = pd.read_csv(context_file, dtype={"last_tweet_id": str}, encoding="utf-8")
     return context["last_tweet_id"].iloc[-1]
+
+
+# ── Cursor de reanudación de About (fichero aparte, como RTs / replies) ──────
+
+def put_context_about(dataset: Path, prefix: str, last_user_id) -> None:
+    dataset.mkdir(parents=True, exist_ok=True)
+    context_file = dataset / f"{prefix}_about_context.csv"
+    pd.DataFrame({"last_user_id": [str(last_user_id)]}).to_csv(context_file, index=False, encoding="utf-8")
+
+
+def get_context_about(dataset: Path, prefix: str) -> str | None:
+    context_file = dataset / f"{prefix}_about_context.csv"
+    if not context_file.exists():
+        return None
+    context = pd.read_csv(context_file, dtype={"last_user_id": str}, encoding="utf-8")
+    return context["last_user_id"].iloc[-1]

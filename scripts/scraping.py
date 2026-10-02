@@ -99,6 +99,50 @@ async def get_user(username: str) -> dict:
     return _user_to_dict(user)
 
 
+def _msec_to_date(value) -> str | None:
+    if value in (None, ""):
+        return None
+    from datetime import datetime, timezone
+    return str(datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc).replace(microsecond=0))
+
+
+async def user_about(username: str, api: API | None = None) -> dict | None:
+    """Datos de la página x.com/{username}/about (AboutAccountQuery). Se parsea la
+    respuesta en bruto en vez de twscrape.parse_about para no perder campos que
+    este ignora (created_country_accurate).
+
+    Devuelve {"about_status": "not_found"} si X responde que la cuenta no existe y
+    "unavailable" si está suspendida/no disponible. Si twscrape no obtiene respuesta
+    (abortada: bloqueo, rate limit, fallo de x-client-transaction-id) lanza
+    RuntimeError, para que se anote como error y se reintente, no como not_found."""
+    api = api or API(ACCOUNTS_DB)
+    rep = await api.user_about_raw(username)
+    if not rep:
+        raise RuntimeError("no response from X (request aborted by twscrape)")
+    obj = ((rep.json().get("data") or {}).get("user_result_by_screen_name") or {}).get("result")
+    if not obj:
+        return {"about_status": "not_found"}
+    if obj.get("__typename") != "User":
+        return {"about_status": "unavailable"}
+    about = obj.get("about_profile") or {}
+    changes = about.get("username_changes") or {}
+    verification = obj.get("verification_info") or {}
+    reason = verification.get("reason") or {}
+    return {
+        "user_id": str(obj.get("rest_id", "")),
+        "about_account_based_in": about.get("account_based_in"),
+        "about_location_accurate": about.get("location_accurate"),
+        "about_created_country_accurate": about.get("created_country_accurate"),
+        "about_source": about.get("source"),
+        "about_affiliate_username": about.get("affiliate_username"),
+        "about_username_changes": int(changes["count"]) if changes.get("count") not in (None, "") else None,
+        "about_username_last_changed": _msec_to_date(changes.get("last_changed_at_msec")),
+        "about_identity_verified": verification.get("is_identity_verified"),
+        "about_verified_since": _msec_to_date(reason.get("verified_since_msec")),
+        "about_status": "ok",
+    }
+
+
 async def search_hashtag(hashtag: str, n: int = 100) -> list[dict]:
     hashtag = hashtag.lstrip("#")
     return await search_tweets(f"#{hashtag}", n=n)
