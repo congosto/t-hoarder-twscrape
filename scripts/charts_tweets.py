@@ -889,6 +889,85 @@ def draw_topics_acumulate(df, topics, ini_date, end_date, RTs, base_title, event
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
+# draw_about_acumulate
+#
+# chart line acumulado por país de la cuenta (about_account_based_in, de
+# Download > About), los top_n más frecuentes
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# paleta categórica validada (8 tonos, orden fijo) + dos grises neutros para los
+# puestos 9 y 10: el color sigue al país por su puesto en el total del periodo
+ABOUT_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4",
+                "#008300", "#4a3aa7", "#e34948", "#5f5e5a", "#a3a29b"]
+
+
+def draw_about_acumulate(df, ini_date, end_date, RTs, base_title, events=None, slot_time="1h",
+                         top_n=10):
+    """Tweets acumulados por país de la cuenta del autor (about_account_based_in).
+    Con RTs, cada tweet cuenta además los RTs que recibió (amplificación), como
+    en draw_topics_acumulate. Los top_n países se eligen SIEMPRE por número de
+    tweets, también con RTs: así las dos versiones muestran los mismos países con
+    los mismos colores y se comparan una al lado de la otra."""
+    df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)]
+    df = df.dropna(subset=["about_account_based_in"])[["date_slot", "about_account_based_in",
+                                                        "retweet_count"]].copy()
+    df["retweet_count"] = pd.to_numeric(df["retweet_count"], errors="coerce").fillna(0)
+    df["weight"] = 1 + df["retweet_count"] if RTs else 1
+
+    countries = list(df["about_account_based_in"].value_counts().head(top_n).index)
+    color_map = dict(zip(countries, ABOUT_COLORS))
+
+    slots = pd.date_range(ini_date.floor("h"), end_date.floor("h"), freq="h")
+    grouped = (df[df["about_account_based_in"].isin(countries)]
+               .groupby(["date_slot", "about_account_based_in"])["weight"].sum()
+               .unstack(fill_value=0).reindex(slots, fill_value=0)
+               .reindex(columns=countries, fill_value=0).cumsum())
+    limit_y = grouped.values.max() if grouped.size else 1
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    finals = {}
+    for country in countries:
+        ax.plot(grouped.index, grouped[country], linewidth=2, alpha=0.85,
+                color=color_map[country], label=country)
+        finals[country] = (grouped.index[-1], grouped[country].iloc[-1])
+
+    # etiquetas al final (país y valor acumulado) separadas verticalmente un
+    # mínimo para que no se pisen, con línea guía hasta su curva (como en topics)
+    min_sep = limit_y * 0.035
+    label_y, prev = {}, None
+    for country in sorted(countries, key=lambda c: finals[c][1]):
+        y = finals[country][1]
+        y = max(y, limit_y * 0.02) if prev is None else y
+        if prev is not None and y - prev < min_sep:
+            y = prev + min_sep
+        label_y[country] = y
+        prev = y
+    dx = expand_time(ini_date, end_date, 3)
+    for country in countries:
+        x_last, y_real = finals[country]
+        if abs(label_y[country] - y_real) > min_sep / 2:
+            ax.plot([x_last, x_last + dx], [y_real, label_y[country]],
+                    linewidth=0.6, alpha=0.5, color=color_map[country])
+        ax.annotate(f"{country} ({y_real:,.0f})", (x_last + dx, label_y[country]),
+                    fontsize=8, color=color_map[country],
+                    xytext=(3, 0), textcoords="offset points", va="center")
+
+    head_room = max(1.15, draw_events(ax, events, ini_date, end_date, limit_y))
+
+    apply_date_axis(ax, ini_date, end_date + expand_time(ini_date, end_date, 40))
+    ax.set_ylim(0, limit_y * head_room)
+    ax.yaxis.set_major_formatter(ENG_FMT)
+    ax.set_ylabel(f"Accumulated {'tweets + RTs' if RTs else 'tweets'} per {slot_time}")
+    subtitle = ("Country the account is based in (X about), top "
+                f"{len(countries)}" + (" (Adding retweet amplification)" if RTs else ""))
+    my_theme(ax, title=f"{base_title}: Accumulated tweets by account country", subtitle=subtitle)
+    fig.tight_layout()
+    return fig
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
 # words_frequency_by_community
 #
 # Word cloud de cada comunidad en una rejilla

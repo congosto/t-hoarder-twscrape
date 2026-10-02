@@ -35,10 +35,10 @@ con twscrape.
 La app se organiza en secciones (barra superior):
 
 ✅ **Project** — crea y selecciona el proyecto de trabajo; cada proyecto agrupa sus datasets.  
-✅ **Download** — descargas con twscrape: búsqueda histórica (*Search*), timeline de usuario (*User TL*), retweets y respuestas de un dataset, y la página *About* de los perfiles (país de la cuenta, desde dónde se conecta, cambios de nombre de usuario, verificación de identidad) de sus autores o retuiteadores.  
+✅ **Download** — descargas con twscrape: búsqueda histórica (*Search*), timeline de usuario (*User TL*), retweets y respuestas de un dataset, y la página *About* de los perfiles (país de la cuenta, desde dónde se conecta, cambios de nombre de usuario, verificación de identidad) de sus autores.  
 ✅ **Dashboard** — dashboard interactivo (HTML autocontenido) para explorar un dataset: KPIs, ritmo de publicación, mapa de calor de métricas y tabla filtrable.  
 ✅ **Tools** — *Merge datasets* (unir y deduplicar), *Clean dataset* (limpieza por idioma/criterios), *Restore dataset* (volver a una versión anterior), *Compare datasets*, *Import dataset* (de otras herramientas), *Location* (geocodificación offline de los perfiles) y *About accounts* (añadir los datos *About* al dataset), con contexto append-only que conserva el historial.  
-✅ **Graphs** — detección de comunidades, generación de grafos (GDF/GEXF) con atributos de nodo (comunidad, metadatos de usuario, idioma, localización y datos *About*), clasificación de tweets por comunidad y visor interactivo con ForceAtlas2 en el navegador.  
+✅ **Graphs** — detección de comunidades, generación de grafos (GDF/GEXF) con atributos de nodo (comunidad, metadatos de usuario, idioma y localización), clasificación de tweets por comunidad y visor interactivo con ForceAtlas2 en el navegador.  
 ✅ **Charts** — gráficas de análisis para tweets y para perfiles de usuario.  
 ✅ **Settings** — gestión de cuentas de twscrape (alta, activas, borrado).
 

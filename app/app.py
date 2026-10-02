@@ -747,24 +747,11 @@ with left:
                         log_error(f"{acm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
         with tab6:
             ab_prefix = prefix_input("Dataset", "ab_prefix")
-            st.caption("Downloads x.com/{user}/about into {dataset}_about.csv (country the "
-                       "account is based in, how it connects, username changes, identity "
-                       "verification). One request per user; resumes where it stopped and never "
-                       "asks twice for the same user, whatever the source.")
-            _ab_sources = {"Authors (tweets of the dataset)": "authors",
-                           "Retweeters (RT graph: retweeted authors + retweeters)": "retweeters"}
-            ab_source = _ab_sources[st.radio("Source", list(_ab_sources), key="ab_source")]
-            if ab_source == "authors":
-                st.caption("Add the columns to the dataset afterwards in Tools > About accounts.")
-                ab_min_rts = 1
-            else:
-                ab_min_rts = st.number_input(
-                    "Min RTs (per retweeter)", min_value=1, value=20, key="ab_min_rts",
-                    help="Retweeted authors are always included. Retweeters are downloaded from "
-                         "the most to the least active, only those with at least this many RTs "
-                         "in {dataset}_RTs.csv: a few very active users make most of the RTs.",
-                )
-                st.caption("Requires {dataset}_RTs.csv (Download > Retweets).")
+            st.caption("Downloads x.com/{user}/about of every author of {dataset}.csv into "
+                       "{dataset}_about.csv (country the account is based in, how it connects, "
+                       "username changes, identity verification). One request per author; "
+                       "resumes where it stopped and later only asks for new authors. "
+                       "Add the columns to the dataset afterwards in Tools > About accounts.")
             ab_sleep = st.number_input(
                 "Pause between requests (s)", min_value=0.0, value=1.0, step=0.5, key="ab_sleep",
                 help="X allows ~50 requests per account every 15 min, so the overall pace "
@@ -778,14 +765,11 @@ with left:
                 elif not ab_prefix:
                     log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Launching get_about (source={ab_source}"
-                        + (f", min_rts={int(ab_min_rts)}" if ab_source == "retweeters" else "")
-                        + f", pause={ab_sleep:g} s)")
+                    log(f"Launching get_about (pause={ab_sleep:g} s)")
                     try:
                         output_file = download.get_about(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
-                            prefix=ab_prefix, source=ab_source, min_rts=int(ab_min_rts),
-                            sleep_time=ab_sleep, log=log,
+                            prefix=ab_prefix, sleep_time=ab_sleep, log=log,
                         )
                         log(f"Result in {output_file}")
                         set_result(output_file)
@@ -1067,11 +1051,19 @@ with left:
                     "Include locations (requires {prefix}_loc.csv, generated in Tools > Location)",
                     value=False, key="gg_include_locations",
                 )
-                gg_include_about = st.checkbox(
-                    "Include about (requires {prefix}_about.csv, downloaded in Download > About; "
-                    "for the RT graph use Source = Retweeters)",
-                    value=False, key="gg_include_about",
-                )
+                gg_zoom = st.checkbox("Zoom (time window)", value=False, key="gg_zoom")
+                gg_since = gg_until = None
+                if gg_zoom:
+                    zc1, zc2 = st.columns(2)
+                    gg_since = zc1.text_input("From (UTC)", key="gg_since",
+                                              placeholder="YYYY-mm-dd or YYYY-mm-dd HH:MM:SS").strip() or None
+                    gg_until = zc2.text_input("To (UTC)", key="gg_until",
+                                              placeholder="YYYY-mm-dd or YYYY-mm-dd HH:MM:SS").strip() or None
+                    st.caption("Only the relations of that window (empty = no limit; a date without "
+                               "time as To includes the whole day). RTs have no date of their own, so "
+                               "they are filtered by the date of the retweeted tweet. Communities are "
+                               "those of the full graph, so colors are comparable between zooms. "
+                               "The file gets a _from-…_to-… suffix and does not overwrite the full graph.")
                 if st.button("Generate graph"):
                     if not gg_prefix:
                         log_error("enter the Dataset")
@@ -1081,11 +1073,11 @@ with left:
                                 project_dir, gg_prefix, gg_relation, output_format=gg_format,
                                 include_communities=gg_include_communities,
                                 include_locations=gg_include_locations,
-                                include_about=gg_include_about, log=log,
+                                since=gg_since, until=gg_until, log=log,
                             )
                             log(f"Graph in {graph_file}")
                             set_result(graph_file)
-                        except FileNotFoundError as e:
+                        except (FileNotFoundError, ValueError) as e:
                             log_error(str(e))
             with tab3:
                 ct_prefix = prefix_input("Dataset", "ct_prefix")
@@ -1165,6 +1157,13 @@ with left:
                         label_visibility="collapsed",
                     )
 
+                tg_about = st.checkbox(
+                    "Show about (account country)", key="tg_about",
+                    help="Cumulative tweets by the country the author's account is based in "
+                         "(top 10), with and without RT amplification. Requires "
+                         "{dataset}_about.csv (Download > About).",
+                )
+
                 tg_translate = st.checkbox(
                     "Translate word clouds", key="tg_translate",
                     help="Translates the words the cloud draws into Spanish, using the "
@@ -1223,6 +1222,7 @@ with left:
                                 translate_words=tg_translate,
                                 show_events=tg_events, events_file=tg_events_file,
                                 show_communities=tg_communities, communities_relation=tg_comm_relation,
+                                show_about=tg_about,
                                 min_date_zoom=tg_zoom_min if tg_zoom else None,
                                 max_date_zoom=tg_zoom_max if tg_zoom else None,
                                 log=log,

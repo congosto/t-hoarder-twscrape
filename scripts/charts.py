@@ -117,6 +117,23 @@ def _load_events(events_path, time_zone):
     return events
 
 
+def _about_country(project_dir: Path, prefix: str, tweets: pd.DataFrame) -> pd.Series:
+    """País de la cuenta (about_account_based_in) del autor de cada tweet, desde
+    {prefix}_about.csv por user_id; si no existe, la columna del dataset si se
+    añadió con Tools > About accounts."""
+    about_file = project_dir / f"{prefix}_about.csv"
+    if about_file.exists():
+        about = pd.read_csv(about_file, dtype=str).drop_duplicates("user_id")
+        country = about.set_index("user_id")["about_account_based_in"]
+        # user_id leído sin dtype puede venir como int o float (si hay huecos)
+        uid = pd.to_numeric(tweets["user_id"], errors="coerce").astype("Int64").astype("string")
+        return uid.map(country)
+    if "about_account_based_in" in tweets.columns:
+        return tweets["about_account_based_in"]
+    raise FileNotFoundError(
+        f"{about_file.name} does not exist. Download it first in Download > About.")
+
+
 def generate_tweet_charts(
     project_dir: Path,
     prefix: str,
@@ -131,6 +148,7 @@ def generate_tweet_charts(
     events_file: str = "",
     show_communities: bool = False,
     communities_relation: str = "RT",
+    show_about: bool = False,
     min_date_zoom: str | None = None,
     max_date_zoom: str | None = None,
     log=print,
@@ -144,6 +162,10 @@ def generate_tweet_charts(
     (RT | replies | replies_advanced) en vez de {prefix}.csv y añade las gráficas
     por comunidad (tweets_by_community y words_frequency_by_community).
 
+    Si show_about, añade los tweets acumulados por país de la cuenta del autor
+    (about_account_based_in de {prefix}_about.csv, Download > About), sin y con
+    amplificación de RTs.
+
     Devuelve (figs, image_path): figs es un dict {nombre: matplotlib.Figure},
     image_path es la carpeta donde se han guardado los PNG.
     """
@@ -152,6 +174,8 @@ def generate_tweet_charts(
 
     tweets, communities = _load_tweets(
         project_dir, prefix, communities_relation if show_communities else None)
+    if show_about:
+        tweets["about_account_based_in"] = _about_country(project_dir, prefix, tweets)
 
     image_path = project_dir / f"{prefix}_graficas"
     image_path.mkdir(exist_ok=True)
@@ -265,6 +289,18 @@ def generate_tweet_charts(
             "Topics - cumulative (with amplification)",
             _charts.draw_topics_acumulate(tweets, topics, min_date, max_date, True, base_title, events, slot_time),
             f"{prefix}_topics_RTs.png",
+        )
+
+    if show_about:
+        add(
+            "Account country - cumulative",
+            _charts.draw_about_acumulate(tweets, min_date, max_date, False, base_title, events, slot_time),
+            f"{prefix}_about_country.png",
+        )
+        add(
+            "Account country - cumulative (with amplification)",
+            _charts.draw_about_acumulate(tweets, min_date, max_date, True, base_title, events, slot_time),
+            f"{prefix}_about_country_RTs.png",
         )
 
     if communities is not None and not communities.empty:

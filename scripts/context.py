@@ -323,12 +323,10 @@ def get_context_RTs(dataset: Path, prefix: str) -> str | None:
 
 # ── Cursor de reanudación de About (fichero aparte, como RTs / replies) ──────
 
-def put_context_about(dataset: Path, prefix: str, last_user_id, source: str = "authors",
-                      min_rts="") -> None:
+def put_context_about(dataset: Path, prefix: str, last_user_id) -> None:
     dataset.mkdir(parents=True, exist_ok=True)
     context_file = dataset / f"{prefix}_about_context.csv"
-    pd.DataFrame({"last_user_id": [str(last_user_id)], "source": [source],
-                  "min_rts": [str(min_rts)]}).to_csv(context_file, index=False, encoding="utf-8")
+    pd.DataFrame({"last_user_id": [str(last_user_id)]}).to_csv(context_file, index=False, encoding="utf-8")
 
 
 def get_context_about(dataset: Path, prefix: str) -> str | None:

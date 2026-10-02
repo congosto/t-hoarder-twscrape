@@ -291,8 +291,8 @@ quedaron, gracias al contexto que se guarda con cada dataset.
   (`{dataset}_replies_advanced_overflow.csv`) y genera
   `{dataset}_replies_advanced.csv`.
 
-- **About** — descarga lo que X muestra en la página *About this account*
-  del perfil de cada usuario (`x.com/{usuario}/about`): el
+- **About** — para cada autor del dataset descarga lo que X muestra en la
+  página *About this account* de su perfil (`x.com/{usuario}/about`): el
   **país en el que está la cuenta** (y si X lo considera preciso), **desde
   dónde se conecta** (p. ej. «Spain Android App», «Spain App Store»), cuántas
   veces **cambió de nombre de usuario** y cuándo fue la última, si tiene la
@@ -301,20 +301,6 @@ quedaron, gracias al contexto que se guarda con cada dataset.
   `about_status`: `ok`, `not_found` (la cuenta ya no existe), `unavailable`
   (suspendida) o `renamed` (el nombre de usuario pertenece ahora a otra
   cuenta, así que no se le asignan datos ajenos).
-  - *Source* elige de quién se descarga:
-    - **Authors**: los autores de los tweets del dataset. Es lo que luego se
-      añade al dataset con *Tools → About accounts*.
-    - **Retweeters**: los usuarios del grafo de RTs (requiere haber hecho
-      antes *Retweets*). Incluye siempre a **todos los autores retuiteados**
-      (los nodos destino del grafo) y, además, a los **retuiteadores con al
-      menos *Min RTs* retweets**, del más al menos activo. Como unos pocos
-      usuarios muy activos hacen buena parte de los RTs, un umbral alto
-      cubre mucho en poco tiempo: en un dataset de 115.000 RTs y casi 40.000
-      retuiteadores, con *Min RTs* = 20 bastan ~730 usuarios (media hora)
-      para cubrir un tercio de los RTs, cuando todos llevarían más de un día.
-    - Las dos opciones comparten el mismo `{dataset}_about.csv` y nadie se
-      descarga dos veces: da igual el orden, y se puede empezar con un umbral
-      alto y bajarlo después, que solo se piden los que faltan.
   - Es **una petición por usuario** y X limita esta consulta a unas **50 por
     cuenta cada 15 minutos**: con varias cuentas se avanza a unos cientos de
     usuarios por hora, así que en datasets grandes es una descarga larga.
@@ -477,12 +463,15 @@ El flujo típico es: **Detect communities** → **Generate graph** →
   métricas — seguidores, seguidos, tweets, favoritos y listas — en escala
   logarítmica. Dos casillas permiten añadir además la **comunidad** (de
   Detect communities) y la **localización** (de Tools → Location), muy
-  útiles para colorear o filtrar el grafo. Con *Include about* añade también
-  los datos de *Download → About*: país de la cuenta
-  (`about_account_based_in`), desde dónde se conecta (`about_source`),
-  cambios de nombre de usuario (`about_username_changes`) e identidad
-  verificada (`about_identity_verified`). Para el grafo de RTs conviene
-  descargarlos con *Source = Retweeters*; los nodos sin datos quedan vacíos.
+  útiles para colorear o filtrar el grafo.
+  Con *Zoom (time window)* se genera el grafo de solo un periodo, entre las
+  fechas *From* y *To* (en UTC; si *To* es una fecha sin hora, incluye el día
+  entero). Los RTs no tienen fecha propia —X no dice cuándo se hizo cada RT—,
+  así que se filtran por la **fecha del tweet retuiteado**; las respuestas,
+  por la suya. Las comunidades son las del grafo completo, de modo que los
+  colores coinciden entre zooms y se puede comparar qué comunidades están
+  activas en cada momento. El fichero lleva el periodo en el nombre
+  (`{dataset}_RT_from-…_to-….gdf`) y no sobrescribe el grafo completo.
 
 - **Classify tweets** — requiere haber ejecutado previamente *Detect
   communities*. Dado un dataset y una relación, clasifica cada tweet con la
@@ -549,6 +538,12 @@ publicación. Se generan dos conjuntos, uno por cada tipo de dataset:
     específicas del tiempo (el «qué pasó ese día» que explica un pico).
   - **Hacer zoom**: restringir todas las gráficas al tramo entre dos fechas
     dadas, en vez de usar todo el periodo.
+  - **Show about**: añade dos gráficas con los tweets acumulados según el
+    **país de la cuenta** del autor (`about_account_based_in`, de
+    *Download → About*), para los 10 países con más tweets: una cuenta solo
+    los tweets y la otra suma los RTs que recibieron (amplificación). Las dos
+    muestran los mismos países con los mismos colores, para compararlas una
+    al lado de la otra. Requiere `{dataset}_about.csv`.
 
 - **Users** — para los datasets de *User TL*: los tweets de uno o más
   perfiles. Las gráficas se generan **para un solo perfil cada vez**, así

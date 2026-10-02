@@ -35,11 +35,6 @@ _NODE_ATTR_TYPES = {
     "is_blue_verified": "BOOLEAN",
     "verified_type": "VARCHAR",
     "lang": "VARCHAR",
-    # de {prefix}_about.csv (Download > About), con include_about
-    "about_account_based_in": "VARCHAR",
-    "about_source": "VARCHAR",
-    "about_username_changes": "INT",
-    "about_identity_verified": "BOOLEAN",
 }
 _NODE_ATTR_COLUMNS = list(_NODE_ATTR_TYPES.keys())
 
@@ -49,12 +44,7 @@ _TOOLTIP_ATTRS = [
     "log_followers_count", "log_friends_count", "log_statuses_count",
     "log_favourites_count", "log_listed_count",
     "location", "location_country", "location_region", "location_city",
-    "about_account_based_in", "about_source", "about_username_changes",
-    "about_identity_verified",
 ]
-
-_ABOUT_NODE_COLS = ["about_account_based_in", "about_source", "about_username_changes",
-                    "about_identity_verified"]
 
 _AUTHOR_COLUMNS = [
     "username", "user_id", "followers_count", "friends_count", "statuses_count",
@@ -107,8 +97,70 @@ def _original_tweet_urls(project_dir: Path, prefix: str) -> set | None:
     return set(urls.dropna().astype(str))
 
 
+def _parse_zoom_date(value, end: bool):
+    """Fecha de zoom en UTC. Una fecha sin hora como fin ('2024-01-15') incluye
+    todo ese día (devuelve el inicio del día siguiente, que se usa con <)."""
+    if value is None or str(value).strip() == "":
+        return None
+    text = str(value).strip()
+    try:
+        ts = pd.Timestamp(text)
+    except ValueError:
+        raise ValueError(f"Invalid zoom date '{text}': use YYYY-mm-dd or YYYY-mm-dd HH:MM:SS") from None
+    ts = ts.tz_localize("UTC") if ts.tz is None else ts.tz_convert("UTC")
+    if end and len(text) <= 10:
+        ts += pd.Timedelta(days=1)
+    return ts
+
+
+def zoom_tag(since=None, until=None) -> str:
+    """Sufijo de fichero para un grafo con zoom: _from-YYYYmmdd[-HHMM]_to-YYYYmmdd[-HHMM]
+    (sin hora si la fecha se dio sin hora: 'to-20260923' incluye todo el día 23)."""
+    def fmt(v):
+        text = str(v).strip()
+        return pd.Timestamp(text).strftime("%Y%m%d" if len(text) <= 10 else "%Y%m%d-%H%M")
+    parts = []
+    if since is not None and str(since).strip():
+        parts.append(f"from-{fmt(since)}")
+    if until is not None and str(until).strip():
+        parts.append(f"to-{fmt(until)}")
+    return ("_" + "_".join(parts)) if parts else ""
+
+
+def _filter_relations_by_date(df: pd.DataFrame, project_dir: Path, prefix: str, relation: str,
+                              since=None, until=None, log=print) -> pd.DataFrame:
+    """Zoom temporal: conserva las relaciones entre since y until (UTC).
+
+    Los RTs no tienen fecha propia (X no da la hora de cada RT; _RTs.csv solo
+    guarda url_rt), así que se filtran por la fecha del tweet ORIGINAL retuiteado,
+    que se saca de {prefix}.csv. Las respuestas sí tienen fecha propia (date)."""
+    start, end = _parse_zoom_date(since, end=False), _parse_zoom_date(until, end=True)
+    if start is None and end is None:
+        return df
+    if relation == "RT":
+        tweets = pd.read_csv(project_dir / f"{prefix}.csv", encoding="utf-8",
+                             dtype=str, usecols=["url", "date"])
+        url_date = tweets.dropna().drop_duplicates("url").set_index("url")["date"]
+        dates = pd.to_datetime(df["url_rt"].astype(str).map(url_date), utc=True, errors="coerce")
+        what = "date of the retweeted tweet"
+    else:
+        dates = pd.to_datetime(df["date"], utc=True, errors="coerce")
+        what = "date of the reply"
+    keep = dates.notna()
+    if start is not None:
+        keep &= dates >= start
+    if end is not None:
+        keep &= (dates < end) if len(str(until).strip()) <= 10 else (dates <= end)
+    log(f"Zoom {since or '…'} → {until or '…'} (UTC, by {what}): "
+        f"{int(keep.sum())} of {len(df)} relations")
+    if not keep.any():
+        raise ValueError("No relations in the zoom window: check the From/To dates.")
+    return df[keep]
+
+
 def _load_relations(project_dir: Path, prefix: str, relation: str,
-                    filter_orphan_rts: bool = True, log=print) -> pd.DataFrame:
+                    filter_orphan_rts: bool = True, since=None, until=None,
+                    log=print) -> pd.DataFrame:
     if relation == "RT":
         path = project_dir / f"{prefix}_RTs.csv"
         if not path.exists():
@@ -147,6 +199,7 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
     else:
         raise ValueError("relation must be 'RT', 'replies' or 'replies_advanced'")
 
+    df = _filter_relations_by_date(df, project_dir, prefix, relation, since, until, log=log)
     df = df.dropna(subset=["source", "target"])
     df["source"] = _norm_username(df["source"])
     df["target"] = _norm_username(df["target"])
@@ -162,7 +215,8 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
 
 def _build_giant_graph(project_dir: Path, prefix: str, relation: str, log=print,
                        min_component_size: int | None = None,
-                       filter_orphan_rts: bool = True) -> tuple[nx.DiGraph, pd.DataFrame]:
+                       filter_orphan_rts: bool = True, since=None,
+                       until=None) -> tuple[nx.DiGraph, pd.DataFrame]:
     """Construye el grafo dirigido de la relación indicada.
 
     Por defecto (min_component_size=None) se queda solo con la componente conexa
@@ -176,7 +230,8 @@ def _build_giant_graph(project_dir: Path, prefix: str, relation: str, log=print,
     no está en {prefix}.csv (ver _load_relations).
     """
     relations_df = _load_relations(project_dir, prefix, relation,
-                                   filter_orphan_rts=filter_orphan_rts, log=log)
+                                   filter_orphan_rts=filter_orphan_rts,
+                                   since=since, until=until, log=log)
     log(f"Relations loaded: {len(relations_df)}")
 
     edges = relations_df.groupby(["source", "target"]).size().reset_index(name="weight")
@@ -347,7 +402,8 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
 
 def generate_graph(project_dir: Path, prefix: str, relation: str, output_format: str = "gdf",
                    include_communities: bool = True, include_locations: bool = False,
-                   include_about: bool = False, min_component_size: int | None = None, filter_orphan_rts: bool = True,
+                   min_component_size: int | None = None,
+                   filter_orphan_rts: bool = True, since=None, until=None,
                    log=print) -> Path:
     """Genera el fichero de grafo (gdf/gexf) de la relación indicada con los atributos de nodo.
 
@@ -355,21 +411,25 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     (generado antes con 'Detect communities'; falla si no existe).
     include_locations: añade location_country/region/city desde {prefix}_loc.csv
     (generado antes en Tools > Localización; falla si no existe).
-    include_about: añade about_account_based_in/source/username_changes/
-    identity_verified desde {prefix}_about.csv (Download > About; falla si no existe).
     min_component_size: debe coincidir con el usado en 'Detect communities' para
     ese mismo prefix/relation (ver _build_giant_graph) — si no, algunos nodos no
     tendrán comunidad asignada porque no estaban en el grafo con el que se calculó.
     filter_orphan_rts (solo relación RT): descarta los RTs cuyo tweet original ya no
     está en {prefix}.csv (ver _load_relations). Debe coincidir con el usado en
     'Detect communities', por lo mismo que min_component_size.
+    since/until (zoom temporal, UTC, 'YYYY-mm-dd' o 'YYYY-mm-dd HH:MM:SS'; vacío =
+    sin límite): solo las relaciones de esa ventana (ver _filter_relations_by_date;
+    en RTs, por la fecha del tweet original). Las comunidades siguen siendo las del
+    grafo completo (Detect communities), para que los colores sean comparables
+    entre zooms. El fichero lleva el sufijo de zoom_tag para no pisar el completo.
     Devuelve la ruta del fichero de grafo generado.
     """
     if output_format not in ("gdf", "gexf"):
         raise ValueError(f"output_format must be 'gdf' or 'gexf', not '{output_format}'")
     G_giant, relations_df = _build_giant_graph(project_dir, prefix, relation, log=log,
                                                min_component_size=min_component_size,
-                                               filter_orphan_rts=filter_orphan_rts)
+                                               filter_orphan_rts=filter_orphan_rts,
+                                               since=since, until=until)
 
     tweets_file = project_dir / f"{prefix}.csv"
     if not tweets_file.exists():
@@ -417,33 +477,6 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
         node_attrs["location_region"] = None
         node_attrs["location_city"] = None
 
-    if include_about:
-        about_file = project_dir / f"{prefix}_about.csv"
-        if not about_file.exists():
-            raise FileNotFoundError(f"{about_file} does not exist. Download it first in Download > About.")
-        about_df = pd.read_csv(about_file, encoding="utf-8", dtype=str)
-        about_df = about_df[about_df["about_status"] == "ok"]
-        # por user_id (estable aunque la cuenta cambie de nombre); si el nodo no
-        # tiene user_id (p.ej. hubs solo-destino), por username normalizado
-        by_id = about_df.drop_duplicates("user_id").set_index("user_id")
-        by_name = about_df.assign(username=_norm_username(about_df["username"]))                           .drop_duplicates("username").set_index("username")
-        node_ids = node_attrs["user_id"].astype("string")
-        for col in _ABOUT_NODE_COLS:
-            values = node_ids.map(by_id[col].to_dict())
-            values = values.fillna(pd.Series(node_attrs.index.map(by_name[col].to_dict()),
-                                             index=node_attrs.index))
-            if _NODE_ATTR_TYPES[col] == "INT":
-                values = pd.to_numeric(values, errors="coerce")
-            elif _NODE_ATTR_TYPES[col] == "BOOLEAN":
-                values = values.map({"True": True, "False": False, True: True, False: False})
-            node_attrs[col] = values
-        n_about = int((node_attrs["about_account_based_in"].notna()
-                       | node_attrs["about_source"].notna()).sum())
-        log(f"About data joined from {about_file.name}: {n_about}/{len(node_attrs)} nodes")
-    else:
-        for col in _ABOUT_NODE_COLS:
-            node_attrs[col] = None
-
     # lang: lengua DOMINANTE (la mas frecuente) de cada usuario. 'lang' es un
     # atributo por-tweet (ver scraping.py), asi que un usuario puede tener varias;
     # se toma la mas usada. Empate -> orden alfabetico, para que sea determinista.
@@ -481,10 +514,10 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
         node_attrs["lang"] = None
 
     if output_format == "gexf":
-        graph_file = project_dir / f"{prefix}_{relation}.gexf"
+        graph_file = project_dir / f"{prefix}_{relation}{zoom_tag(since, until)}.gexf"
         _export_gexf(G_giant, node_attrs, graph_file)
     else:
-        graph_file = project_dir / f"{prefix}_{relation}.gdf"
+        graph_file = project_dir / f"{prefix}_{relation}{zoom_tag(since, until)}.gdf"
         _export_gdf(G_giant, node_attrs, graph_file)
     log(f"Graph exported to {graph_file}")
 

@@ -287,8 +287,8 @@ they left off, thanks to the context saved with each dataset.
   (`{dataset}_replies_advanced_overflow.csv`) and generates
   `{dataset}_replies_advanced.csv`.
 
-- **About** — downloads what X shows on the *About this account* page of
-  each user's profile (`x.com/{user}/about`): the
+- **About** — for each author of the dataset, downloads what X shows on the
+  *About this account* page of their profile (`x.com/{user}/about`): the
   **country the account is based in** (and whether X considers it
   accurate), **how it connects** (e.g. "Spain Android App", "Spain App
   Store"), how many times it **changed its username** and when it last did,
@@ -297,20 +297,6 @@ they left off, thanks to the context saved with each dataset.
   an `about_status` column: `ok`, `not_found` (the account no longer exists),
   `unavailable` (suspended) or `renamed` (the username now belongs to
   another account, so no foreign data is assigned).
-  - *Source* chooses whose data is downloaded:
-    - **Authors**: the authors of the dataset's tweets. This is what is later
-      added to the dataset with *Tools → About accounts*.
-    - **Retweeters**: the users of the RT graph (requires *Retweets* first).
-      It always includes **every retweeted author** (the graph's target
-      nodes) plus the **retweeters with at least *Min RTs* retweets**, from
-      the most to the least active. Since a few very active users make a
-      large share of the RTs, a high threshold covers a lot in little time:
-      in a dataset with 115,000 RTs and almost 40,000 retweeters, *Min RTs* =
-      20 needs only ~730 users (half an hour) to cover a third of the RTs,
-      whereas all of them would take more than a day.
-    - Both options share the same `{dataset}_about.csv` and nobody is
-      downloaded twice: the order does not matter, and you can start with a
-      high threshold and lower it later, only the missing users are asked.
   - It is **one request per user**, and X limits this query to about **50
     per account every 15 minutes**: with several accounts it advances a few
     hundred users per hour, so on large datasets it is a long download. When
@@ -471,11 +457,15 @@ The typical flow is: **Detect communities** → **Generate graph** →
   — followers, following, tweets, favorites and lists — in logarithmic
   scale. Two checkboxes also allow adding the **community** (from Detect
   communities) and the **location** (from Tools → Location), very useful to
-  color or filter the graph. With *Include about* it also adds the data from
-  *Download → About*: the account's country (`about_account_based_in`), how
-  it connects (`about_source`), username changes (`about_username_changes`)
-  and verified identity (`about_identity_verified`). For the RT graph,
-  download it with *Source = Retweeters*; nodes without data are left empty.
+  color or filter the graph.
+  With *Zoom (time window)* the graph covers only one period, between the
+  *From* and *To* dates (in UTC; if *To* is a date without time, the whole
+  day is included). RTs have no date of their own —X does not say when each
+  RT was made—, so they are filtered by the **date of the retweeted tweet**;
+  replies, by their own. Communities are those of the full graph, so colors
+  match between zooms and you can compare which communities are active at
+  each moment. The file carries the period in its name
+  (`{dataset}_RT_from-…_to-….gdf`) and does not overwrite the full graph.
 
 - **Classify tweets** — requires having run *Detect communities* first.
   Given a dataset and a relation, it classifies each tweet with its
@@ -540,6 +530,12 @@ sets are generated, one per dataset type:
     time (the "what happened that day" that explains a spike).
   - **Zoom**: restrict all the charts to the stretch between two given
     dates, instead of using the whole period.
+  - **Show about**: adds two charts with the cumulative tweets by the
+    **country of the author's account** (`about_account_based_in`, from
+    *Download → About*), for the 10 countries with most tweets: one counts
+    only the tweets and the other adds the RTs they received (amplification).
+    Both show the same countries with the same colors, to compare them side
+    by side. Requires `{dataset}_about.csv`.
 
 - **Users** — for *User TL* datasets: the tweets of one or more profiles.
   The charts are generated **for a single profile at a time**, so besides
