@@ -552,8 +552,19 @@ publicación. Se generan dos conjuntos, uno por cada tipo de dataset:
     las medianas parten el plano en cuatro cuadrantes («escribe mucho / poco,
     se amplifica mucho / poco»). Los puntos se colorean por continente; los
     huecos son regiones, cuando X da una zona («Europe», «West Asia»…) en vez
-    de un país. Solo entran los países con al menos 10 tweets. Requiere
-    `{dataset}_about.csv`.
+    de un país. Solo entran los países con al menos 10 tweets. Y una cuarta,
+    de **perfiles sospechosos**: los autores con 5 o más cambios de nombre de
+    usuario, con la antigüedad de la cuenta en el eje X, los seguidores en el
+    Y (escala logarítmica: 1K, 10K, 1M…), el tamaño según los cambios de
+    nombre y el color según el país (los mismos colores que en las gráficas
+    de acumulados). De fondo, en gris, todos los autores, para ver qué es lo
+    normal. Se sombrea la zona «joven y con muchos seguidores» (menos de 3
+    años y 5.000 seguidores o más) y se rotulan sus cuentas, las más
+    seguidas y las que más han cambiado de nombre. Es una pista, no una
+    prueba: cambiar mucho de nombre es típico de cuentas compradas o
+    reconvertidas, pero también de quien cambia de apodo a menudo.
+    Los datos se toman del fichero de tweets si ya tiene las columnas about
+    (*Tools → About accounts*) y, si no, de `{dataset}_about.csv`.
 
 - **Users** — para los datasets de *User TL*: los tweets de uno o más
   perfiles. Las gráficas se generan **para un solo perfil cada vez**, así

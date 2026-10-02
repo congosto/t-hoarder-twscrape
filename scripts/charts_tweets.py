@@ -1084,6 +1084,102 @@ def draw_about_scatter(df, ini_date, end_date, base_title, min_tweets=10):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
+# draw_about_suspicious
+#
+# perfiles sospechosos por cambios de nombre: antigüedad vs. seguidores
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+def _kmg(v, _):
+    """Etiquetas de eje log: 1, 10, 100, 1K, 10K, 100K, 1M, 10M."""
+    for div, suf in ((1e6, "M"), (1e3, "K")):
+        if v >= div:
+            return f"{v / div:g}{suf}"
+    return f"{v:g}"
+
+
+def draw_about_suspicious(df, ini_date, end_date, base_title, min_changes=5,
+                          young_years=3, many_followers=5000):
+    """Autores con >= min_changes cambios de nombre (about_username_changes):
+    antigüedad de la cuenta (X) frente a seguidores (Y, log), tamaño = cambios
+    de nombre, color = país de la cuenta. De fondo, en gris, todos los autores.
+    Se sombrea la zona "joven y con muchos seguidores" (< young_years años y
+    >= many_followers) y se rotulan sus cuentas, las más seguidas y las que más
+    han cambiado de nombre. Colores de país como draw_about_acumulate (los
+    países con más tweets, en ese orden), para reconocerlos igual en todas."""
+    df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)]
+    users = df.sort_values("date").drop_duplicates("user_id", keep="last").copy()
+    users["changes"] = pd.to_numeric(users["about_username_changes"], errors="coerce")
+    users["followers"] = pd.to_numeric(users["followers_count"], errors="coerce").clip(lower=1)
+    created = pd.to_datetime(users["created_at"], utc=True, errors="coerce").dt.tz_localize(None)
+    users["age"] = (end_date - created).dt.days / 365.25
+    users = users.dropna(subset=["age", "followers"])
+    sus = users[users["changes"] >= min_changes].copy()
+
+    palette = ABOUT_COLORS[:8]
+    ranking = list(df["about_account_based_in"].value_counts().head(len(palette)).index)
+    color_map = dict(zip(ranking, palette))
+    other = "#a3a29b"
+    sus["color"] = sus["about_account_based_in"].map(color_map).fillna(other)
+    sus = sus.sort_values("changes", ascending=False)  # las burbujas grandes, debajo
+
+    def size(changes):  # área proporcional a los cambios, con un mínimo visible
+        return 18 + np.sqrt(changes) * 40
+
+    fig, ax = plt.subplots(figsize=(10, 7))
+    ax.set_yscale("log")
+    ax.scatter(users["age"], users["followers"], s=6, color="#d3d1c7", alpha=0.6,
+               linewidth=0, zorder=1)
+    ymax = max(users["followers"].max(), many_followers) * 2.5
+    ax.fill_between([0, young_years], many_followers, ymax, color="#e34948", alpha=0.07, zorder=0)
+    ax.text(0.15, ymax / 1.3, f"young (< {young_years} y) & many followers (≥ {many_followers:,})",
+            color="#e34948", fontsize=9, style="italic", va="top")
+
+    if not sus.empty:
+        ax.scatter(sus["age"], sus["followers"], s=size(sus["changes"]), color=sus["color"],
+                   alpha=0.8, edgecolor="white", linewidth=0.8, zorder=3)
+        zone = sus[(sus["age"] < young_years) & (sus["followers"] >= many_followers)]
+        labelled = pd.concat([zone, sus.nlargest(6, "followers"),
+                              sus.nlargest(5, "changes")]).drop_duplicates("user_id")
+        _repel(ax, list(labelled["age"]), list(labelled["followers"]),
+               [f"@{n} ({int(c)})" for n, c in zip(labelled["username"], labelled["changes"])],
+               size=8, max_texts=len(labelled), min_sep_px=None, ha="left", va="center")
+
+    ax.set_xlim(0, users["age"].max() * 1.03)
+    ax.set_ylim(1, ymax)
+    ax.yaxis.set_major_formatter(FuncFormatter(_kmg))
+    ax.yaxis.set_minor_formatter(FuncFormatter(lambda v, _: ""))
+    ax.set_xlabel("Account age (years)")
+    ax.set_ylabel("Followers (log)")
+
+    present = set(sus["about_account_based_in"])
+    shown = [c for c in ranking if c in present]
+    handles = [Line2D([], [], marker="o", linestyle="", markersize=7, color=color_map[c])
+               for c in shown]
+    labels = list(shown)
+    if (sus["color"] == other).any():
+        handles.append(Line2D([], [], marker="o", linestyle="", markersize=7, color=other))
+        labels.append("Other")
+    country_leg = legend_top(ax, handles, labels, fontsize=8) if handles else None
+
+    for c in (5, 20, 100):  # leyenda de tamaños, abajo a la derecha
+        ax.scatter([], [], s=size(c), color="white", edgecolor=COLOR_TEXTO, label=f"{c} changes")
+    size_leg = ax.legend(loc="lower right", frameon=False, fontsize=8, labelspacing=1.4,
+                         borderpad=1, title="Username changes", title_fontsize=8)
+    for t in size_leg.get_texts() + [size_leg.get_title()]:
+        t.set_color(COLOR_TEXTO)
+    if country_leg is not None:
+        ax.add_artist(country_leg)  # matplotlib solo conserva la última leyenda si no
+
+    my_theme(ax, title=f"{base_title}: Suspicious profiles (≥ {min_changes} username changes)",
+             subtitle=f"{len(sus)} of {len(users):,} authors · grey = all authors · "
+                      "size = username changes",
+             subtitle_y=1.055, title_pad=48)
+    fig.tight_layout()
+    return fig
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
 # words_frequency_by_community
 #
 # Word cloud de cada comunidad en una rejilla

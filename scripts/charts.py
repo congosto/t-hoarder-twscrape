@@ -118,21 +118,25 @@ def _load_events(events_path, time_zone):
     return events
 
 
-def _about_country(project_dir: Path, prefix: str, tweets: pd.DataFrame) -> pd.Series:
-    """País de la cuenta (about_account_based_in) del autor de cada tweet, desde
-    {prefix}_about.csv por user_id; si no existe, la columna del dataset si se
-    añadió con Tools > About accounts."""
+_ABOUT_CHART_COLS = ["about_account_based_in", "about_username_changes"]
+
+
+def _add_about_columns(project_dir: Path, prefix: str, tweets: pd.DataFrame) -> pd.DataFrame:
+    """Columnas about que usan las gráficas (país y cambios de nombre del autor).
+    Se toman del propio fichero de tweets si ya las tiene (Tools > About
+    accounts); si no, de {prefix}_about.csv por user_id."""
+    if all(c in tweets.columns for c in _ABOUT_CHART_COLS):
+        return tweets
     about_file = project_dir / f"{prefix}_about.csv"
-    if about_file.exists():
-        about = pd.read_csv(about_file, dtype=str).drop_duplicates("user_id")
-        country = about.set_index("user_id")["about_account_based_in"]
-        # user_id leído sin dtype puede venir como int o float (si hay huecos)
-        uid = pd.to_numeric(tweets["user_id"], errors="coerce").astype("Int64").astype("string")
-        return uid.map(country)
-    if "about_account_based_in" in tweets.columns:
-        return tweets["about_account_based_in"]
-    raise FileNotFoundError(
-        f"{about_file.name} does not exist. Download it first in Download > About.")
+    if not about_file.exists():
+        raise FileNotFoundError(
+            f"{about_file.name} does not exist. Download it first in Download > About.")
+    about = pd.read_csv(about_file, dtype=str).drop_duplicates("user_id").set_index("user_id")
+    # user_id leído sin dtype puede venir como int o float (si hay huecos)
+    uid = pd.to_numeric(tweets["user_id"], errors="coerce").astype("Int64").astype("string")
+    for col in _ABOUT_CHART_COLS:
+        tweets[col] = uid.map(about[col]) if col in about.columns else None
+    return tweets
 
 
 def generate_tweet_charts(
@@ -165,7 +169,8 @@ def generate_tweet_charts(
 
     Si show_about, añade los tweets acumulados por país de la cuenta del autor
     (about_account_based_in de {prefix}_about.csv, Download > About), sin y con
-    amplificación de RTs, y la dispersión escritura vs. amplificación por país.
+    amplificación de RTs, la dispersión escritura vs. amplificación por país y
+    los perfiles sospechosos por cambios de nombre.
 
     Devuelve (figs, image_path): figs es un dict {nombre: matplotlib.Figure},
     image_path es la carpeta donde se han guardado los PNG.
@@ -176,7 +181,7 @@ def generate_tweet_charts(
     tweets, communities = _load_tweets(
         project_dir, prefix, communities_relation if show_communities else None)
     if show_about:
-        tweets["about_account_based_in"] = _about_country(project_dir, prefix, tweets)
+        tweets = _add_about_columns(project_dir, prefix, tweets)
 
     # con zoom, las gráficas van a su propia carpeta para no pisar las del periodo
     # completo (mismo sufijo que los grafos con zoom)
@@ -310,6 +315,11 @@ def generate_tweet_charts(
             "Account country - writing vs. amplification",
             _charts.draw_about_scatter(tweets, min_date, max_date, base_title),
             f"{prefix}_about_country_scatter.png",
+        )
+        add(
+            "Suspicious profiles (username changes)",
+            _charts.draw_about_suspicious(tweets, min_date, max_date, base_title),
+            f"{prefix}_about_suspicious.png",
         )
 
     if communities is not None and not communities.empty:

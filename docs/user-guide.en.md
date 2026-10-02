@@ -544,7 +544,18 @@ sets are generated, one per dataset type:
     plane into four quadrants ("writes a lot / little, highly / little
     amplified"). Dots are colored by continent; hollow ones are regions, when
     X gives an area ("Europe", "West Asia"…) instead of a country. Only
-    countries with at least 10 tweets are included. Requires
+    countries with at least 10 tweets are included. And a fourth one, of
+    **suspicious profiles**: authors with 5 or more username changes, with
+    the account age on the X axis, followers on the Y axis (log scale: 1K,
+    10K, 1M…), size by username changes and color by country (the same
+    colors as the cumulative charts). In the background, in grey, all the
+    authors, to see what is normal. The "young with many followers" zone
+    (under 3 years and 5,000 followers or more) is shaded, and its accounts,
+    the most followed ones and those that changed their name the most are
+    labeled. It is a hint, not proof: changing names often is typical of
+    bought or repurposed accounts, but also of people who change nicknames
+    often. The data comes from the tweets file if it already has the about
+    columns (*Tools → About accounts*) and, otherwise, from
     `{dataset}_about.csv`.
 
 - **Users** — for *User TL* datasets: the tweets of one or more profiles.
