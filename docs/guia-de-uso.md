@@ -537,13 +537,23 @@ publicación. Se generan dos conjuntos, uno por cada tipo de dataset:
   - **Añadir un fichero de events**, para anotar las gráficas en posiciones
     específicas del tiempo (el «qué pasó ese día» que explica un pico).
   - **Hacer zoom**: restringir todas las gráficas al tramo entre dos fechas
-    dadas, en vez de usar todo el periodo.
+    dadas, en vez de usar todo el periodo. Las gráficas y el informe con zoom
+    llevan el periodo en el nombre, como los grafos
+    (`{dataset}_graficas_from-…_to-…/`, `{dataset}_informe_tweets_from-…_to-….html`),
+    así que no sobrescriben los del periodo completo.
   - **Show about**: añade dos gráficas con los tweets acumulados según el
     **país de la cuenta** del autor (`about_account_based_in`, de
     *Download → About*), para los 10 países con más tweets: una cuenta solo
     los tweets y la otra suma los RTs que recibieron (amplificación). Las dos
     muestran los mismos países con los mismos colores, para compararlas una
-    al lado de la otra. Requiere `{dataset}_about.csv`.
+    al lado de la otra. Añade además una gráfica de dispersión **escritura
+    vs. amplificación**: cada país es un punto, con sus tweets en el eje X y
+    los RTs recibidos por tweet en el eje Y (ambos en escala logarítmica), y
+    las medianas parten el plano en cuatro cuadrantes («escribe mucho / poco,
+    se amplifica mucho / poco»). Los puntos se colorean por continente; los
+    huecos son regiones, cuando X da una zona («Europe», «West Asia»…) en vez
+    de un país. Solo entran los países con al menos 10 tweets. Requiere
+    `{dataset}_about.csv`.
 
 - **Users** — para los datasets de *User TL*: los tweets de uno o más
   perfiles. Las gráficas se generan **para un solo perfil cada vez**, así

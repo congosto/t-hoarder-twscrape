@@ -74,6 +74,20 @@ def clean_tweets(df: pd.DataFrame, since, until) -> pd.DataFrame:
     return df
 
 
+def zoom_tag(since=None, until=None) -> str:
+    """Sufijo de fichero para un resultado con zoom temporal (grafos y gráficas): _from-YYYYmmdd[-HHMM]_to-YYYYmmdd[-HHMM]
+    (sin hora si la fecha se dio sin hora: 'to-20260923' incluye todo el día 23)."""
+    def fmt(v):
+        text = str(v).strip()
+        return pd.Timestamp(text).strftime("%Y%m%d" if len(text) <= 10 else "%Y%m%d-%H%M")
+    parts = []
+    if since is not None and str(since).strip():
+        parts.append(f"from-{fmt(since)}")
+    if until is not None and str(until).strip():
+        parts.append(f"to-{fmt(until)}")
+    return ("_" + "_".join(parts)) if parts else ""
+
+
 def merge_datasets(project_dir: Path, datasets: list[str], dest: str, log=print) -> Path:
     """Une los tweets de varios datasets del proyecto en uno nuevo, quitando
     duplicados por 'id' (o 'url'). Los datasets son nombres (sin extensión); se

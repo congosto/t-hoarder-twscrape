@@ -13,6 +13,8 @@ from pathlib import Path
 import networkx as nx
 import pandas as pd
 
+from utils import zoom_tag  # noqa: F401  (sufijo de los ficheros con zoom)
+
 # Además de los atributos derivados (log_*, create_at_year, location_*) se
 # trasladan tal cual los metadatos de usuario que traen el fichero de RTs y el
 # de tweets (id, location y created_at): en Gephi sirven para identificar
@@ -111,20 +113,6 @@ def _parse_zoom_date(value, end: bool):
     if end and len(text) <= 10:
         ts += pd.Timedelta(days=1)
     return ts
-
-
-def zoom_tag(since=None, until=None) -> str:
-    """Sufijo de fichero para un grafo con zoom: _from-YYYYmmdd[-HHMM]_to-YYYYmmdd[-HHMM]
-    (sin hora si la fecha se dio sin hora: 'to-20260923' incluye todo el día 23)."""
-    def fmt(v):
-        text = str(v).strip()
-        return pd.Timestamp(text).strftime("%Y%m%d" if len(text) <= 10 else "%Y%m%d-%H%M")
-    parts = []
-    if since is not None and str(since).strip():
-        parts.append(f"from-{fmt(since)}")
-    if until is not None and str(until).strip():
-        parts.append(f"to-{fmt(until)}")
-    return ("_" + "_".join(parts)) if parts else ""
 
 
 def _filter_relations_by_date(df: pd.DataFrame, project_dir: Path, prefix: str, relation: str,

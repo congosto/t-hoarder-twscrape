@@ -529,13 +529,23 @@ sets are generated, one per dataset type:
   - **Add an events file**, to annotate the charts at specific points in
     time (the "what happened that day" that explains a spike).
   - **Zoom**: restrict all the charts to the stretch between two given
-    dates, instead of using the whole period.
+    dates, instead of using the whole period. Zoomed charts and reports carry
+    the period in their name, like the graphs
+    (`{dataset}_graficas_from-…_to-…/`, `{dataset}_informe_tweets_from-…_to-….html`),
+    so they do not overwrite those of the whole period.
   - **Show about**: adds two charts with the cumulative tweets by the
     **country of the author's account** (`about_account_based_in`, from
     *Download → About*), for the 10 countries with most tweets: one counts
     only the tweets and the other adds the RTs they received (amplification).
     Both show the same countries with the same colors, to compare them side
-    by side. Requires `{dataset}_about.csv`.
+    by side. It also adds a **writing vs. amplification** scatter plot: each
+    country is a dot, with its tweets on the X axis and the RTs received per
+    tweet on the Y axis (both on a log scale), and the medians split the
+    plane into four quadrants ("writes a lot / little, highly / little
+    amplified"). Dots are colored by continent; hollow ones are regions, when
+    X gives an area ("Europe", "West Asia"…) instead of a country. Only
+    countries with at least 10 tweets are included. Requires
+    `{dataset}_about.csv`.
 
 - **Users** — for *User TL* datasets: the tweets of one or more profiles.
   The charts are generated **for a single profile at a time**, so besides

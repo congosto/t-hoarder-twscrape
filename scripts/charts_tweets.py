@@ -12,10 +12,11 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.ticker import EngFormatter
+from matplotlib.lines import Line2D
+from matplotlib.ticker import EngFormatter, FuncFormatter
 from wordcloud import WordCloud
 
-from utils_charts import (apply_date_axis, draw_events, expand_time, my_theme,
+from utils_charts import (apply_date_axis, draw_events, expand_time, legend_top, my_theme,
                           my_theme_colored_title, style_twin_axis)
 
 try:
@@ -962,6 +963,121 @@ def draw_about_acumulate(df, ini_date, end_date, RTs, base_title, events=None, s
     subtitle = ("Country the account is based in (X about), top "
                 f"{len(countries)}" + (" (Adding retweet amplification)" if RTs else ""))
     my_theme(ax, title=f"{base_title}: Accumulated tweets by account country", subtitle=subtitle)
+    fig.tight_layout()
+    return fig
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# draw_about_scatter
+#
+# dispersión escritura vs. amplificación por país de la cuenta (about),
+# coloreada por continente
+#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# regiones que X da en lugar de un país -> código de continente de geonames
+ABOUT_REGIONS = {
+    "Europe": "EU", "Eastern Europe (Non-EU)": "EU", "North America": "NA",
+    "Caribbean": "NA", "Central America": "NA", "South America": "SA", "Africa": "AF",
+    "North Africa": "AF", "Asia": "AS", "West Asia": "AS", "East Asia": "AS",
+    "South Asia": "AS", "Southeast Asia": "AS", "Central Asia": "AS",
+    "Australasia": "OC", "Oceania": "OC",
+}
+# nombres que da X (oficiales, tipo ONU) que geonamescache escribe de otra forma
+ABOUT_COUNTRY_ALIASES = {
+    "Netherlands": "The Netherlands", "Czech Republic": "Czechia", "Viet Nam": "Vietnam",
+    "Russian Federation": "Russia", "Korea": "South Korea", "Macedonia": "North Macedonia",
+    "Congo": "Republic of the Congo", "Syrian Arab Republic": "Syria",
+    "Côte d'Ivoire": "Ivory Coast", "Curaçao": "Curacao",
+    "Lao People's Democratic Republic": "Laos",
+}
+# continentes en orden fijo con los 6 primeros tonos de la paleta categórica
+ABOUT_CONTINENTS = [("EU", "Europe", "#2a78d6"), ("NA", "North America", "#eb6834"),
+                    ("AS", "Asia", "#1baf7a"), ("SA", "South America", "#eda100"),
+                    ("AF", "Africa", "#e87ba4"), ("OC", "Oceania", "#008300")]
+_continent_table = None
+
+
+def _about_continent(name):
+    """Código de continente (EU, NA, AS, SA, AF, OC) de un país o región de X."""
+    global _continent_table
+    if name in ABOUT_REGIONS:
+        return ABOUT_REGIONS[name]
+    if _continent_table is None:
+        import geonamescache
+        _continent_table = {c["name"]: c["continentcode"]
+                            for c in geonamescache.GeonamesCache().get_countries().values()}
+    return _continent_table.get(ABOUT_COUNTRY_ALIASES.get(name, name))
+
+
+def draw_about_scatter(df, ini_date, end_date, base_title, min_tweets=10):
+    """Escritura vs. amplificación por país de la cuenta del autor: tweets (X) frente
+    a RTs recibidos por tweet (Y), ambos en escala log, con las medianas como
+    cuadrantes. Color = continente; círculo hueco = región (X no da el país). Solo
+    países con >= min_tweets tweets, para que uno con 2 tweets virales no domine."""
+    df = df[(df["date"] >= ini_date) & (df["date"] <= end_date)]
+    df = df.dropna(subset=["about_account_based_in"]).copy()
+    df["retweet_count"] = pd.to_numeric(df["retweet_count"], errors="coerce").fillna(0)
+    agg = (df.groupby("about_account_based_in")
+           .agg(tweets=("about_account_based_in", "size"), rts=("retweet_count", "sum")))
+    agg = agg[agg["tweets"] >= min_tweets].copy()
+
+    fig, ax = plt.subplots(figsize=(10, 7))
+    if agg.empty:
+        ax.text(0.5, 0.5, f"No country with >= {min_tweets} tweets", ha="center",
+                transform=ax.transAxes, color=COLOR_TEXTO)
+        my_theme(ax, title=f"{base_title}: Writing vs. amplification by account country")
+        return fig
+
+    agg["rts_per_tweet"] = agg["rts"] / agg["tweets"]
+    agg["is_region"] = agg.index.isin(list(ABOUT_REGIONS))
+    agg["continent"] = [_about_continent(n) for n in agg.index]
+    cont_color = {code: color for code, _, color in ABOUT_CONTINENTS}
+    colors = agg["continent"].map(cont_color).fillna("#a3a29b")
+    y = agg["rts_per_tweet"].clip(lower=0.1)  # en log los de 0 RTs quedan pegados abajo
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.axvline(agg["tweets"].median(), color=COLOR_TEXTO, linestyle="--", linewidth=0.8, alpha=0.6)
+    ax.axhline(agg["rts_per_tweet"].median(), color=COLOR_TEXTO, linestyle="--",
+               linewidth=0.8, alpha=0.6)
+
+    countries, regions = agg[~agg["is_region"]], agg[agg["is_region"]]
+    ax.scatter(countries["tweets"], y[countries.index], s=60, color=colors[countries.index],
+               alpha=0.9, edgecolor="white", linewidth=1, zorder=3)
+    ax.scatter(regions["tweets"], y[regions.index], s=60, facecolor="white",
+               edgecolor=colors[regions.index], linewidth=1.8, zorder=3)
+    _repel(ax, list(agg["tweets"]), list(y), list(agg.index), size=8, max_texts=len(agg),
+           min_sep_px=None, ha="left", va="center")
+
+    xmin, xmax = agg["tweets"].min() * 0.8, agg["tweets"].max() * 1.6
+    ymin, ymax = y.min() * 0.6, y.max() * 1.8
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    kw = dict(color=COLOR_TEXTO, fontsize=9, alpha=0.8, style="italic")
+    ax.text(xmax / 1.05, ymax / 1.1, "writes a lot, highly amplified", ha="right", va="top", **kw)
+    ax.text(xmin * 1.05, ymax / 1.1, "writes little, highly amplified", ha="left", va="top", **kw)
+    ax.text(xmax / 1.05, ymin * 1.1, "writes a lot, little amplified", ha="right", va="bottom", **kw)
+    ax.text(xmin * 1.05, ymin * 1.1, "writes little, little amplified", ha="left", va="bottom", **kw)
+
+    fmt = FuncFormatter(lambda v, _: f"{v:,.0f}" if v >= 1 else f"{v:g}")
+    for axis in (ax.xaxis, ax.yaxis):
+        axis.set_major_formatter(fmt)
+        axis.set_minor_formatter(FuncFormatter(lambda v, _: ""))
+    ax.set_xlabel("Tweets (log)")
+    ax.set_ylabel("RTs received per tweet (log)")
+
+    present = [(name, color) for code, name, color in ABOUT_CONTINENTS
+               if code in set(agg["continent"])]
+    handles = [Line2D([], [], marker="o", linestyle="", markersize=7, color=color)
+               for _, color in present]
+    handles.append(Line2D([], [], marker="o", linestyle="", markersize=7, markerfacecolor="white",
+                          markeredgecolor=COLOR_TEXTO, markeredgewidth=1.5))
+    legend_top(ax, handles, [n for n, _ in present] + ["Region (no country)"], fontsize=8)
+    my_theme(ax, title=f"{base_title}: Writing vs. amplification by account country",
+             subtitle=f"Countries with >= {min_tweets} tweets · dashed lines = medians",
+             subtitle_y=1.055, title_pad=48)
     fig.tight_layout()
     return fig
 

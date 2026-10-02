@@ -10,6 +10,7 @@ import pandas as pd
 import charts_tweets as _charts
 import charts_profile as _charts_profile
 import translate as _translate
+from utils import zoom_tag
 from utils_charts import savefig
 
 
@@ -164,7 +165,7 @@ def generate_tweet_charts(
 
     Si show_about, añade los tweets acumulados por país de la cuenta del autor
     (about_account_based_in de {prefix}_about.csv, Download > About), sin y con
-    amplificación de RTs.
+    amplificación de RTs, y la dispersión escritura vs. amplificación por país.
 
     Devuelve (figs, image_path): figs es un dict {nombre: matplotlib.Figure},
     image_path es la carpeta donde se han guardado los PNG.
@@ -177,7 +178,10 @@ def generate_tweet_charts(
     if show_about:
         tweets["about_account_based_in"] = _about_country(project_dir, prefix, tweets)
 
-    image_path = project_dir / f"{prefix}_graficas"
+    # con zoom, las gráficas van a su propia carpeta para no pisar las del periodo
+    # completo (mismo sufijo que los grafos con zoom)
+    tag = zoom_tag(min_date_zoom, max_date_zoom) if (min_date_zoom and max_date_zoom) else ""
+    image_path = project_dir / f"{prefix}_graficas{tag}"
     image_path.mkdir(exist_ok=True)
 
     tweets["date"] = tweets["date"].dt.tz_convert(time_zone).dt.tz_localize(None).dt.floor("s")
@@ -301,6 +305,11 @@ def generate_tweet_charts(
             "Account country - cumulative (with amplification)",
             _charts.draw_about_acumulate(tweets, min_date, max_date, True, base_title, events, slot_time),
             f"{prefix}_about_country_RTs.png",
+        )
+        add(
+            "Account country - writing vs. amplification",
+            _charts.draw_about_scatter(tweets, min_date, max_date, base_title),
+            f"{prefix}_about_country_scatter.png",
         )
 
     if communities is not None and not communities.empty:
@@ -558,13 +567,17 @@ def generate_tweet_report(project_dir: Path, prefix: str, base_title: str, *args
     """Genera las graficas de tweets y las empaqueta en un informe HTML.
 
     Mismos parametros que generate_tweet_charts. Devuelve (html, out_path);
-    el informe se guarda en {prefix}_informe_tweets.html dentro del proyecto.
+    el informe se guarda en {prefix}_informe_tweets.html dentro del proyecto, con
+    el sufijo del zoom si se pidió (_from-…_to-…) para no pisar el del periodo completo.
     """
     import matplotlib.pyplot as plt
 
     figs, _ = generate_tweet_charts(project_dir, prefix, base_title, *args, log=log, **kwargs)
-    html = build_html_report(figs, title=f"{base_title}: tweets report", subtitle=f"Dataset {prefix}")
-    out_path = Path(project_dir) / f"{prefix}_informe_tweets.html"
+    zmin, zmax = kwargs.get("min_date_zoom"), kwargs.get("max_date_zoom")
+    tag = zoom_tag(zmin, zmax) if (zmin and zmax) else ""
+    subtitle = f"Dataset {prefix}" + (f" — zoom {zmin} → {zmax}" if tag else "")
+    html = build_html_report(figs, title=f"{base_title}: tweets report", subtitle=subtitle)
+    out_path = Path(project_dir) / f"{prefix}_informe_tweets{tag}.html"
     out_path.write_text(html, encoding="utf-8")
     for fig in figs.values():
         plt.close(fig)

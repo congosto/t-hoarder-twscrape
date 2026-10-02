@@ -1160,7 +1160,8 @@ with left:
                 tg_about = st.checkbox(
                     "Show about (account country)", key="tg_about",
                     help="Cumulative tweets by the country the author's account is based in "
-                         "(top 10), with and without RT amplification. Requires "
+                         "(top 10), with and without RT amplification, and writing vs. "
+                         "amplification by country (colored by continent). Requires "
                          "{dataset}_about.csv (Download > About).",
                 )
 
