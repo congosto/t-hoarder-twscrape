@@ -194,16 +194,35 @@ de verdad hace falta decidir: **el tamaño de la ventana**.
    1 mes). Las ventanas de un día o más se alinean a medianoche UTC,
    porque Latest trunca al día la hora del `until:`.
 2. Si una ventana desborda (500 tweets o más: puede estar incompleta), la
-   **re-descarga subdividida** en la siguiente frecuencia de la escalera
-   mes → semana → día → 6 h → 3 h → 1 h → 30 min, recursivamente hasta que
-   ninguna subventana desborde o se llegue a los 30 minutos.
-3. En las ventanas de menos de un día, la consulta usa `since_time:` /
-   `until_time:` en epoch, que es la forma de que Latest respete la hora;
-   el recorte fino al rango pedido lo hace la app en local, al rematar la
-   descarga, junto con la eliminación de duplicados.
+   **continúa** en vez de volver a descargarla entera. Latest entrega los
+   tweets, a grandes rasgos, del más nuevo al más antiguo, así que lo
+   recibido ya cubre el final de la ventana: basta pedir lo que falta,
+   desde el inicio de la ventana hasta la **frontera** de lo recibido, y
+   repetir hasta que una consulta no desborde. La frontera es la mediana
+   de las fechas de la última página recibida y no el tweet más antiguo,
+   porque el orden de Latest no es estricto: entre los tweets se cuelan
+   algunos más antiguos sueltos, y tomar el más antiguo dejaría huecos.
+   Solo si la frontera no avanza se subdivide la ventana con la siguiente
+   frecuencia de la escalera mes → semana → día → 6 h → 3 h → 1 h → 30 min.
+3. En las ventanas de menos de un día y en las continuaciones (que acaban
+   a una hora concreta), la consulta usa `since_time:` / `until_time:` en
+   epoch, que es la forma de que Latest respete la hora; el recorte fino al
+   rango pedido lo hace la app en local, al rematar la descarga, junto con
+   la eliminación de duplicados.
 
 El método respeta la pausa entre todas las consultas, también las de las
-subdivisiones, para no quemar la cuota en ráfaga.
+continuaciones, para no quemar la cuota en ráfaga.
+
+> **Cambio (17-10-2026): continuar en vez de subdividir.** Hasta esta
+> versión, una ventana que desbordaba se volvía a descargar entera en
+> ventanas más pequeñas, repitiendo todo lo ya recibido (casi la mitad de
+> lo descargado eran duplicados, según el análisis de Marcelino Madrigal).
+> Ahora se continúa desde la frontera. En una prueba real con una consulta
+> de unos 3.000 tweets por hora, la continuación recuperó el 98 % de una
+> hora con 4 consultas y las mismas peticiones que ventanas de 10 minutos
+> hechas a mano. En una simulación de tres horas, la subdivisión, que
+> llegaba a ventanas de 30 minutos que seguían desbordando, se quedaba en
+> torno al 60 % con un coste parecido.
 
 > **Cambio (3-9-2026): fuera Top de la descarga optimizada.** Hasta esta
 > versión, la descarga optimizada cambiaba a *Top* en las ventanas
@@ -232,6 +251,17 @@ Todas las descargas son **reanudables**: si se interrumpen (o se cortan a
 propósito), basta relanzarlas con el mismo dataset y continúan donde se
 quedaron, gracias al contexto que se guarda con cada dataset.
 
+Las descargas de tweets (*Search* y *User TL*) anotan además lo que han
+costado, para comparar alternativas (modo, frecuencia, número de cuentas…).
+Al terminar, la fila `end_download` del log de contexto guarda el tiempo
+real (`elapsed`, con las pausas y las esperas por rate limit), el número de
+consultas (`queries`) y los tweets recibidos en bruto (`tweets_received`),
+junto al total sin duplicados (`total_tweets`). Si la descarga se corta, se
+anota una fila `interrupted_download` con lo gastado hasta ese momento, y al
+terminarla la fila `end_download` suma todas las sesiones (`sessions`). Si
+se mata el proceso o se apaga el ordenador, el tiempo de esa sesión se
+pierde.
+
 ### Las opciones, una a una
 
 - **Search** — búsqueda histórica de tweets a partir de una query. Campos:
@@ -246,7 +276,7 @@ quedaron, gracias al contexto que se guarda con cada dataset.
   - *Mode*: la decisión clave del formulario.
     - **Optimized** (recomendado): no pide nada más. Aplica el **método
       optimizado** descrito en los conceptos previos: siempre Latest, la
-      app elige sola la frecuencia y subdivide las ventanas que desbordan
+      app elige sola la frecuencia y continúa las ventanas que desbordan
       hasta capturar cada tramo completo.
     - **Manual**: pide además *Product* (Top | Latest) y *Frequency*, y los
       usa tal cual. El overflow aquí solo se avisa en consola y se anota en

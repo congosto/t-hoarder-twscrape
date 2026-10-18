@@ -8,7 +8,12 @@ Dentro de cada log se anotan las operaciones según se producen, una fila por
 operación, con una columna 'operation' y la unión de los campos:
   download_tweets: last_date, since, until, query, product, frequency
   download_users:  last_date, order, username, since, until, product, frequency
-  end_download:    date, total_tweets
+  end_download:    date, total_tweets, elapsed (H:MM:SS, con pausas y esperas
+                   de rate limit), queries, tweets_received (en bruto, con
+                   duplicados y fuera de rango), sessions; suman las sesiones
+                   interrumpidas desde la última descarga terminada
+  interrupted_download: date, elapsed, queries, tweets_received de una sesión
+                   que se cortó (Stop o error) antes de terminar
   merge_datasets:  date, merged_from, n_datasets, total_tweets
   clean_dataset:   date, cleaned_from, langs, positives, false_positives,
                    total_before, total_after
@@ -28,6 +33,7 @@ _LOG_COLUMNS = [
     "order", "username", "date", "total_tweets", "merged_from", "n_datasets",
     "cleaned_from", "langs", "positives", "false_positives", "total_before", "total_after",
     "restored_from", "imported_from", "about_from", "n_users", "n_with_about", "about_status",
+    "elapsed", "queries", "tweets_received", "sessions",
 ]
 
 
@@ -107,12 +113,49 @@ def log_download_users(dataset, prefix, last_date, order, username, since, until
     }, upsert_key="username")
 
 
-def log_end_download(dataset, prefix, log_type, total_tweets) -> None:
+def log_end_download(dataset, prefix, log_type, total_tweets, elapsed="", queries="",
+                     tweets_received="", sessions="") -> None:
     _record(dataset, prefix, log_type, {
         "operation": "end_download",
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total_tweets": str(total_tweets),
+        "elapsed": str(elapsed), "queries": str(queries),
+        "tweets_received": str(tweets_received), "sessions": str(sessions),
     })
+
+
+def log_interrupted_download(dataset, prefix, log_type, elapsed, queries,
+                             tweets_received) -> None:
+    _record(dataset, prefix, log_type, {
+        "operation": "interrupted_download",
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "elapsed": str(elapsed), "queries": str(queries),
+        "tweets_received": str(tweets_received),
+    })
+
+
+def _elapsed_seconds(value: str) -> int:
+    try:
+        h, m, s = (int(x) for x in str(value).split(":"))
+        return h * 3600 + m * 60 + s
+    except ValueError:
+        return 0
+
+
+def get_interrupted_sessions(dataset, prefix, log_type) -> tuple[int, int, int, int]:
+    """Suma de las sesiones interrumpidas desde la última descarga terminada:
+    (segundos, consultas, tweets recibidos, nº de sesiones), para que el
+    end_download de la descarga reanudada dé el coste total."""
+    df = _read_log(Path(dataset), prefix, log_type)
+    if df is None or df.empty:
+        return 0, 0, 0, 0
+    ends = df.index[df["operation"] == "end_download"]
+    if len(ends):
+        df = df.loc[ends[-1] + 1:]
+    rows = df[df["operation"] == "interrupted_download"]
+    num = lambda c: int(pd.to_numeric(rows[c], errors="coerce").fillna(0).sum())
+    return (sum(_elapsed_seconds(v) for v in rows["elapsed"]), num("queries"),
+            num("tweets_received"), len(rows))
 
 
 def log_merge_datasets(dataset, prefix, log_type, sources, total) -> None:

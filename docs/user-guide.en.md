@@ -191,16 +191,34 @@ thing that really needs deciding: **the window size**.
    longer → 1-month). Windows of one day or longer are aligned to UTC
    midnight, because Latest truncates the `until:` time to the day.
 2. If a window overflows (500 tweets or more: it may be incomplete), it
-   **re-downloads it subdivided** at the next frequency of the ladder
-   month → week → day → 6 h → 3 h → 1 h → 30 min, recursively until no
-   sub-window overflows or 30 minutes is reached.
-3. On windows shorter than a day, the query uses `since_time:` /
-   `until_time:` in epoch, which is how Latest honours the time of day;
-   the fine trim to the requested range is done locally when the download
-   is finalized, together with the removal of duplicates.
+   **continues it** instead of downloading it all over again. Latest
+   delivers tweets roughly from newest to oldest, so what was received
+   already covers the end of the window: it is enough to ask for what is
+   missing, from the start of the window to the **frontier** of what was
+   received, and repeat until a query no longer overflows. The frontier is
+   the median date of the last page received, not the oldest tweet,
+   because Latest's order is not strict: a few older stray tweets slip in
+   among the rest, and taking the oldest one would leave gaps. Only if the
+   frontier does not move does it subdivide the window at the next
+   frequency of the ladder month → week → day → 6 h → 3 h → 1 h → 30 min.
+3. On windows shorter than a day and on continuations (which end at a
+   specific time), the query uses `since_time:` / `until_time:` in epoch,
+   which is how Latest honours the time of day; the fine trim to the
+   requested range is done locally when the download is finalized,
+   together with the removal of duplicates.
 
 The method respects the pause between all queries, including the
-subdivided ones, to avoid burning the quota in a burst.
+continuations, to avoid burning the quota in a burst.
+
+> **Change (2026-10-17): continue instead of subdividing.** Until this
+> version, an overflowing window was downloaded again in full in smaller
+> windows, repeating everything already received (almost half of what was
+> downloaded were duplicates, according to Marcelino Madrigal's analysis).
+> Now it continues from the frontier. In a real test with a query of about
+> 3,000 tweets per hour, continuation recovered 98 % of one hour with 4
+> queries and the same number of requests as hand-made 10-minute windows.
+> In a three-hour simulation, subdivision, which reached 30-minute windows
+> that still overflowed, stayed at around 60 % at a similar cost.
 
 > **Change (2026-09-03): Top is out of the optimized download.** Until
 > this version, the optimized download switched to *Top* on sub-day
@@ -229,6 +247,17 @@ All downloads are **resumable**: if they are interrupted (or stopped on
 purpose), just relaunch them with the same dataset and they continue where
 they left off, thanks to the context saved with each dataset.
 
+Tweet downloads (*Search* and *User TL*) also record what they cost, so
+that alternatives can be compared (mode, frequency, number of accounts…).
+When they finish, the `end_download` row of the context log stores the
+real time (`elapsed`, including pauses and rate-limit waits), the number
+of queries (`queries`) and the raw tweets received (`tweets_received`),
+next to the total without duplicates (`total_tweets`). If the download is
+cut short, an `interrupted_download` row records what was spent up to
+that point, and when it is finished the `end_download` row adds up all
+the sessions (`sessions`). If the process is killed or the computer is
+switched off, the time of that session is lost.
+
 ### The options, one by one
 
 - **Search** — historical tweet search from a query. Fields:
@@ -243,7 +272,7 @@ they left off, thanks to the context saved with each dataset.
   - *Mode*: the key decision of the form.
     - **Optimized** (recommended): asks for nothing else. It applies the
       **optimized method** described in the key concepts: always Latest,
-      with the app picking the frequency by itself and subdividing
+      with the app picking the frequency by itself and continuing
       overflowing windows until each stretch is fully captured.
     - **Manual**: also asks for *Product* (Top | Latest) and *Frequency*,
       and uses them as given. Overflow here is only reported in the console
