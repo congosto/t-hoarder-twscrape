@@ -2,6 +2,7 @@
 
 import faulthandler
 import sys
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -11,11 +12,14 @@ import streamlit.components.v1 as st_components
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Si Python muere por un error fatal (crash nativo, sin traceback normal), deja la
-# pila de todos los hilos en streamlit_fatal.log: la consola donde se lanzó la app
-# puede no existir ya. Una vez por proceso (Streamlit re-ejecuta este fichero).
+# pila de todos los hilos en t-hoarder_streamlit_fatal.log: la consola donde se
+# lanzó la app puede no existir ya. Una vez por proceso (Streamlit re-ejecuta este
+# fichero). Va en la carpeta temporal del sistema, NO junto a la app: faulthandler
+# mantiene el fichero abierto mientras vive el proceso, y dentro de una carpeta
+# sincronizada (Dropbox, OneDrive…) eso dejaba la sincronización atascada.
+FATAL_LOG = Path(tempfile.gettempdir()) / "t-hoarder_streamlit_fatal.log"
 if not faulthandler.is_enabled():
-    faulthandler.enable(open(REPO_ROOT / "streamlit_fatal.log", "a", encoding="utf-8"),
-                        all_threads=True)
+    faulthandler.enable(open(FATAL_LOG, "a", encoding="utf-8"), all_threads=True)
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import accounts, compare, context, dashboard, download, projects, scraping, utils  # noqa: E402
 from async_utils import run_async  # noqa: E402
