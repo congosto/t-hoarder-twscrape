@@ -338,10 +338,14 @@ _OPT_OVERFLOW = 500
 
 
 def _initial_frequency(since, until) -> str:
+    """Ventanas anchas (18-10-2026): con la continuación, una ventana que
+    desborda se completa desde la frontera sin repetir nada, así que trocear
+    de antemano solo añade consultas en los tramos tranquilos. Antes: hasta
+    1 mes -> día; hasta 6 meses -> semana; más -> mes."""
     days = (_to_utc_timestamp(until) - _to_utc_timestamp(since)).total_seconds() / 86400
-    if days <= 31:
+    if days < 7:
         return "1 day"
-    if days <= 183:
+    if days < 31:
         return "1 week"
     return "1 month"
 

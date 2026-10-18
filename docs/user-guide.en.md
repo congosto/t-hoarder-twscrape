@@ -187,9 +187,12 @@ The optimized download always uses ***Latest*** and automates the one
 thing that really needs deciding: **the window size**.
 
 1. Depending on the length of the requested period, it picks the initial
-   frequency (up to 1 month → 1-day windows; up to 6 months → 1-week;
-   longer → 1-month). Windows of one day or longer are aligned to UTC
-   midnight, because Latest truncates the `until:` time to the day.
+   frequency (under 1 week → 1-day windows; under 1 month → 1-week;
+   longer → 1-month). Windows are wide on purpose: if one overflows, it is
+   completed from the frontier (step 2) without repeating anything, so
+   slicing in advance would only add queries on quiet stretches. Windows
+   of one day or longer are aligned to UTC midnight, because Latest
+   truncates the `until:` time to the day.
 2. If a window overflows (500 tweets or more: it may be incomplete), it
    **continues it** instead of downloading it all over again. Latest
    delivers tweets roughly from newest to oldest, so what was received

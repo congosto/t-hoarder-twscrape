@@ -190,9 +190,12 @@ La descarga optimizada usa **siempre *Latest*** y automatiza lo único que
 de verdad hace falta decidir: **el tamaño de la ventana**.
 
 1. Según la longitud del periodo pedido, elige la frecuencia inicial
-   (hasta 1 mes → ventanas de 1 día; hasta 6 meses → de 1 semana; más → de
-   1 mes). Las ventanas de un día o más se alinean a medianoche UTC,
-   porque Latest trunca al día la hora del `until:`.
+   (menos de 1 semana → ventanas de 1 día; menos de 1 mes → de 1 semana;
+   más → de 1 mes). Las ventanas son anchas a propósito: si una desborda,
+   se completa desde la frontera (paso 2) sin repetir nada, así que trocear
+   de antemano solo añadiría consultas en los tramos tranquilos. Las
+   ventanas de un día o más se alinean a medianoche UTC, porque Latest
+   trunca al día la hora del `until:`.
 2. Si una ventana desborda (500 tweets o más: puede estar incompleta), la
    **continúa** en vez de volver a descargarla entera. Latest entrega los
    tweets, a grandes rasgos, del más nuevo al más antiguo, así que lo
