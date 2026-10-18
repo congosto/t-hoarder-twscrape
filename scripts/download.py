@@ -583,7 +583,8 @@ def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: l
 
 
 def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
-                  sleep_time: int = 5, n: int = 10000, log=print) -> Path:
+                  sleep_time: float = 1, n: int = 10000, retries: int = 4,
+                  retry_wait: int = 300, page_pause: float = 0.5, log=print) -> Path:
     _log_handler = _start_forwarding_twscrape_logs(log)
     try:
         output = Path(data_path) / dataset
@@ -607,7 +608,22 @@ def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
                 continue
 
             log(f"Download RTs from {tweet_urls[i]} {i + 1}/{len(tweet_ids)}")
-            users = run_async(scraping.get_retweeters(tweet_id, n=n))
+            # bloqueo de Cloudflare/X: se reintenta el mismo tweet con esperas
+            # crecientes y, si persiste, se para sin avanzar el cursor
+            for attempt in range(1, retries + 1):
+                try:
+                    users = run_async(scraping.get_retweeters(tweet_id, n=n, page_pause=page_pause))
+                    break
+                except RuntimeError as e:
+                    if attempt == retries:
+                        raise RuntimeError(
+                            f"{tweet_urls[i]}: {e} after {retries} attempts; stopped at "
+                            f"{i + 1}/{len(tweet_ids)}. Progress saved in {output_file.name}: "
+                            f"launch it again later to resume."
+                        )
+                    wait = retry_wait * attempt
+                    log(f"{e}; retrying in {wait} seconds ({attempt}/{retries})...")
+                    time.sleep(wait)
             log(f"Downloaded {len(users)} retweeters")
             if users:
                 df = pd.DataFrame(users)

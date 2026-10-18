@@ -708,6 +708,8 @@ with left:
                         set_result(output_file)
                     except FileNotFoundError:
                         log_error(f"{rt_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
+                    except RuntimeError as e:
+                        log_error(str(e))
         with tab4:
             cm_prefix = prefix_input("Dataset", "cm_prefix")
             cm_min = st.number_input("Min Replies", min_value=0, value=1, key="cm_min")

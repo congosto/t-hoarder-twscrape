@@ -1,4 +1,7 @@
-from twscrape import API
+import asyncio
+
+from loguru import logger
+from twscrape import API, parse_users
 
 from config import ACCOUNTS_DB
 
@@ -161,11 +164,35 @@ async def tweet_replies(tweet_id: int | str, n: int = 100) -> list[dict]:
     return replies
 
 
-async def get_retweeters(tweet_id: int | str, n: int = 100) -> list[dict]:
-    api = API(ACCOUNTS_DB)
-    retweeters = []
-    async for user in api.retweeters(int(tweet_id), limit=n):
-        retweeters.append(_user_to_dict(user))
+async def get_retweeters(tweet_id: int | str, n: int = 100, page_pause: float = 0.5) -> list[dict]:
+    """Si twscrape aborta la petición (p. ej. "Blocked by Cloudflare: 429") el
+    iterador termina en silencio, igual que si el tweet no tuviera más RTs. Se
+    vigila su logger para distinguirlo y lanzar RuntimeError, de modo que quien
+    llama reintente en vez de dar el tweet por descargado con 0 (o con una parte).
+
+    page_pause espacia las páginas (20 usuarios cada una): twscrape las pide
+    seguidas y un tweet con miles de RTs eran cientos de peticiones en ráfaga
+    desde la misma IP, que es lo que disparaba el 429 de Cloudflare (12-10-2026).
+    Dormir con el generador suspendido retrasa la petición de la página siguiente."""
+    blocked = []
+
+    def sink(message):
+        if message.record["name"].startswith("twscrape") and \
+                message.record["message"].startswith("Blocked by"):
+            blocked.append(message.record["message"])
+
+    handler = logger.add(sink, level="WARNING")
+    try:
+        api = API(ACCOUNTS_DB)
+        retweeters = []
+        async for rep in api.retweeters_raw(int(tweet_id), limit=n):
+            retweeters.extend(_user_to_dict(u) for u in parse_users(rep.json(), n))
+            if page_pause:
+                await asyncio.sleep(page_pause)
+    finally:
+        logger.remove(handler)
+    if blocked:
+        raise RuntimeError(f"request aborted by twscrape ({blocked[-1]})")
     return retweeters
 
 
