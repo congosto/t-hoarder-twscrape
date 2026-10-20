@@ -21,7 +21,7 @@ FATAL_LOG = Path(tempfile.gettempdir()) / "t-hoarder_streamlit_fatal.log"
 if not faulthandler.is_enabled():
     faulthandler.enable(open(FATAL_LOG, "a", encoding="utf-8"), all_threads=True)
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import accounts, compare, context, dashboard, download, projects, scraping, utils  # noqa: E402
+import accounts, compare, config, context, dashboard, download, projects, scraping, utils  # noqa: E402
 from async_utils import run_async  # noqa: E402
 
 DATA_PATH = str(REPO_ROOT / "data")
@@ -112,6 +112,10 @@ for col, name in zip(nav_cols, SECTIONS):
             # sin este rerun, en la pasada del clic los botones ya se pintaron
             # con la sección anterior y el resaltado rojo se queda en la vieja
             st.rerun()
+
+# BD de cuentas antigua en app/ que no se pudo migrar sola (ver config.py)
+if config.ACCOUNTS_DB_WARNING:
+    st.warning(config.ACCOUNTS_DB_WARNING)
 
 st.divider()
 

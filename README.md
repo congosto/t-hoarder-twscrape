@@ -211,8 +211,8 @@ sqlite3.OperationalError: disk I/O error
 **Solución:** guardar `accounts.db` en una carpeta que **no** se sincronice. Para
 ello, define la variable de entorno **`THOARDER_ACCOUNTS_DB`** con la **carpeta**
 (no el fichero) donde quieres que viva la base de datos; la app creará
-`accounts.db` dentro. Si la variable no existe, todo sigue igual que ahora
-(la base de datos se queda junto a la app).
+`accounts.db` dentro. Si la variable no existe, la base de datos se queda en la
+carpeta principal de la app (`accounts.db`, junto a `README.md`).
 
 En **Windows** (PowerShell), una vez:
 
@@ -229,6 +229,12 @@ export THOARDER_ACCOUNTS_DB="$HOME/t-hoarder_twscraper"
 Cierra y vuelve a abrir la terminal (y la app) para que tome el cambio. Si ya
 tenías cuentas dadas de alta, copia tu `accounts.db` anterior a esa carpeta para
 no tener que volver a añadirlas.
+
+> **Si arrancabas la app desde la carpeta `app\`:** las versiones anteriores
+> guardaban entonces las cuentas en `app\accounts.db`. Ahora la app las mueve
+> sola a la carpeta principal la primera vez que arranca. Si ya había un
+> `accounts.db` en la carpeta principal, la app usa ese y muestra un aviso con la
+> ruta del antiguo, por si te falta alguna cuenta.
 
 ## Estructura del repo
 

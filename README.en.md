@@ -210,8 +210,8 @@ sqlite3.OperationalError: disk I/O error
 **Fix:** keep `accounts.db` in a folder that is **not** synced. Set the
 environment variable **`THOARDER_ACCOUNTS_DB`** to the **folder** (not the file)
 where the database should live; the app will create `accounts.db` inside it. If
-the variable is not set, everything stays as before (the database sits next to
-the app).
+the variable is not set, the database stays in the app's main folder
+(`accounts.db`, next to `README.md`).
 
 On **Windows** (PowerShell), once:
 
@@ -228,6 +228,12 @@ export THOARDER_ACCOUNTS_DB="$HOME/t-hoarder_twscraper"
 Close and reopen the terminal (and the app) for the change to take effect. If
 you already had accounts registered, copy your previous `accounts.db` into that
 folder so you don't have to add them again.
+
+> **If you used to start the app from the `app\` folder:** earlier versions then
+> stored the accounts in `app\accounts.db`. The app now moves that file to the
+> main folder by itself the first time it starts. If there was already an
+> `accounts.db` in the main folder, the app uses that one and shows a warning with
+> the path of the old file, in case any account is missing.
 
 ## Repository layout
 
