@@ -448,12 +448,15 @@ with left:
                 result = run_async(accounts.add_account(
                     new_username, new_password, new_email, new_email_password, cookies
                 ))
+                done = "cookies updated" if result.get("updated") else "added"
                 if result.get("success") and result.get("active"):
-                    log(f"Account @{new_username} added and active")
+                    log(f"Account @{new_username} {done} and active")
                 elif result.get("success"):
-                    log(f"Account @{new_username} added but not active (check cookies)")
+                    log(f"Account @{new_username} {done} but not active (check cookies)")
                 else:
                     log_error(f"{result.get('message')}")
+                if result.get("success"):
+                    st.session_state.active_accounts = run_async(accounts.list_accounts())
         with tab2:
             if st.button("Refresh list"):
                 st.session_state.active_accounts = run_async(accounts.list_accounts())
@@ -468,6 +471,7 @@ with left:
                 result = run_async(accounts.delete_account(del_username))
                 if result.get("success"):
                     log(f"Account @{del_username} deleted")
+                    st.session_state.active_accounts = run_async(accounts.list_accounts())
                 else:
                     log_error(f"{result.get('message')}")
 

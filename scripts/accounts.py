@@ -15,15 +15,23 @@ async def add_account(username: str, password: str, email: str, email_password: 
     api = API(db_file)
 
     try:
-        await api.pool.add_account(username, password, email, email_password, cookies=cookies)
+        # pool.add_account solo avisa si la cuenta ya existe y no toca nada:
+        # en ese caso se actualizan las cookies y se limpian sus bloqueos.
+        existing = await api.pool.get_account(username)
+        if existing:
+            await api.pool.add_account_cookies(username, cookies)
+            acc = await api.pool.get_account(username)
+            acc.locks = {}
+            await api.pool.save(acc)
+        else:
+            await api.pool.add_account(username, password, email, email_password, cookies=cookies)
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-    accounts = await api.pool.get_all()
-    target = next((acc for acc in accounts if acc.username == username), None)
+    target = await api.pool.get_account(username)
     active = bool(target.active) if target else False
 
-    return {"success": True, "active": active}
+    return {"success": True, "active": active, "updated": existing is not None}
 
 
 async def list_accounts(db_file: str = DEFAULT_DB_FILE) -> list[dict]:
