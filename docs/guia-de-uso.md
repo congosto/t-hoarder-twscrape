@@ -249,6 +249,7 @@ continuaciones, para no quemar la cuota en ráfaga.
   *About*. Parten de un dataset ya descargado y lo enriquecen: quién retuiteó
   sus tweets, qué respuestas recibieron y qué dice X de sus autores. Las tres
   primeras son la materia prima de los grafos de la sección *Graphs*.
+  *About* también puede partir de un CSV con nombres de usuario.
 
 Todas las descargas son **reanudables**: si se interrumpen (o se cortan a
 propósito), basta relanzarlas con el mismo dataset y continúan donde se
@@ -361,8 +362,9 @@ pierde.
     quita. El dataset solo da nombre al fichero de salida
     (`{dataset}_about.csv`), así que puede ser uno nuevo sin tweets. Al
     relanzarla se saltan los usuarios que ya están en `{dataset}_about.csv`,
-    de modo que se pueden ir añadiendo usuarios al CSV. Aquí no hay `renamed`: el identificador de
-    usuario es el que devuelve X para ese nombre.
+    de modo que se pueden ir añadiendo usuarios al CSV. Aquí no hay
+    `renamed`: el identificador de usuario es el que devuelve X para ese
+    nombre.
 
 ## Dashboard
 

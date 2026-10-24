@@ -244,7 +244,8 @@ continuations, to avoid burning the quota in a burst.
   Comments* and *About*. They start from an already-downloaded dataset and
   enrich it: who retweeted its tweets, what replies they received and what X
   says about their authors. The first three are the raw material for the
-  graphs of the *Graphs* section.
+  graphs of the *Graphs* section. *About* can also start from a CSV of
+  usernames.
 
 All downloads are **resumable**: if they are interrupted (or stopped on
 purpose), just relaunch them with the same dataset and they continue where
@@ -355,8 +356,8 @@ switched off, the time of that session is lost.
     column, the header is optional. A leading @ is removed. The dataset
     only names the output file (`{dataset}_about.csv`), so it can be a new one
     with no tweets. When relaunched it skips the users already in
-    `{dataset}_about.csv`, so you can keep adding users to the CSV. There is no `renamed`
-    here: the user id is the one X returns for that username.
+    `{dataset}_about.csv`, so you can keep adding users to the CSV. There is
+    no `renamed` here: the user id is the one X returns for that username.
 
 ## Dashboard
 
