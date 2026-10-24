@@ -920,9 +920,17 @@ ABOUT_FILE_COLS = [
 
 
 def get_about(data_path: Path, dataset: str, prefix: str, sleep_time: float = 1,
-              retries: int = 3, retry_wait: int = 60, log=print) -> Path:
+              retries: int = 3, retry_wait: int = 60, list_users: list[str] | None = None,
+              log=print) -> Path:
     """Descarga la página "About this account" de cada autor de {prefix}.csv en
     {prefix}_about.csv (una fila por usuario, en orden de user_id).
+
+    Con list_users (24-10-2026) los usuarios son esa lista de usernames, en su
+    orden, en vez de los autores de {prefix}.csv, que no hace falta que exista:
+    {prefix} solo da nombre a la salida. El user_id sale de la respuesta de X
+    (vacío si la cuenta no existe) y no hay comprobación de renamed, porque no
+    hay un user_id previo con el que comparar. Se reanuda saltando los usernames
+    (sin distinguir mayúsculas) que ya están en la salida, sin cursor.
 
     Solo autores de los tweets originales: se probó también con los retuiteadores
     (2-10-2026) y se quitó por coste: una petición por usuario y ~50 por cuenta
@@ -952,20 +960,32 @@ def get_about(data_path: Path, dataset: str, prefix: str, sleep_time: float = 1,
         file_in = output / f"{prefix}.csv"
         output_file = output / f"{prefix}_about.csv"
 
-        tweets = pd.read_csv(file_in, encoding="utf-8", dtype={"user_id": str},
-                             usecols=["user_id", "username"])
-        users = (tweets.dropna()
-                       .drop_duplicates(subset="user_id", keep="last")
-                       .assign(_uid=lambda d: d["user_id"].astype(int))
-                       .sort_values("_uid"))
-        done = (set(pd.read_csv(output_file, encoding="utf-8", dtype={"user_id": str},
-                                usecols=["user_id"])["user_id"])
-                if output_file.exists() else set())
-        last_user_id = context.get_context_about(output, prefix)
-        pending = users[~users["user_id"].isin(done)]
-        log(f"Authors in {file_in.name}: {len(users)} — already downloaded: {len(users) - len(pending)} "
-            f"— to download: {len(pending)}"
-            + (f" (resuming after user_id {last_user_id})" if last_user_id else ""))
+        previous = (pd.read_csv(output_file, encoding="utf-8", dtype={"user_id": str},
+                                usecols=["user_id", "username"])
+                    if output_file.exists() else pd.DataFrame(columns=["user_id", "username"]))
+        if list_users is not None:
+            unique = {}
+            for u in (u.strip().lstrip("@") for u in list_users):
+                if u:
+                    unique.setdefault(u.lower(), u)
+            users = pd.DataFrame({"user_id": None, "username": list(unique.values())})
+            done = set(previous["username"].dropna().str.lower())
+            pending = users[~users["username"].str.lower().isin(done)]
+            log(f"Users in the list: {len(users)} — already downloaded: {len(users) - len(pending)} "
+                f"— to download: {len(pending)}")
+        else:
+            tweets = pd.read_csv(file_in, encoding="utf-8", dtype={"user_id": str},
+                                 usecols=["user_id", "username"])
+            users = (tweets.dropna()
+                           .drop_duplicates(subset="user_id", keep="last")
+                           .assign(_uid=lambda d: d["user_id"].astype(int))
+                           .sort_values("_uid"))
+            done = set(previous["user_id"])
+            last_user_id = context.get_context_about(output, prefix)
+            pending = users[~users["user_id"].isin(done)]
+            log(f"Authors in {file_in.name}: {len(users)} — already downloaded: {len(users) - len(pending)} "
+                f"— to download: {len(pending)}"
+                + (f" (resuming after user_id {last_user_id})" if last_user_id else ""))
 
         api = API(ACCOUNTS_DB)
         append = output_file.exists()
@@ -983,15 +1003,16 @@ def get_about(data_path: Path, dataset: str, prefix: str, sleep_time: float = 1,
                     log(f"@{username}: {e}; retrying in {retry_wait} seconds ({attempt}/{retries})...")
                     time.sleep(retry_wait)
 
-            row = {**about, "user_id": user_id, "username": username,
+            row = {**about, "user_id": user_id or about.get("user_id"), "username": username,
                    "about_checked_at": str(datetime.now(timezone.utc).replace(microsecond=0))}
             # si la cuenta cambió de nombre, el screen_name puede ser ya de otra cuenta
-            if about["about_status"] == "ok" and about["user_id"] != user_id:
+            if user_id and about["about_status"] == "ok" and about["user_id"] != user_id:
                 row = {"user_id": user_id, "username": username, "about_status": "renamed",
                        "about_checked_at": row["about_checked_at"]}
             _write_csv(pd.DataFrame([row]).reindex(columns=ABOUT_FILE_COLS), output_file, append)
             append = True
-            context.put_context_about(output, prefix, user_id)
+            if user_id:
+                context.put_context_about(output, prefix, user_id)
             if i % 25 == 0 or i == len(pending):
                 log(f"Downloaded about of {i}/{len(pending)} users")
             if i < len(pending):

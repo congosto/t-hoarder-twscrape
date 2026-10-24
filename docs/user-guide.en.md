@@ -347,6 +347,16 @@ switched off, the time of that session is lost.
     mistaken for a non-existent account; just relaunch it later.
   - To have this data as columns of the dataset, use *Tools → About
     accounts* afterwards.
+  - **Users file**: instead of the authors of a dataset, you can ask for the
+    about of a list of users by uploading a **CSV with their usernames**. If
+    the CSV has several columns (for instance, the co-retweeters one), choose
+    the one with the usernames in *Username column*; it comes preselected when
+    it is called `Profile`, `username`, `user` or similar. With a single
+    column, the header is optional. A leading @ is removed. The dataset
+    only names the output file (`{dataset}_about.csv`), so it can be a new one
+    with no tweets. When relaunched it skips the users already in
+    `{dataset}_about.csv`, so you can keep adding users to the CSV. There is no `renamed`
+    here: the user id is the one X returns for that username.
 
 ## Dashboard
 

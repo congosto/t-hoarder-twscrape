@@ -69,6 +69,50 @@ def parse_users_list(text: str) -> tuple[list[str], str | None]:
         return [], f"Error: do not include '@' in usernames ({', '.join(with_at)})"
     return users, None
 
+_USERS_CSV_HEADERS = {"username", "usernames", "user", "users", "screen_name",
+                      "usuario", "usuarios", "name", "user_name", "profile"}
+
+
+def users_csv_columns(file) -> list[str]:
+    """Columnas de un CSV de usuarios (fila de cabecera). Lista vacía si no se puede
+    leer; deja el fichero al principio para volver a leerlo."""
+    try:
+        return list(pd.read_csv(file, nrows=0, encoding="utf-8-sig").columns)
+    except (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError):
+        return []
+    finally:
+        file.seek(0)
+
+
+def read_users_csv(file, column: str | None = None) -> tuple[list[str], str | None]:
+    """Lee los nombres de usuario de un CSV. Devuelve (lista, error).
+
+    Con column (CSV de varias columnas, p. ej. el de co-retweeters, cuyos nombres
+    van en Profile) se toma esa columna. Sin ella el CSV debe tener una única
+    columna, con la cabecera opcional (se descarta si la primera fila es username,
+    usuario...). En ambos casos se quita la '@' inicial."""
+    if file is None:
+        return [], "Error: upload a CSV file with the usernames"
+    try:
+        if column:
+            values = pd.read_csv(file, dtype=str, encoding="utf-8-sig", usecols=[column])[column]
+        else:
+            df = pd.read_csv(file, header=None, dtype=str, encoding="utf-8-sig",
+                             skip_blank_lines=True)
+            if df.shape[1] != 1:
+                return [], f"Error: choose the column with the usernames (the CSV has {df.shape[1]})"
+            values = df[0]
+    except pd.errors.EmptyDataError:
+        return [], "Error: the CSV file is empty"
+    finally:
+        file.seek(0)
+    users = [u.strip().lstrip("@") for u in values.dropna() if u.strip().lstrip("@")]
+    if not column and users and users[0].lower() in _USERS_CSV_HEADERS:
+        users = users[1:]
+    if not users:
+        return [], "Error: the CSV file has no usernames"
+    return users, None
+
 LOGO_PATH = str(REPO_ROOT / "logo_t-hoarder.png")
 ICON_PATH = str(REPO_ROOT / "t-hoarder.ico")
 
@@ -218,6 +262,9 @@ def set_result_charts(figs, image_path):
 _PREFIX_KIND_SUFFIXES = {
     "search": "_search_context.csv",
     "users": "_users_context.csv",
+    # solo para Download > About con lista de usuarios: datasets que pueden no
+    # tener tweets, únicamente {dataset}_about.csv
+    "about": "_about.csv",
 }
 _ALL_KINDS = ("search", "users")
 
@@ -760,12 +807,34 @@ with left:
                     except FileNotFoundError:
                         log_error(f"{acm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
         with tab6:
-            ab_prefix = prefix_input("Dataset", "ab_prefix")
-            st.caption("Downloads x.com/{user}/about of every author of {dataset}.csv into "
-                       "{dataset}_about.csv (country the account is based in, how it connects, "
-                       "username changes, identity verification). One request per author; "
-                       "resumes where it stopped and later only asks for new authors. "
-                       "Add the columns to the dataset afterwards in Tools > About accounts.")
+            ab_source = st.radio("Users", ["Dataset authors", "Users file"], horizontal=True,
+                                 key="ab_source")
+            if ab_source == "Dataset authors":
+                ab_prefix = prefix_input("Dataset", "ab_prefix")
+                st.caption("Downloads x.com/{user}/about of every author of {dataset}.csv into "
+                           "{dataset}_about.csv (country the account is based in, how it connects, "
+                           "username changes, identity verification). One request per author; "
+                           "resumes where it stopped and later only asks for new authors. "
+                           "Add the columns to the dataset afterwards in Tools > About accounts.")
+            else:
+                ab_prefix = prefix_input("Dataset (name of the output file {dataset}_about.csv)",
+                                         "ab_list_prefix", allow_new=True, kinds=("about",))
+                ab_users_file = st.file_uploader(
+                    "Users file (CSV with the usernames)", type=["csv", "txt"],
+                    key="ab_users_file",
+                )
+                ab_users_col = None
+                ab_cols = users_csv_columns(ab_users_file) if ab_users_file else []
+                if len(ab_cols) > 1:
+                    guess = next((i for i, c in enumerate(ab_cols)
+                                  if str(c).strip().lower() in _USERS_CSV_HEADERS), 0)
+                    ab_users_col = st.selectbox("Username column", ab_cols, index=guess,
+                                                key="ab_users_col")
+                st.caption("Downloads x.com/{user}/about of every user of the file into "
+                           "{dataset}_about.csv. With several columns, choose the one with the "
+                           "usernames; with a single one, the header is optional. '@' is removed. "
+                           "One request per user; relaunching skips the users already in "
+                           "{dataset}_about.csv, so you can add more users to the file.")
             ab_sleep = st.number_input(
                 "Pause between requests (s)", min_value=0.0, value=1.0, step=0.5, key="ab_sleep",
                 help="X allows ~50 requests per account every 15 min, so the overall pace "
@@ -774,16 +843,22 @@ with left:
                      "Cloudflare with a 429 error.",
             )
             if st.button("Launch about download"):
+                ab_users, users_error = (read_users_csv(ab_users_file, ab_users_col)
+                                         if ab_source == "Users file" else (None, None))
                 if not st.session_state.active_project:
                     log_error("select or create a project before downloading")
                 elif not ab_prefix:
-                    log_error("enter the Dataset of the file with the original tweets")
+                    log_error("enter the Dataset of the file with the original tweets"
+                              if ab_source == "Dataset authors" else "enter the Dataset name")
+                elif users_error:
+                    log(users_error)
                 else:
-                    log(f"Launching get_about (pause={ab_sleep:g} s)")
+                    log(f"Launching get_about (pause={ab_sleep:g} s"
+                        + (f", {len(ab_users)} user(s) from the file)" if ab_users else ")"))
                     try:
                         output_file = download.get_about(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
-                            prefix=ab_prefix, sleep_time=ab_sleep, log=log,
+                            prefix=ab_prefix, sleep_time=ab_sleep, list_users=ab_users, log=log,
                         )
                         log(f"Result in {output_file}")
                         set_result(output_file)

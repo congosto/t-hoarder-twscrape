@@ -352,6 +352,17 @@ pierde.
     con una cuenta inexistente; basta relanzarla más tarde.
   - Para tener estos datos como columnas del dataset, se usa después
     *Tools → About accounts*.
+  - **Users file**: en vez de los autores de un dataset, se puede pedir el
+    about de una lista de usuarios subiendo un **CSV con sus nombres de
+    usuario**. Si el CSV tiene varias columnas (por ejemplo, el de
+    co-retweeters), se elige en *Username column* la que tiene los nombres;
+    viene ya marcada si se llama `Profile`, `username`, `usuario` o parecido.
+    Si tiene una sola columna, la cabecera es opcional. La @ inicial se
+    quita. El dataset solo da nombre al fichero de salida
+    (`{dataset}_about.csv`), así que puede ser uno nuevo sin tweets. Al
+    relanzarla se saltan los usuarios que ya están en `{dataset}_about.csv`,
+    de modo que se pueden ir añadiendo usuarios al CSV. Aquí no hay `renamed`: el identificador de
+    usuario es el que devuelve X para ese nombre.
 
 ## Dashboard
 
