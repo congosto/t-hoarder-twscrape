@@ -317,12 +317,13 @@ pierde.
   grandes.
 
 - **Advanced Comments** — el mismo objetivo que Comments, pero usando el
-  buscador: para cada tweet lanza búsquedas de su conversación
-  (`conversation_id`) troceadas por ventanas desde la fecha del tweet hasta
-  *Last* días después, con la *Frequency* elegida. Llega mucho más hondo en
-  conversaciones con cientos de respuestas, a cambio de gastar más cuota.
-  Tiene su propia detección de overflow
-  (`{dataset}_replies_advanced_overflow.csv`) y genera
+  buscador: para cada tweet busca su conversación (`conversation_id`) con
+  Latest en una sola ventana, desde la fecha del tweet hasta *Last* días
+  después. Si la conversación desborda el buscador, sigue pidiendo desde
+  donde llegaron los resultados, igual que la descarga optimizada, así que
+  la mayoría de los tweets se resuelven en una consulta. Llega mucho más
+  hondo que Comments en conversaciones con cientos de respuestas. Anota cada
+  desbordamiento en `{dataset}_replies_advanced_overflow.csv` y genera
   `{dataset}_replies_advanced.csv`.
 
 - **About** — para cada autor del dataset descarga lo que X muestra en la

@@ -834,8 +834,15 @@ def get_replies(data_path: Path, dataset: str, prefix: str, min_replies: int = 1
 
 
 def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies: int = 1,
-                          last_days: int = 4, frequency: str = "1 day", sleep_time: int = 5,
-                          n: int = 900, product: str = "Top", log=print) -> Path:
+                          last_days: int = 4, sleep_time: int = 5, n: int = 900,
+                          log=print) -> Path:
+    """Respuestas de cada tweet vía el buscador (conversation_id:{id}
+    filter:replies) con el criterio de la descarga optimizada (13-11-2026):
+    siempre Latest y UNA sola ventana [fecha del tweet, + last_days) en epoch,
+    continuando desde la frontera mientras desborde (_optimized_window). La
+    mayoría de las conversaciones caben en una consulta; antes se troceaba con
+    la Frequency del formulario (casi todas las ventanas vacías) y con Top,
+    que fuera de sus 7 días de memoria es errático."""
     _log_handler = _start_forwarding_twscrape_logs(log)
     try:
         output = Path(data_path) / dataset
@@ -857,6 +864,9 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
         tweet_urls = tweets["url"].tolist()
         tweet_dates = tweets["date"].tolist()
 
+        threshold = min(n, _OPT_OVERFLOW)
+        start_time = time.monotonic()
+        counts = {"queries": 0, "received": 0}
         _pacer = {"first": True}
         overflow_count = 0
 
@@ -867,42 +877,63 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
                 log(f"Waiting {sleep_time} seconds before the next iteration...")
                 time.sleep(sleep_time)
 
+        def fetcher(_tid, _url):
+            def fetch(a, b, freq):
+                nonlocal append
+                pace()
+                query = f"conversation_id:{_tid} filter:replies {_optimized_operators(a, b)}"
+                log(f"--> Downloading {query} (product=Latest) ......")
+                replies = run_async(scraping.search_tweets(query, n=n, product="Latest"))
+                counts["queries"] += 1
+                counts["received"] += len(replies)
+                log(f"Downloaded {len(replies)} replies")
+                if replies:
+                    df = _to_dataframe(replies)
+                    df["url_replied"] = _url
+                    df = clean_text(df)
+                    _write_csv(df, output_raw_file, output_raw_file.exists())
+                    df = clean_tweets(df, a, b)
+                    if len(df):
+                        _write_csv(df, output_file, append)
+                        append = True
+                return replies
+            return fetch
+
+        def recorder(_url):
+            def record(a, b, freq, ntweets, action):
+                _record_overflow_opt(overflow_file, _url, a, b, "Latest", freq, ntweets, n,
+                                     action, log)
+            return record
+
         for i, tweet_id in enumerate(tweet_ids):
             if int(tweet_id) <= last_tweet_id:
                 continue
 
             log(f"Download replies from {tweet_urls[i]} {i + 1}/{len(tweet_ids)}")
-            since_t = pd.Timestamp(tweet_dates[i], tz="UTC")
-            until_t = since_t + pd.Timedelta(days=last_days)
-
-            def slot(a, b, _tid=tweet_id, _url=tweet_urls[i]):
-                nonlocal append, overflow_count
-                pace()
-                query = (f"conversation_id:{_tid} filter:replies "
-                         f"since:{a:%Y-%m-%d_%H:%M:%S} until:{b:%Y-%m-%d_%H:%M:%S}")
-                log(f"--> Downloading {query} (product={product}) ......")
-                replies = run_async(scraping.search_tweets(query, n=n, product=product))
-                log(f"Downloaded {len(replies)} replies")
-                if len(replies) >= _overflow_threshold(n):
-                    _record_overflow(overflow_file, _url, a, b, product, frequency, len(replies), n, log)
-                    overflow_count += 1
-                if replies:
-                    df = _to_dataframe(replies)
-                    df["url_replied"] = _url
-                    df = clean_text(df)
-                    _write_csv(df, output_raw_file, append)
-                    df = clean_tweets(df, a, b)
-                    _write_csv(df, output_file, append)
-                    append = True
-
-            seq = date_sequence(since_t, until_t, frequency)
-            for j in range(len(seq) - 1):
-                slot(seq[j], seq[j + 1])
+            since_t = _to_utc_timestamp(tweet_dates[i]).floor("s")
+            # no se pide el futuro: en tweets recientes la ventana acaba ahora
+            until_t = min(since_t + pd.Timedelta(days=last_days),
+                          pd.Timestamp.now(tz="UTC").ceil("s"))
+            if until_t > since_t:
+                # el nivel solo decide a qué escalón se baja si la frontera no avanza
+                level = _OPT_LADDER.index(_initial_frequency(since_t, until_t))
+                overflow_count += _optimized_window(since_t, until_t, level,
+                                                    fetcher(tweet_id, tweet_urls[i]), threshold,
+                                                    recorder(tweet_urls[i]))
             context.put_context_replies(output, prefix, tweet_id, kind="replies_advanced")
 
+        # el solape de 1 s de las continuaciones y las reanudaciones a mitad de
+        # un tweet dejan repetidos
+        total = 0
+        if output_file.exists():
+            df = pd.read_csv(output_file, encoding="utf-8").drop_duplicates(subset="url")
+            df.to_csv(output_file, index=False, encoding="utf-8")
+            total = len(df)
         if overflow_count:
-            log(f"WARNING: {overflow_count} interval(s) reached >= {_overflow_threshold(n)} tweets "
-                f"and may be incomplete — see {overflow_file.name}.")
+            log(f"{overflow_count} query(ies) overflowed and were continued from their "
+                f"frontier — see {overflow_file.name} for every range change.")
+        log(f"Elapsed {_fmt_elapsed(int(time.monotonic() - start_time))} — {counts['queries']} "
+            f"queries, {counts['received']} replies received, {total} unique in the file")
         log("'Advanced Replies' download completed")
         return output_file
     finally:

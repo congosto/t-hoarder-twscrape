@@ -312,12 +312,13 @@ switched off, the time of that session is lost.
   is fast but does not always reach every reply of large conversations.
 
 - **Advanced Comments** — same goal as Comments, but using the search
-  engine: for each tweet it runs searches over its conversation
-  (`conversation_id`) sliced into windows from the tweet's date until
-  *Last* days later, with the chosen *Frequency*. It goes much deeper in
-  conversations with hundreds of replies, at the cost of more quota. It has
-  its own overflow detection
-  (`{dataset}_replies_advanced_overflow.csv`) and generates
+  engine: for each tweet it searches its conversation (`conversation_id`)
+  with Latest in a single window, from the tweet's date until *Last* days
+  later. If the conversation overflows the search engine, it keeps asking
+  from where the results reached, like the optimized download, so most
+  tweets need a single query. It goes much deeper than Comments in
+  conversations with hundreds of replies. It records every overflow in
+  `{dataset}_replies_advanced_overflow.csv` and generates
   `{dataset}_replies_advanced.csv`.
 
 - **About** — for each author of the dataset, downloads what X shows on the

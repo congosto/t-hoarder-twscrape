@@ -787,20 +787,22 @@ with left:
         with tab5:
             acm_prefix = prefix_input("Dataset", "acm_prefix")
             acm_min = st.number_input("Min Replies", min_value=0, value=1, key="acm_min")
-            acm_last = st.number_input("Last (days)", min_value=0, value=1, key="acm_last")
-            acm_freq = frequency_input("acm")
+            acm_last = st.number_input("Last (days)", min_value=1, value=1, key="acm_last")
+            st.caption("Searches each conversation with Latest in a single window from the "
+                       "tweet's date to Last days later; if it overflows it continues from "
+                       "where the results reached, so most tweets need one query.")
             if st.button("Launch advanced download"):
                 if not st.session_state.active_project:
                     log_error("select or create a project before downloading")
                 elif not acm_prefix:
                     log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Launching get_replies_advanced (frequency={acm_freq})")
+                    log(f"Launching get_replies_advanced (last_days={int(acm_last)})")
                     try:
                         output_file = download.get_replies_advanced(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
                             prefix=acm_prefix, min_replies=int(acm_min),
-                            last_days=int(acm_last), frequency=acm_freq, log=log,
+                            last_days=int(acm_last), log=log,
                         )
                         log(f"Result in {output_file}")
                         set_result(output_file)
