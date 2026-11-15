@@ -1,4 +1,4 @@
-"""graphs.py — grafos de relaciones (RT / replies) con detección de comunidades
+"""graphs.py — grafos de relaciones (RT / replies / quotes / replies_RT / quotes_RT) con detección de comunidades
 y visor interactivo sigma.js, para t-hoarder-twscrape.
 
 Versión auditada y mejorada (jul-2026), integrada desde la auditoría externa
@@ -66,9 +66,31 @@ _READ_DTYPES = {"user_id": str}
 # hubs aunque no hayan tuiteado en el dataset.
 _TARGET_PREFIXES = {
     "RT": "user_retweeted_",
+    "replies_RT": "user_retweeted_",
+    "quotes_RT": "user_retweeted_",
     "replies": "in_reply_to_user_",
-    "replies_advanced": "in_reply_to_user_",
 }
+
+# Relaciones de RTs (14-11-2026) -> descarga de la que salen los tweets
+# retuiteados: RT, los del dataset; replies_RT / quotes_RT, los comentarios o
+# citas (Download > Retweets of Comments / Quotes). Todas funcionan igual:
+# retuiteador -> autor del tweet retuiteado, leídas de {stem}_RTs.csv.
+_RT_RELATIONS = {"RT": None, "replies_RT": "replies", "quotes_RT": "quotes"}
+_RELATIONS = ("RT", "replies", "quotes", "replies_RT", "quotes_RT")
+
+
+def _retweeted_stem(prefix: str, relation: str) -> str:
+    """Nombre (sin .csv) del fichero con los tweets retuiteados de una relación
+    de RTs: {prefix} para RT, {prefix}_replies / {prefix}_quotes para el resto."""
+    source = _RT_RELATIONS[relation]
+    return prefix if source is None else f"{prefix}_{source}"
+
+
+def _tweets_file(project_dir: Path, prefix: str, relation: str) -> Path:
+    """Tweets que dan atributos (y lang) a los nodos y que se clasifican: los
+    retuiteados en las relaciones de RTs; {prefix}.csv en replies y quotes."""
+    stem = _retweeted_stem(prefix, relation) if relation in _RT_RELATIONS else prefix
+    return project_dir / f"{stem}.csv"
 
 
 def _norm_username(series: pd.Series) -> pd.Series:
@@ -86,10 +108,10 @@ def _log10(series: pd.Series) -> pd.Series:
     return values.apply(math.floor).astype(int)
 
 
-def _original_tweet_urls(project_dir: Path, prefix: str) -> set | None:
-    """URLs de los tweets originales de {prefix}.csv, o None si no se pueden leer
+def _original_tweet_urls(project_dir: Path, stem: str) -> set | None:
+    """URLs de los tweets originales de {stem}.csv, o None si no se pueden leer
     (no existe el fichero o no tiene columna 'url')."""
-    tweets_file = project_dir / f"{prefix}.csv"
+    tweets_file = project_dir / f"{stem}.csv"
     if not tweets_file.exists():
         return None
     try:
@@ -125,15 +147,15 @@ def _filter_relations_by_date(df: pd.DataFrame, project_dir: Path, prefix: str, 
     start, end = _parse_zoom_date(since, end=False), _parse_zoom_date(until, end=True)
     if start is None and end is None:
         return df
-    if relation == "RT":
-        tweets = pd.read_csv(project_dir / f"{prefix}.csv", encoding="utf-8",
+    if relation in _RT_RELATIONS:
+        tweets = pd.read_csv(project_dir / f"{_retweeted_stem(prefix, relation)}.csv", encoding="utf-8",
                              dtype=str, usecols=["url", "date"])
         url_date = tweets.dropna().drop_duplicates("url").set_index("url")["date"]
         dates = pd.to_datetime(df["url_rt"].astype(str).map(url_date), utc=True, errors="coerce")
         what = "date of the retweeted tweet"
     else:
         dates = pd.to_datetime(df["date"], utc=True, errors="coerce")
-        what = "date of the reply"
+        what = "date of the quote" if relation == "quotes" else "date of the reply"
     keep = dates.notna()
     if start is not None:
         keep &= dates >= start
@@ -149,10 +171,14 @@ def _filter_relations_by_date(df: pd.DataFrame, project_dir: Path, prefix: str, 
 def _load_relations(project_dir: Path, prefix: str, relation: str,
                     filter_orphan_rts: bool = True, since=None, until=None,
                     log=print) -> pd.DataFrame:
-    if relation == "RT":
-        path = project_dir / f"{prefix}_RTs.csv"
+    if relation in _RT_RELATIONS:
+        stem = _retweeted_stem(prefix, relation)
+        path = project_dir / f"{stem}_RTs.csv"
         if not path.exists():
-            raise FileNotFoundError(f"{path} does not exist. Download the Retweets first.")
+            origin = {"RT": "Tweets", "replies_RT": "Comments",
+                      "quotes_RT": "Quotes"}[relation]
+            raise FileNotFoundError(f"{path} does not exist. Download the Retweets first "
+                                    f"(Retweets of: {origin}).")
         df = pd.read_csv(path, encoding="utf-8", dtype=_READ_DTYPES)
         # Descarta RTs huérfanos: los que retuitean (url_rt) un tweet original que
         # ya no está en {prefix}.csv, p.ej. porque el dataset se limpió por idioma o
@@ -160,23 +186,16 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
         # originales del cuaderno R: sin esto, el grafo incluye relaciones que ya no
         # existen en el dataset limpio.
         if filter_orphan_rts and "url_rt" in df.columns:
-            valid = _original_tweet_urls(project_dir, prefix)
+            valid = _original_tweet_urls(project_dir, stem)
             if valid:
                 before = len(df)
                 df = df[df["url_rt"].astype(str).isin(valid)]
                 dropped = before - len(df)
                 if dropped:
-                    log(f"RTs discarded because the retweeted tweet is no longer in the "
-                        f"dataset {prefix}.csv: {dropped} of {before}")
+                    log(f"RTs discarded because the retweeted tweet is no longer in "
+                        f"{stem}.csv: {dropped} of {before}")
         df["source"] = df["username"]
         df["target"] = df["user_retweeted"]
-    elif relation == "replies_advanced":
-        path = project_dir / f"{prefix}_replies_advanced.csv"
-        if not path.exists():
-            raise FileNotFoundError(f"{path} does not exist. Download the Advanced Comments first.")
-        df = pd.read_csv(path, encoding="utf-8", dtype=_READ_DTYPES)
-        df["source"] = df["username"]
-        df["target"] = df["in_reply_to_user_username"]
     elif relation == "replies":
         path = project_dir / f"{prefix}_replies.csv"
         if not path.exists():
@@ -184,8 +203,20 @@ def _load_relations(project_dir: Path, prefix: str, relation: str,
         df = pd.read_csv(path, encoding="utf-8", dtype=_READ_DTYPES)
         df["source"] = df["username"]
         df["target"] = df["in_reply_to_user_username"]
+    elif relation == "quotes":
+        path = project_dir / f"{prefix}_quotes.csv"
+        if not path.exists():
+            raise FileNotFoundError(f"{path} does not exist. Download the Quotes first.")
+        df = pd.read_csv(path, encoding="utf-8", dtype=_READ_DTYPES)
+        # quien cita -> autor del tweet citado. url_quoted es el tweet del
+        # dataset por el que se buscó (x.com/{user}/status/{id}); si faltara,
+        # el autor que twscrape saca del propio tweet citado
+        df["source"] = df["username"]
+        df["target"] = df["url_quoted"].astype(str).str.extract(r"x\.com/([^/]+)/status/")[0]
+        if "quoted_tweet_username" in df.columns:
+            df["target"] = df["target"].fillna(df["quoted_tweet_username"])
     else:
-        raise ValueError("relation must be 'RT', 'replies' or 'replies_advanced'")
+        raise ValueError(f"relation must be one of {', '.join(_RELATIONS)}")
 
     df = _filter_relations_by_date(df, project_dir, prefix, relation, since, until, log=log)
     df = df.dropna(subset=["source", "target"])
@@ -214,7 +245,7 @@ def _build_giant_graph(project_dir: Path, prefix: str, relation: str, log=print,
     y con el filtro "solo la gigante" queda completamente invisible — para
     detectar coordinación/astroturfing conviene poder incluirla.
 
-    filter_orphan_rts (solo relación RT): descarta los RTs cuyo tweet original ya
+    filter_orphan_rts (relaciones de RTs): descarta los RTs cuyo tweet original ya
     no está en {prefix}.csv (ver _load_relations).
     """
     relations_df = _load_relations(project_dir, prefix, relation,
@@ -329,7 +360,7 @@ def detect_communities(project_dir: Path, prefix: str, relation: str, log=print,
     None) a la tabla de usuarios. Identifica nodos "puente" entre comunidades
     que el indegree/PageRank no detectan; coste O(V*E) exacto, por eso es opcional.
 
-    filter_orphan_rts (solo relación RT): descarta los RTs cuyo tweet original ya
+    filter_orphan_rts (relaciones de RTs): descarta los RTs cuyo tweet original ya
     no está en {prefix}.csv (ver _load_relations); para que las comunidades no se
     calculen sobre relaciones que ya no existen tras limpiar el dataset.
 
@@ -402,7 +433,7 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     min_component_size: debe coincidir con el usado en 'Detect communities' para
     ese mismo prefix/relation (ver _build_giant_graph) — si no, algunos nodos no
     tendrán comunidad asignada porque no estaban en el grafo con el que se calculó.
-    filter_orphan_rts (solo relación RT): descarta los RTs cuyo tweet original ya no
+    filter_orphan_rts (relaciones de RTs): descarta los RTs cuyo tweet original ya no
     está en {prefix}.csv (ver _load_relations). Debe coincidir con el usado en
     'Detect communities', por lo mismo que min_component_size.
     since/until (zoom temporal, UTC, 'YYYY-mm-dd' o 'YYYY-mm-dd HH:MM:SS'; vacío =
@@ -419,7 +450,7 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
                                                filter_orphan_rts=filter_orphan_rts,
                                                since=since, until=until)
 
-    tweets_file = project_dir / f"{prefix}.csv"
+    tweets_file = _tweets_file(project_dir, prefix, relation)
     if not tweets_file.exists():
         raise FileNotFoundError(f"{tweets_file} does not exist")
     tweets_df = pd.read_csv(tweets_file, encoding="utf-8", dtype=_READ_DTYPES)
@@ -478,7 +509,7 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
     # idioma: se hereda del tweet retuiteado uniendo url_rt con la url de
     # {prefix}.csv. Sin esto los usuarios que solo retuitean (casi todos los
     # nodos de un grafo de RT) se quedaban sin lang.
-    if (relation == "RT" and "lang" not in relations_df.columns
+    if (relation in _RT_RELATIONS and "lang" not in relations_df.columns
             and "url_rt" in relations_df.columns
             and {"url", "lang"} <= set(tweets_df.columns)):
         url_lang = tweets_df.dropna(subset=["url", "lang"]).drop_duplicates("url")
@@ -514,8 +545,10 @@ def generate_graph(project_dir: Path, prefix: str, relation: str, output_format:
 
 def classify_tweets(project_dir: Path, prefix: str, relation: str, log=print) -> Path:
     """Añade a los tweets de {prefix}.csv la comunidad de su autor, leída desde
-    {prefix}_users_{relation}_communities.csv (generado antes con 'Detect communities')."""
-    tweets_file = project_dir / f"{prefix}.csv"
+    {prefix}_users_{relation}_communities.csv (generado antes con 'Detect communities').
+    En replies_RT / quotes_RT se clasifican los tweets retuiteados, es decir,
+    los comentarios o citas ({prefix}_replies.csv / {prefix}_quotes.csv)."""
+    tweets_file = _tweets_file(project_dir, prefix, relation)
     if not tweets_file.exists():
         raise FileNotFoundError(f"{tweets_file} does not exist")
 

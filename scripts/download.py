@@ -722,19 +722,25 @@ def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: l
 
 def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
                   sleep_time: float = 1, n: int = 10000, retries: int = 4,
-                  retry_wait: int = 300, page_pause: float = 0.5, log=print) -> Path:
+                  retry_wait: int = 300, page_pause: float = 0.5, source: str = "tweets",
+                  log=print) -> Path:
+    """Retuiteadores de los tweets de {prefix}.csv -> {prefix}_RTs.csv. Con
+    source = replies / quotes (14-11-2026) parte de las
+    respuestas o citas descargadas, {prefix}_{source}.csv ->
+    {prefix}_{source}_RTs.csv, con su propio cursor de reanudación."""
     _log_handler = _start_forwarding_twscrape_logs(log)
     try:
         output = Path(data_path) / dataset
-        file_in = output / f"{prefix}.csv"
-        output_file = output / f"{prefix}_RTs.csv"
+        stem = prefix if source == "tweets" else f"{prefix}_{source}"
+        file_in = output / f"{stem}.csv"
+        output_file = output / f"{stem}_RTs.csv"
 
         tweets = pd.read_csv(file_in, encoding="utf-8")
         tweets = tweets[tweets["retweet_count"] >= min_rts]
         tweets["tweet_id"] = tweets["url"].str.extract(r"(\d+)$")
         tweets = tweets.dropna(subset=["id"]).sort_values("tweet_id")
 
-        last_tweet_id = context.get_context_RTs(output, prefix)
+        last_tweet_id = context.get_context_RTs(output, prefix, source)
         append = output_file.exists()
         last_tweet_id = int(last_tweet_id) if last_tweet_id else 0
 
@@ -777,7 +783,7 @@ def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
                 _write_csv(df, output_file, append)
                 append = True
 
-            context.put_context_RTs(output, prefix, tweet_id)
+            context.put_context_RTs(output, prefix, tweet_id, source)
             if i < len(tweet_ids) - 1:
                 log(f"Waiting {sleep_time} seconds before the next iteration...")
                 time.sleep(sleep_time)
@@ -789,74 +795,66 @@ def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
 
 
 def get_replies(data_path: Path, dataset: str, prefix: str, min_replies: int = 1,
-                 sleep_time: int = 5, n: int = 10000, log=print) -> Path:
-    _log_handler = _start_forwarding_twscrape_logs(log)
-    try:
-        output = Path(data_path) / dataset
-        file_in = output / f"{prefix}.csv"
-        output_file = output / f"{prefix}_replies.csv"
-        output_raw_file = output / f"{prefix}_replies_raw.csv"
-
-        tweets = pd.read_csv(file_in, encoding="utf-8")
-        tweets = tweets[tweets["reply_count"] >= min_replies]
-        tweets["tweet_id"] = tweets["url"].str.extract(r"(\d+)$")
-        tweets = tweets.sort_values("tweet_id")
-
-        last_tweet_id = context.get_context_replies(output, prefix)
-        append = output_file.exists()
-        last_tweet_id = int(last_tweet_id) if last_tweet_id else 0
-
-        tweet_ids = tweets["tweet_id"].tolist()
-        tweet_urls = tweets["url"].tolist()
-
-        for i, tweet_id in enumerate(tweet_ids):
-            if int(tweet_id) <= last_tweet_id:
-                continue
-
-            log(f"Download replies from {tweet_urls[i]} {i + 1}/{len(tweet_ids)}")
-            replies = run_async(scraping.tweet_replies(tweet_id, n=n))
-            log(f"Downloaded {len(replies)} replies")
-            if replies:
-                df = _to_dataframe(replies)
-                df = clean_text(df)
-                _write_csv(df, output_raw_file, append)
-                _write_csv(df, output_file, append)
-                context.put_context_replies(output, prefix, tweet_id)
-                append = True
-
-            log(f"Waiting {sleep_time} seconds before the next iteration...")
-            time.sleep(sleep_time)
-
-        log("'Replies' download completed")
-        return output_file
-    finally:
-        _stop_forwarding_twscrape_logs(_log_handler)
-
-
-def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies: int = 1,
-                          last_days: int = 4, sleep_time: int = 5, n: int = 900,
-                          log=print) -> Path:
+                 last_days: int = 4, sleep_time: int = 5, n: int = 900,
+                 log=print) -> Path:
     """Respuestas de cada tweet vía el buscador (conversation_id:{id}
     filter:replies) con el criterio de la descarga optimizada (13-11-2026):
     siempre Latest y UNA sola ventana [fecha del tweet, + last_days) en epoch,
     continuando desde la frontera mientras desborde (_optimized_window). La
     mayoría de las conversaciones caben en una consulta; antes se troceaba con
     la Frequency del formulario (casi todas las ventanas vacías) y con Top,
-    que fuera de sus 7 días de memoria es errático."""
+    que fuera de sus 7 días de memoria es errático. Desde el 14-11-2026 es la
+    ÚNICA descarga de comentarios (antes get_replies_advanced; la antigua
+    get_replies con tweet_replies de twscrape se eliminó) y su salida es
+    {prefix}_replies.csv."""
+    return _search_per_tweet(
+        data_path, dataset, prefix, kind="replies", count_col="reply_count",
+        min_count=min_replies, query=lambda tid: f"conversation_id:{tid} filter:replies",
+        link_col="url_replied", noun="replies", title="Comments",
+        last_days=last_days, sleep_time=sleep_time, n=n, log=log)
+
+
+def get_quotes(data_path: Path, dataset: str, prefix: str, min_quotes: int = 1,
+               last_days: int = 4, sleep_time: int = 5, n: int = 900, log=print) -> Path:
+    """Citas de cada tweet (14-11-2026) vía el buscador (quoted_tweet_id:{id}),
+    con el mismo criterio que get_replies. Salida {prefix}_quotes.csv
+    con url_quoted = url del tweet citado."""
+    return _search_per_tweet(
+        data_path, dataset, prefix, kind="quotes", count_col="quote_count",
+        min_count=min_quotes, query=lambda tid: f"quoted_tweet_id:{tid}",
+        link_col="url_quoted", noun="quotes", title="Quotes",
+        last_days=last_days, sleep_time=sleep_time, n=n, log=log)
+
+
+def _status_id(urls: pd.Series) -> pd.Series:
+    """Id del tweet al final de su url (…/status/{id}), como texto."""
+    return urls.astype(str).str.extract(r"/status/(\d+)")[0]
+
+
+def _search_per_tweet(data_path: Path, dataset: str, prefix: str, kind: str, count_col: str,
+                      min_count: int, query, link_col: str, noun: str, title: str,
+                      last_days: int, sleep_time: int, n: int, log) -> Path:
+    """Para cada tweet de {prefix}.csv con count_col >= min_count, busca
+    query(tweet_id) con Latest en [fecha del tweet, + last_days) continuando
+    desde la frontera, y guarda en {prefix}_{kind}.csv cada resultado con la
+    url del tweet de origen en link_col. Reanuda por tweet_id. El propio
+    tweet de origen nunca entra en el fichero (14-11-2026): si el buscador lo
+    devuelve, al sacar después los RTs de comentarios/citas se mezclarían los
+    del tweet original."""
     _log_handler = _start_forwarding_twscrape_logs(log)
     try:
         output = Path(data_path) / dataset
         file_in = output / f"{prefix}.csv"
-        output_file = output / f"{prefix}_replies_advanced.csv"
-        output_raw_file = output / f"{prefix}_replies_advanced_raw.csv"
-        overflow_file = output / f"{prefix}_replies_advanced_overflow.csv"
+        output_file = output / f"{prefix}_{kind}.csv"
+        output_raw_file = output / f"{prefix}_{kind}_raw.csv"
+        overflow_file = output / f"{prefix}_{kind}_overflow.csv"
 
         tweets = pd.read_csv(file_in, encoding="utf-8")
-        tweets = tweets[tweets["reply_count"] >= min_replies]
+        tweets = tweets[tweets[count_col] >= min_count]
         tweets["tweet_id"] = tweets["url"].str.extract(r"(\d+)$")
         tweets = tweets.sort_values("tweet_id")
 
-        last_tweet_id = context.get_context_replies(output, prefix, kind="replies_advanced")
+        last_tweet_id = context.get_context_replies(output, prefix, kind=kind)
         append = output_file.exists()
         last_tweet_id = int(last_tweet_id) if last_tweet_id else 0
 
@@ -881,15 +879,18 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
             def fetch(a, b, freq):
                 nonlocal append
                 pace()
-                query = f"conversation_id:{_tid} filter:replies {_optimized_operators(a, b)}"
-                log(f"--> Downloading {query} (product=Latest) ......")
-                replies = run_async(scraping.search_tweets(query, n=n, product="Latest"))
+                query_date = f"{query(_tid)} {_optimized_operators(a, b)}"
+                log(f"--> Downloading {query_date} (product=Latest) ......")
+                replies = run_async(scraping.search_tweets(query_date, n=n, product="Latest"))
                 counts["queries"] += 1
                 counts["received"] += len(replies)
-                log(f"Downloaded {len(replies)} replies")
+                log(f"Downloaded {len(replies)} {noun}")
                 if replies:
                     df = _to_dataframe(replies)
-                    df["url_replied"] = _url
+                    df[link_col] = _url
+                    df = df[_status_id(df["url"]) != str(_tid)]
+                    if df.empty:
+                        return replies
                     df = clean_text(df)
                     _write_csv(df, output_raw_file, output_raw_file.exists())
                     df = clean_tweets(df, a, b)
@@ -909,7 +910,7 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
             if int(tweet_id) <= last_tweet_id:
                 continue
 
-            log(f"Download replies from {tweet_urls[i]} {i + 1}/{len(tweet_ids)}")
+            log(f"Download {noun} from {tweet_urls[i]} {i + 1}/{len(tweet_ids)}")
             since_t = _to_utc_timestamp(tweet_dates[i]).floor("s")
             # no se pide el futuro: en tweets recientes la ventana acaba ahora
             until_t = min(since_t + pd.Timedelta(days=last_days),
@@ -920,21 +921,24 @@ def get_replies_advanced(data_path: Path, dataset: str, prefix: str, min_replies
                 overflow_count += _optimized_window(since_t, until_t, level,
                                                     fetcher(tweet_id, tweet_urls[i]), threshold,
                                                     recorder(tweet_urls[i]))
-            context.put_context_replies(output, prefix, tweet_id, kind="replies_advanced")
+            context.put_context_replies(output, prefix, tweet_id, kind=kind)
 
         # el solape de 1 s de las continuaciones y las reanudaciones a mitad de
         # un tweet dejan repetidos
         total = 0
         if output_file.exists():
             df = pd.read_csv(output_file, encoding="utf-8").drop_duplicates(subset="url")
+            # también limpia ficheros de descargas anteriores a este filtro
+            if link_col in df.columns:
+                df = df[_status_id(df["url"]) != _status_id(df[link_col])]
             df.to_csv(output_file, index=False, encoding="utf-8")
             total = len(df)
         if overflow_count:
             log(f"{overflow_count} query(ies) overflowed and were continued from their "
                 f"frontier — see {overflow_file.name} for every range change.")
         log(f"Elapsed {_fmt_elapsed(int(time.monotonic() - start_time))} — {counts['queries']} "
-            f"queries, {counts['received']} replies received, {total} unique in the file")
-        log("'Advanced Replies' download completed")
+            f"queries, {counts['received']} {noun} received, {total} unique in the file")
+        log(f"'{title}' download completed")
         return output_file
     finally:
         _stop_forwarding_twscrape_logs(_log_handler)

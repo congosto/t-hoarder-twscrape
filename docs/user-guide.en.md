@@ -62,7 +62,7 @@ choose (or create) the project you are going to work on.
 ### Left · Sub-functions and form
 
 Each function is divided into **sub-functions** (for example, Download
-offers Search, User TL, Retweets, Comments, Advanced Comments and About). When you
+offers Search, User TL, Retweets, Comments, Quotes and About). When you
 pick a sub-function, this zone shows its **input form** and, at the end,
 the **button that launches the operation**.
 
@@ -240,11 +240,12 @@ continuations, to avoid burning the quota in a burst.
 - The **main ones** — *Search* and *User TL*. These create a dataset: they
   download tweets bounded between two dates, from a query or from a list
   of users.
-- The **complementary ones** — *Retweets*, *Comments*, *Advanced
-  Comments* and *About*. They start from an already-downloaded dataset and
-  enrich it: who retweeted its tweets, what replies they received and what X
-  says about their authors. The first three are the raw material for the
-  graphs of the *Graphs* section. *About* can also start from a CSV of
+- The **complementary ones** — *Retweets*, *Comments*, *Quotes* and
+  *About*. They start from an already-downloaded
+  dataset and enrich it: who retweeted its tweets, what replies and quotes
+  they received and what X says about their authors. Retweets, Comments
+  and Quotes are the raw material for the graphs of the
+  *Graphs* section. *About* can also start from a CSV of
   usernames.
 
 All downloads are **resumable**: if they are interrupted (or stopped on
@@ -305,21 +306,33 @@ switched off, the time of that session is lost.
   retweeter and tweet. The *Min RTs* threshold helps focus on the tweets
   with real spread and not spend quota on those barely retweeted. It is the
   basis of the RT graphs in *Graphs*.
+  *Retweets of* chooses where the tweets come from: **Tweets** (those of
+  the dataset, the usual option) or the replies and quotes already
+  downloaded (**Comments** or **Quotes**). In those two cases it starts
+  from `{dataset}_replies.csv` or `{dataset}_quotes.csv` and generates
+  `{dataset}_replies_RTs.csv` or `{dataset}_quotes_RTs.csv`. Each source
+  resumes on its own. Since those files do not contain the original tweet,
+  its retweeters are not mixed with those of the replies or quotes.
 
 - **Comments** — for each tweet of the dataset with at least *Min Replies*
-  replies, it downloads those replies (which are full tweets) and generates
-  `{dataset}_replies.csv`. It uses each tweet's conversation thread, which
-  is fast but does not always reach every reply of large conversations.
+  replies, it downloads those replies (which are full tweets) using the
+  search engine: it searches its conversation (`conversation_id`) with
+  Latest in a single window, from the tweet's date until *Last* days later.
+  If the conversation overflows the search engine, it keeps asking from
+  where the results reached, like the optimized download, so most tweets
+  need a single query and it reaches every reply even in conversations with
+  thousands of them. It generates `{dataset}_replies.csv`, with the
+  `url_replied` column (the url of the replied tweet) and without the
+  original tweet, and records every overflow in
+  `{dataset}_replies_overflow.csv`.
 
-- **Advanced Comments** — same goal as Comments, but using the search
-  engine: for each tweet it searches its conversation (`conversation_id`)
-  with Latest in a single window, from the tweet's date until *Last* days
-  later. If the conversation overflows the search engine, it keeps asking
-  from where the results reached, like the optimized download, so most
-  tweets need a single query. It goes much deeper than Comments in
-  conversations with hundreds of replies. It records every overflow in
-  `{dataset}_replies_advanced_overflow.csv` and generates
-  `{dataset}_replies_advanced.csv`.
+- **Quotes** — for each tweet of the dataset with at least *Min Quotes*
+  quotes, it downloads the tweets that quote it. It works like Comments
+  but searches `quoted_tweet_id`: Latest, a single window from the
+  tweet's date until *Last* days later, and continuation if it overflows.
+  It generates `{dataset}_quotes.csv`, with the `url_quoted` column (the url
+  of the quoted tweet) and without the original tweet, and records overflows in
+  `{dataset}_quotes_overflow.csv`.
 
 - **About** — for each author of the dataset, downloads what X shows on the
   *About this account* page of their profile (`x.com/{user}/about`): the
@@ -463,8 +476,13 @@ users of each one are and how they connect (or not) with each other.
 
 - **The relation** — the graph is built from one of the complementary
   downloads of *Download*: **RT** (who retweeted whom, from the Retweets
-  file), **replies** or **replies_advanced** (who replied to whom, from
-  Comments or Advanced Comments). Each user is a node; each relation, a
+  file), **replies** (who replied to whom, from Comments) or **quotes** (who quoted whom, from
+  Quotes: the edge goes from the quoting user to the author of the quoted
+  tweet). With the RTs of the comments and quotes (*Retweets of* →
+  Comments or Quotes) there are also **replies_RT** and **quotes_RT**: they
+  work like RT, from the retweeter to the author of the comment or quote,
+  and the zoom counts by the date of the retweeted comment or quote. Each
+  user is a node; each relation, a
   directed edge whose weight is the number of times it repeats.
 
 - **The communities** — groups of users more connected among themselves
@@ -475,7 +493,7 @@ users of each one are and how they connect (or not) with each other.
   steps always reuse the same one instead of recalculating it.
 
 - **A user's relevance** is measured by their **weighted indegree**: the
-  number of RTs (or replies) they received. It is what determines the size
+  number of RTs (or replies, or quotes) they received. It is what determines the size
   of each node in the viewer.
 
 The typical flow is: **Detect communities** → **Generate graph** →
@@ -484,8 +502,8 @@ The typical flow is: **Detect communities** → **Generate graph** →
 
 ### The options, one by one
 
-- **Detect communities** — the **relations** (RTs, replies or
-  replies_advanced) are needed, so it is essential to have downloaded them
+- **Detect communities** — the **relations** (RT, replies,
+  quotes, replies_RT or quotes_RT) are needed, so it is essential to have downloaded them
   previously in *Download*. Given a dataset and a relation, it builds the
   graph, keeps its **giant component** (the largest connected part) and
   detects the communities with the **Louvain** algorithm. As a result it
@@ -506,7 +524,7 @@ The typical flow is: **Detect communities** → **Generate graph** →
   *From* and *To* dates (in UTC; if *To* is a date without time, the whole
   day is included). RTs have no date of their own —X does not say when each
   RT was made—, so they are filtered by the **date of the retweeted tweet**;
-  replies, by their own. Communities are those of the full graph, so colors
+  replies and quotes, by their own. Communities are those of the full graph, so colors
   match between zooms and you can compare which communities are active at
   each moment. The file carries the period in its name
   (`{dataset}_RT_from-…_to-….gdf`) and does not overwrite the full graph.
@@ -515,7 +533,9 @@ The typical flow is: **Detect communities** → **Generate graph** →
   Given a dataset and a relation, it classifies each tweet with its
   author's community and generates `{dataset}_{relation}_classified.csv`.
   It is the file *Charts* uses for the per-community charts (what each pole
-  of the conversation says).
+  of the conversation says). With replies_RT and quotes_RT it classifies
+  the retweeted tweets, that is, the comments or the quotes, so the
+  per-community charts in *Charts* show that conversation.
 
 - **Visualize graph** — renders a graph of the project (.gdf/.gexf) with
   the **ForceAtlas2** layout (the same as Gephi), computed live in the

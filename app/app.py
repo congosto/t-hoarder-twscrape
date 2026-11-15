@@ -583,8 +583,8 @@ with left:
                 st.write("No deactivated projects.")
 
     elif section == "Download":
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-            ["Search", "User TL", "Retweets", "Comments", "Advanced Comments", "About"]
+        tab1, tab2, tab3, tab4, tab_q, tab6 = st.tabs(
+            ["Search", "User TL", "Retweets", "Comments", "Quotes", "About"]
         )
         with tab1:
             search_prefix = prefix_input("Dataset", "search_prefix", allow_new=True, kinds=("search",))
@@ -746,6 +746,18 @@ with left:
                     set_result(output_file)
         with tab3:
             rt_prefix = prefix_input("Dataset", "rt_prefix")
+            # origen -> (fichero de entrada, sub-función que lo genera)
+            rt_sources = {
+                "Tweets": ("tweets", "{p}.csv", "Search/User TL"),
+                "Comments": ("replies", "{p}_replies.csv", "Comments"),
+                "Quotes": ("quotes", "{p}_quotes.csv", "Quotes"),
+            }
+            rt_source_label = st.radio("Retweets of", list(rt_sources), horizontal=True,
+                                       key="rt_source")
+            rt_source, rt_in, rt_origin = rt_sources[rt_source_label]
+            if rt_source != "tweets":
+                st.caption(f"Downloads the retweeters of {{dataset}}_{rt_source}.csv into "
+                           f"{{dataset}}_{rt_source}_RTs.csv.")
             rt_min = st.number_input("Min RTs", min_value=0, value=1, key="rt_min")
             if st.button("Launch RTs download"):
                 if not st.session_state.active_project:
@@ -753,61 +765,68 @@ with left:
                 elif not rt_prefix:
                     log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Launching get_retweets (min_rts={int(rt_min)})")
+                    log(f"Launching get_retweets (source={rt_source}, min_rts={int(rt_min)})")
                     try:
                         output_file = download.get_retweets(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
-                            prefix=rt_prefix, min_rts=int(rt_min), log=log,
+                            prefix=rt_prefix, min_rts=int(rt_min), source=rt_source, log=log,
                         )
                         log(f"Result in {output_file}")
                         set_result(output_file)
                     except FileNotFoundError:
-                        log_error(f"{rt_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
+                        log_error(f"{rt_in.format(p=rt_prefix)} does not exist in the active project. Download it first ({rt_origin}).")
                     except RuntimeError as e:
                         log_error(str(e))
         with tab4:
             cm_prefix = prefix_input("Dataset", "cm_prefix")
             cm_min = st.number_input("Min Replies", min_value=0, value=1, key="cm_min")
+            cm_last = st.number_input("Last (days)", min_value=1, value=1, key="cm_last")
+            st.caption("Searches each conversation with Latest in a single window from the "
+                       "tweet's date to Last days later; if it overflows it continues from "
+                       "where the results reached, so most tweets need one query. Result in "
+                       "{dataset}_replies.csv.")
             if st.button("Launch comments download"):
                 if not st.session_state.active_project:
                     log_error("select or create a project before downloading")
                 elif not cm_prefix:
                     log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Launching get_replies (min_replies={int(cm_min)})")
+                    log(f"Launching get_replies (min_replies={int(cm_min)}, last_days={int(cm_last)})")
                     try:
                         output_file = download.get_replies(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
-                            prefix=cm_prefix, min_replies=int(cm_min), log=log,
+                            prefix=cm_prefix, min_replies=int(cm_min),
+                            last_days=int(cm_last), log=log,
                         )
                         log(f"Result in {output_file}")
                         set_result(output_file)
                     except FileNotFoundError:
                         log_error(f"{cm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
-        with tab5:
-            acm_prefix = prefix_input("Dataset", "acm_prefix")
-            acm_min = st.number_input("Min Replies", min_value=0, value=1, key="acm_min")
-            acm_last = st.number_input("Last (days)", min_value=1, value=1, key="acm_last")
-            st.caption("Searches each conversation with Latest in a single window from the "
-                       "tweet's date to Last days later; if it overflows it continues from "
-                       "where the results reached, so most tweets need one query.")
-            if st.button("Launch advanced download"):
+        with tab_q:
+            qt_prefix = prefix_input("Dataset", "qt_prefix")
+            qt_min = st.number_input("Min Quotes", min_value=0, value=1, key="qt_min")
+            qt_last = st.number_input("Last (days)", min_value=1, value=1, key="qt_last")
+            st.caption("Searches the quotes of each tweet (quoted_tweet_id) with Latest in a "
+                       "single window from the tweet's date to Last days later, continuing "
+                       "from where the results reached if it overflows. Result in "
+                       "{dataset}_quotes.csv.")
+            if st.button("Launch quotes download"):
                 if not st.session_state.active_project:
                     log_error("select or create a project before downloading")
-                elif not acm_prefix:
+                elif not qt_prefix:
                     log_error("enter the Dataset of the file with the original tweets")
                 else:
-                    log(f"Launching get_replies_advanced (last_days={int(acm_last)})")
+                    log(f"Launching get_quotes (min_quotes={int(qt_min)}, last_days={int(qt_last)})")
                     try:
-                        output_file = download.get_replies_advanced(
+                        output_file = download.get_quotes(
                             data_path=DATA_PATH, dataset=st.session_state.active_project,
-                            prefix=acm_prefix, min_replies=int(acm_min),
-                            last_days=int(acm_last), log=log,
+                            prefix=qt_prefix, min_quotes=int(qt_min),
+                            last_days=int(qt_last), log=log,
                         )
                         log(f"Result in {output_file}")
                         set_result(output_file)
                     except FileNotFoundError:
-                        log_error(f"{acm_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
+                        log_error(f"{qt_prefix}.csv does not exist in the active project. Download those tweets first (Search/User TL).")
         with tab6:
             ab_source = st.radio("Users", ["Dataset authors", "Users file"], horizontal=True,
                                  key="ab_source")
@@ -1115,7 +1134,7 @@ with left:
             with tab1:
                 dc_prefix = prefix_input("Dataset", "dc_prefix")
                 dc_relation = st.selectbox(
-                    "Relation (relation type)", ["RT", "replies", "replies_advanced"], key="dc_relation"
+                    "Relation (relation type)", ["RT", "replies", "quotes", "replies_RT", "quotes_RT"], key="dc_relation"
                 )
                 if st.button("Detect communities"):
                     if not dc_prefix:
@@ -1131,7 +1150,7 @@ with left:
             with tab2:
                 gg_prefix = prefix_input("Dataset", "gg_prefix")
                 gg_relation = st.selectbox(
-                    "Relation (relation type)", ["RT", "replies", "replies_advanced"], key="gg_relation"
+                    "Relation (relation type)", ["RT", "replies", "quotes", "replies_RT", "quotes_RT"], key="gg_relation"
                 )
                 gg_format = st.selectbox("Format", ["gdf", "gexf"], key="gg_format")
                 gg_include_communities = st.checkbox(
@@ -1173,7 +1192,7 @@ with left:
             with tab3:
                 ct_prefix = prefix_input("Dataset", "ct_prefix")
                 ct_relation = st.selectbox(
-                    "Relation (relation type)", ["RT", "replies", "replies_advanced"], key="ct_relation"
+                    "Relation (relation type)", ["RT", "replies", "quotes", "replies_RT", "quotes_RT"], key="ct_relation"
                 )
                 if st.button("Classify tweets"):
                     if not ct_prefix:
@@ -1243,7 +1262,7 @@ with left:
                     tg_communities = st.checkbox("Show communities", key="tg_communities")
                 with col_comm_rel:
                     tg_comm_relation = st.selectbox(
-                        "Communities relation", ["RT", "replies", "replies_advanced"],
+                        "Communities relation", ["RT", "replies", "quotes", "replies_RT", "quotes_RT"],
                         key="tg_comm_relation", disabled=not tg_communities,
                         label_visibility="collapsed",
                     )

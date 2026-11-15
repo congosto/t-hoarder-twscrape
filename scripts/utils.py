@@ -529,8 +529,8 @@ def geocode_location_offline(location: str) -> tuple[str | None, str | None, str
 
 def extract_locations(project_dir: Path, prefix: str, log=print) -> Path:
     """Extrae los perfiles con localización en su biografía de {prefix}.csv (y, si existen,
-    {prefix}_RTs.csv y {prefix}_replies_advanced.csv para cubrir también a los usuarios
-    retuiteados/replicados) y resuelve país/región/ciudad de forma offline (sin red).
+    {prefix}_RTs.csv, {prefix}_replies.csv, {prefix}_quotes.csv y sus _RTs.csv para cubrir
+    también a los usuarios retuiteados/replicados/que citan) y resuelve país/región/ciudad de forma offline (sin red).
 
     Genera {prefix}_loc.csv con username, location, location_country, location_region,
     location_city, solo para los perfiles que tienen localización en su biografía y cuyo
@@ -542,17 +542,20 @@ def extract_locations(project_dir: Path, prefix: str, log=print) -> Path:
 
     frames = [pd.read_csv(tweets_file, encoding="utf-8")]
 
-    rts_file = project_dir / f"{prefix}_RTs.csv"
-    if rts_file.exists():
-        rts_df = pd.read_csv(rts_file, encoding="utf-8")
-        if "location" in rts_df.columns:
-            frames.append(rts_df[["username", "location"]])
+    # retuiteadores de los tweets, de los comentarios y de las citas
+    for stem in (prefix, f"{prefix}_replies", f"{prefix}_quotes"):
+        rts_file = project_dir / f"{stem}_RTs.csv"
+        if rts_file.exists():
+            rts_df = pd.read_csv(rts_file, encoding="utf-8")
+            if "location" in rts_df.columns:
+                frames.append(rts_df[["username", "location"]])
 
-    replies_file = project_dir / f"{prefix}_replies_advanced.csv"
-    if replies_file.exists():
-        replies_df = pd.read_csv(replies_file, encoding="utf-8")
-        if "location" in replies_df.columns:
-            frames.append(replies_df[["username", "location"]])
+    for kind in ("replies", "quotes"):
+        replies_file = project_dir / f"{prefix}_{kind}.csv"
+        if replies_file.exists():
+            replies_df = pd.read_csv(replies_file, encoding="utf-8")
+            if "location" in replies_df.columns:
+                frames.append(replies_df[["username", "location"]])
 
     combined = pd.concat(frames, ignore_index=True)
     combined = combined.dropna(subset=["username"]).drop_duplicates(subset="username", keep="first")

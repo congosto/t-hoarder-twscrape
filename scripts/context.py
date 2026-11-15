@@ -350,14 +350,20 @@ def get_context_replies(dataset: Path, prefix: str, kind: str = "replies") -> st
     return context["last_tweet_id"].iloc[-1]
 
 
-def put_context_RTs(dataset: Path, prefix: str, last_tweet_id) -> None:
+def _rts_context_file(dataset: Path, prefix: str, source: str) -> Path:
+    # RTs de los tweets: {prefix}_RTs_context.csv; de replies/quotes: {prefix}_{source}_RTs_context.csv
+    stem = prefix if source == "tweets" else f"{prefix}_{source}"
+    return dataset / f"{stem}_RTs_context.csv"
+
+
+def put_context_RTs(dataset: Path, prefix: str, last_tweet_id, source: str = "tweets") -> None:
     dataset.mkdir(parents=True, exist_ok=True)
-    context_file = dataset / f"{prefix}_RTs_context.csv"
+    context_file = _rts_context_file(dataset, prefix, source)
     pd.DataFrame({"last_tweet_id": [str(last_tweet_id)]}).to_csv(context_file, index=False, encoding="utf-8")
 
 
-def get_context_RTs(dataset: Path, prefix: str) -> str | None:
-    context_file = dataset / f"{prefix}_RTs_context.csv"
+def get_context_RTs(dataset: Path, prefix: str, source: str = "tweets") -> str | None:
+    context_file = _rts_context_file(dataset, prefix, source)
     if not context_file.exists():
         return None
     context = pd.read_csv(context_file, dtype={"last_tweet_id": str}, encoding="utf-8")

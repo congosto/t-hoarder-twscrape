@@ -62,7 +62,7 @@ elegir (o crear) el proyecto sobre el que se va a trabajar.
 ### Parte izquierda · Sub-funciones y formulario
 
 Cada función se divide en **sub-funciones** (por ejemplo, Download ofrece
-Search, User TL, Retweets, Comments, Advanced Comments y About). Al elegir una
+Search, User TL, Retweets, Comments, Quotes y About). Al elegir una
 sub-función, esta zona muestra su **formulario de entrada de datos** y, al
 final, el **botón que lanza la operación**.
 
@@ -245,10 +245,10 @@ continuaciones, para no quemar la cuota en ráfaga.
 - Las **principales** — *Search* y *User TL*. Son las que crean un dataset:
   descargan tweets delimitados entre dos fechas, a partir de una query o de
   una lista de usuarios.
-- Las **complementarias** — *Retweets*, *Comments*, *Advanced Comments* y
-  *About*. Parten de un dataset ya descargado y lo enriquecen: quién retuiteó
-  sus tweets, qué respuestas recibieron y qué dice X de sus autores. Las tres
-  primeras son la materia prima de los grafos de la sección *Graphs*.
+- Las **complementarias** — *Retweets*, *Comments*, *Quotes* y *About*. Parten de un dataset ya descargado y lo enriquecen:
+  quién retuiteó sus tweets, qué respuestas y citas recibieron y qué dice X
+  de sus autores. Retweets, Comments y Quotes son la
+  materia prima de los grafos de la sección *Graphs*.
   *About* también puede partir de un CSV con nombres de usuario.
 
 Todas las descargas son **reanudables**: si se interrumpen (o se cortan a
@@ -309,22 +309,31 @@ pierde.
   por retuiteador y tweet. El umbral *Min RTs* sirve para centrarse en los
   tweets con difusión y no gastar cuota en los que apenas se retuitearon.
   Es la base de los grafos de RTs de *Graphs*.
+  Con *Retweets of* se elige de dónde salen los tweets: **Tweets** (los del
+  dataset, la opción de siempre) o las respuestas y citas ya descargadas
+  (**Comments** o **Quotes**). En estos dos casos parte de
+  `{dataset}_replies.csv` o `{dataset}_quotes.csv` y genera
+  `{dataset}_replies_RTs.csv` o `{dataset}_quotes_RTs.csv`. Cada origen se
+  reanuda por separado. Como esos ficheros no contienen el tweet original,
+  sus retuiteadores no se mezclan con los de las respuestas o citas.
 
 - **Comments** — para cada tweet del dataset con al menos *Min Replies*
-  respuestas, descarga esas respuestas (que son tweets completos) y genera
-  `{dataset}_replies.csv`. Usa el hilo de conversación de cada tweet, que es
-  rápido pero no siempre llega a todas las respuestas de las conversaciones
-  grandes.
+  respuestas, descarga esas respuestas (que son tweets completos) usando el
+  buscador: busca su conversación (`conversation_id`) con Latest en una sola
+  ventana, desde la fecha del tweet hasta *Last* días después. Si la
+  conversación desborda el buscador, sigue pidiendo desde donde llegaron los
+  resultados, igual que la descarga optimizada, así que la mayoría de los
+  tweets se resuelven en una consulta y llega a todas las respuestas también
+  en conversaciones con miles de ellas. Genera `{dataset}_replies.csv`, con
+  la columna `url_replied` (la url del tweet respondido) y sin el tweet
+  original, y anota cada desbordamiento en `{dataset}_replies_overflow.csv`.
 
-- **Advanced Comments** — el mismo objetivo que Comments, pero usando el
-  buscador: para cada tweet busca su conversación (`conversation_id`) con
-  Latest en una sola ventana, desde la fecha del tweet hasta *Last* días
-  después. Si la conversación desborda el buscador, sigue pidiendo desde
-  donde llegaron los resultados, igual que la descarga optimizada, así que
-  la mayoría de los tweets se resuelven en una consulta. Llega mucho más
-  hondo que Comments en conversaciones con cientos de respuestas. Anota cada
-  desbordamiento en `{dataset}_replies_advanced_overflow.csv` y genera
-  `{dataset}_replies_advanced.csv`.
+- **Quotes** — para cada tweet del dataset con al menos *Min Quotes* citas,
+  descarga los tweets que lo citan. Funciona igual que Comments,
+  pero busca `quoted_tweet_id`: Latest, una sola ventana desde la fecha del
+  tweet hasta *Last* días después y continuación si desborda. Genera
+  `{dataset}_quotes.csv`, con la columna `url_quoted` (la url del tweet
+  citado) y sin el tweet original, y anota los desbordamientos en `{dataset}_quotes_overflow.csv`.
 
 - **About** — para cada autor del dataset descarga lo que X muestra en la
   página *About this account* de su perfil (`x.com/{usuario}/about`): el
@@ -472,8 +481,14 @@ usuarios centrales de cada uno y cómo se conectan (o no) entre sí.
 
 - **La relación** — el grafo se construye a partir de una de las descargas
   complementarias de *Download*: **RT** (quién retuiteó a quién, del fichero
-  de Retweets), **replies** o **replies_advanced** (quién respondió a quién,
-  de Comments o Advanced Comments). Cada usuario es un nodo; cada relación,
+  de Retweets), **replies** (quién respondió a quién, de Comments) o
+  **quotes** (quién citó a quién, de
+  Quotes: la arista va de quien cita al autor del tweet citado). Con los
+  RTs de los comentarios y de las citas (*Retweets of* → Comments o Quotes)
+  hay además **replies_RT** y **quotes_RT**: funcionan como RT, del
+  retuiteador al autor del comentario o de la cita, y en el zoom cuentan por
+  la fecha del comentario o de la cita retuiteados. Cada usuario es un
+  nodo; cada relación,
   una arista dirigida cuyo peso es el número de veces que se repite.
 
 - **Las comunidades** — grupos de usuarios más conectados entre sí que con
@@ -484,7 +499,7 @@ usuarios centrales de cada uno y cómo se conectan (o no) entre sí.
   reutilizan siempre el mismo en vez de recalcularlo.
 
 - **La relevancia de un usuario** se mide por su **weighted indegree**: el
-  número de RTs (o respuestas) que recibió. Es lo que determina el tamaño de
+  número de RTs (o respuestas, o citas) que recibió. Es lo que determina el tamaño de
   cada nodo en el visor.
 
 El flujo típico es: **Detect communities** → **Generate graph** →
@@ -493,8 +508,8 @@ El flujo típico es: **Detect communities** → **Generate graph** →
 
 ### Las opciones, una a una
 
-- **Detect communities** — se necesitan las **relaciones** (RTs, replies o
-  replies_advanced), así que es imprescindible haberlas descargado
+- **Detect communities** — se necesitan las **relaciones** (RT, replies,
+  quotes, replies_RT o quotes_RT), así que es imprescindible haberlas descargado
   previamente en *Download*. Dado un dataset y una relación, construye el
   grafo, se queda con su **componente gigante** (la parte conexa más grande)
   y detecta las comunidades con el algoritmo de **Louvain**. Como resultado
@@ -514,8 +529,8 @@ El flujo típico es: **Detect communities** → **Generate graph** →
   Con *Zoom (time window)* se genera el grafo de solo un periodo, entre las
   fechas *From* y *To* (en UTC; si *To* es una fecha sin hora, incluye el día
   entero). Los RTs no tienen fecha propia —X no dice cuándo se hizo cada RT—,
-  así que se filtran por la **fecha del tweet retuiteado**; las respuestas,
-  por la suya. Las comunidades son las del grafo completo, de modo que los
+  así que se filtran por la **fecha del tweet retuiteado**; las respuestas
+  y las citas, por la suya. Las comunidades son las del grafo completo, de modo que los
   colores coinciden entre zooms y se puede comparar qué comunidades están
   activas en cada momento. El fichero lleva el periodo en el nombre
   (`{dataset}_RT_from-…_to-….gdf`) y no sobrescribe el grafo completo.
@@ -524,7 +539,9 @@ El flujo típico es: **Detect communities** → **Generate graph** →
   communities*. Dado un dataset y una relación, clasifica cada tweet con la
   comunidad de su autor y genera `{dataset}_{relation}_classified.csv`. Es
   el fichero que usa *Charts* para las gráficas por comunidad (qué dice
-  cada polo de la conversación).
+  cada polo de la conversación). Con replies_RT y quotes_RT clasifica los
+  tweets retuiteados, es decir, los comentarios o las citas, así que las
+  gráficas por comunidad de *Charts* muestran esa conversación.
 
 - **Visualize graph** — renderiza un grafo del proyecto (.gdf/.gexf) con el
   layout **ForceAtlas2** (el mismo de Gephi), calculado en vivo en el

@@ -164,8 +164,10 @@ def generate_tweet_charts(
     rango de fechas en vez de usar todo el periodo disponible.
 
     Si show_communities, lee los tweets clasificados de communities_relation
-    (RT | replies | replies_advanced) en vez de {prefix}.csv y añade las gráficas
-    por comunidad (tweets_by_community y words_frequency_by_community).
+    (RT | replies | quotes | replies_RT | quotes_RT) en vez de {prefix}.csv y
+    añade las gráficas por comunidad (tweets_by_community y
+    words_frequency_by_community). Con replies_RT / quotes_RT los tweets
+    clasificados son los comentarios o las citas (ver graphs.classify_tweets).
 
     Si show_about, añade los tweets acumulados por país de la cuenta del autor
     (about_account_based_in de {prefix}_about.csv, Download > About), sin y con
