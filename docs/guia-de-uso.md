@@ -579,6 +579,14 @@ publicación. Se generan dos conjuntos, uno por cada tipo de dataset:
   Se especifica el *Dataset*, el prefijo del título que llevarán todas las
   gráficas, la zona horaria y los valores mínimos de alcance y de RTs a
   partir de los cuales se etiqueta a los influencers en las gráficas.
+  Con *Tweets of* se elige qué tweets se grafican: **Tweets** (los del
+  dataset), **Comments** o **Quotes** (las respuestas o citas descargadas,
+  `{dataset}_replies.csv` o `{dataset}_quotes.csv`). Con comentarios o citas,
+  las gráficas y el informe se guardan como `{dataset}_replies` o
+  `{dataset}_quotes` (`{dataset}_replies_graficas/`…), y para las
+  comunidades no hace falta *Classify tweets*: cada comentario o cita toma la
+  comunidad de su autor de *Detect communities*, con cualquier relación
+  (lo natural es replies_RT o quotes_RT).
   Opcionalmente se puede:
   - **Incluir las comunidades** (hay que haberlas calculado antes en
     *Graphs*, con *Detect communities* y *Classify tweets*): añade las

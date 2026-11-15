@@ -48,11 +48,48 @@ def _build_communities_table(communities_file: Path, min_pct: float = 2.0):
     return df[["community", "name_community", "color"]]
 
 
-def _load_tweets(project_dir: Path, prefix: str, communities_relation: str | None = None):
+# Charts > Tweets of (15-11-2026): de qué fichero salen los tweets de las gráficas
+TWEET_SOURCES = {"tweets": "Tweets", "replies": "Comments", "quotes": "Quotes"}
+
+
+def _source_stem(prefix: str, source: str) -> str:
+    """{prefix} para los tweets del dataset; {prefix}_replies / {prefix}_quotes
+    para los comentarios o citas descargados."""
+    if source not in TWEET_SOURCES:
+        raise ValueError(f"source must be one of {', '.join(TWEET_SOURCES)}")
+    return prefix if source == "tweets" else f"{prefix}_{source}"
+
+
+def _load_tweets(project_dir: Path, prefix: str, communities_relation: str | None = None,
+                 source: str = "tweets"):
     """Carga los tweets del dataset. Si se indica communities_relation, lee el fichero
     clasificado {prefix}_{relation}_classified.csv (que trae la columna 'community')
-    en vez de {prefix}.csv, y devuelve además la tabla de comunidades."""
-    if communities_relation:
+    en vez de {prefix}.csv, y devuelve además la tabla de comunidades.
+
+    Con source = replies / quotes lee {prefix}_replies.csv / {prefix}_quotes.csv
+    y, si se piden comunidades, asigna a cada comentario o cita la comunidad de
+    su autor desde {prefix}_users_{relation}_communities.csv (vale cualquier
+    relación; no hace falta Classify tweets)."""
+    community_of = None
+    if source != "tweets":
+        stem = _source_stem(prefix, source)
+        tweets_file = project_dir / f"{stem}.csv"
+        if not tweets_file.exists():
+            raise FileNotFoundError(
+                f"{tweets_file.name} does not exist. Download it first "
+                f"(Download > {TWEET_SOURCES[source]}).")
+        communities = None
+        if communities_relation:
+            users_file = project_dir / f"{prefix}_users_{communities_relation}_communities.csv"
+            communities_file = project_dir / f"{prefix}_{communities_relation}_communities.csv"
+            if not (users_file.exists() and communities_file.exists()):
+                raise FileNotFoundError(
+                    f"{users_file.name} does not exist. Run Graphs > Detect communities "
+                    f"first for relation '{communities_relation}'.")
+            communities = _build_communities_table(communities_file)
+            users = pd.read_csv(users_file, dtype=str)
+            community_of = users.set_index("user")["community"].to_dict()
+    elif communities_relation:
         classified_file = project_dir / f"{prefix}_{communities_relation}_classified.csv"
         communities_file = project_dir / f"{prefix}_{communities_relation}_communities.csv"
         if not classified_file.exists():
@@ -74,6 +111,10 @@ def _load_tweets(project_dir: Path, prefix: str, communities_relation: str | Non
     tweets = pd.read_csv(tweets_file)
     if "date" not in tweets.columns:
         raise FileNotFoundError(f"{tweets_file} has no 'date' column; not a valid tweets file")
+    if community_of is not None:
+        # mismo criterio que graphs: handles sin @, sin espacios y en minúsculas
+        handles = tweets["username"].astype(str).str.strip().str.lstrip("@").str.lower()
+        tweets["community"] = handles.map(community_of)
     tweets["date"] = pd.to_datetime(tweets["date"], utc=True, errors="coerce")
     tweets = (
         tweets.sort_values("date")
@@ -156,9 +197,15 @@ def generate_tweet_charts(
     show_about: bool = False,
     min_date_zoom: str | None = None,
     max_date_zoom: str | None = None,
+    source: str = "tweets",
     log=print,
 ):
     """Genera las graficas de tweets de un proyecto.
+
+    source (15-11-2026, Charts > Tweets of): tweets ({prefix}.csv), replies
+    ({prefix}_replies.csv) o quotes ({prefix}_quotes.csv). Con comentarios o
+    citas la carpeta y los PNG llevan el nombre {prefix}_{source}; las cachés
+    de traducción, los topics y el about siguen siendo los del dataset.
 
     Si se indican min_date_zoom/max_date_zoom, las graficas se limitan a ese
     rango de fechas en vez de usar todo el periodo disponible.
@@ -180,15 +227,16 @@ def generate_tweet_charts(
     project_dir = Path(project_dir)
     slot_time = "1h"
 
+    stem = _source_stem(prefix, source)
     tweets, communities = _load_tweets(
-        project_dir, prefix, communities_relation if show_communities else None)
+        project_dir, prefix, communities_relation if show_communities else None, source=source)
     if show_about:
         tweets = _add_about_columns(project_dir, prefix, tweets)
 
     # con zoom, las gráficas van a su propia carpeta para no pisar las del periodo
     # completo (mismo sufijo que los grafos con zoom)
     tag = zoom_tag(min_date_zoom, max_date_zoom) if (min_date_zoom and max_date_zoom) else ""
-    image_path = project_dir / f"{prefix}_graficas{tag}"
+    image_path = project_dir / f"{stem}_graficas{tag}"
     image_path.mkdir(exist_ok=True)
 
     tweets["date"] = tweets["date"].dt.tz_convert(time_zone).dt.tz_localize(None).dt.floor("s")
@@ -196,7 +244,7 @@ def generate_tweet_charts(
     tweets["date_slot"] = tweets["date"].dt.floor("h")
 
     if tweets.empty:
-        raise FileNotFoundError(f"{prefix}: no tweets with a valid date")
+        raise FileNotFoundError(f"{stem}: no tweets with a valid date")
 
     if min_date_zoom and max_date_zoom:
         try:
@@ -241,39 +289,39 @@ def generate_tweet_charts(
     add(
         "Tweets vs. reach with influencers",
         _charts.draw_tweets_vs_reach_influencers(tweets, min_date, max_date, min_reach, base_title, slot_time),
-        f"{prefix}_tweets_vs_reach_influencers.png",
+        f"{stem}_tweets_vs_reach_influencers.png",
     )
     add(
         "Tweets vs. reach",
         _charts.draw_tweets_vs_reach(tweets, min_date, max_date, base_title, slot_time),
-        f"{prefix}_tweets_vs_reach.png",
+        f"{stem}_tweets_vs_reach.png",
     )
 
     add(
         "Tweets vs. RTs with influencers",
         _charts.draw_tweets_vs_RTs_influencers(tweets, min_date, max_date, min_RTs, base_title, slot_time),
-        f"{prefix}_tweets_vs_RTs_influencers.png",
+        f"{stem}_tweets_vs_RTs_influencers.png",
     )
     add(
         "Tweets vs. RTs",
         _charts.draw_tweets_vs_RTs(tweets, min_date, max_date, base_title, slot_time),
-        f"{prefix}_tweets_vs_RTs.png",
+        f"{stem}_tweets_vs_RTs.png",
     )
     add(
         "Comments vs. RTs",
         _charts.draw_comments_vs_RTs(tweets, min_date, max_date, base_title),
-        f"{prefix}_comments_vs_RTs.png",
+        f"{stem}_comments_vs_RTs.png",
     )
     add(
         "Most frequent words",
         _charts.draw_word_frequency(tweets, min_date, max_date, False, base_title,
-                                    str(project_dir), prefix, translate=word_translator),
-        f"{prefix}_word_cloud.png",
+                                    str(project_dir), stem, translate=word_translator),
+        f"{stem}_word_cloud.png",
     )
     add(
         "Most frequent words (with amplification)",
         _charts.draw_word_frequency(tweets, min_date, max_date, True, base_title, translate=word_translator),
-        f"{prefix}_word_cloud_RTs.png",
+        f"{stem}_word_cloud_RTs.png",
     )
 
     media = [
@@ -287,53 +335,53 @@ def generate_tweet_charts(
     add(
         "Media mentions",
         _charts.draw_media_acumulate(tweets, min_date, max_date, media, True, base_title, slot_time),
-        f"{prefix}_medios.png",
+        f"{stem}_medios.png",
     )
 
     if topics is not None:
         add(
             "Topics - cumulative",
             _charts.draw_topics_acumulate(tweets, topics, min_date, max_date, False, base_title, events, slot_time),
-            f"{prefix}_topics.png",
+            f"{stem}_topics.png",
         )
         add(
             "Topics - cumulative (with amplification)",
             _charts.draw_topics_acumulate(tweets, topics, min_date, max_date, True, base_title, events, slot_time),
-            f"{prefix}_topics_RTs.png",
+            f"{stem}_topics_RTs.png",
         )
 
     if show_about:
         add(
             "Account country - cumulative",
             _charts.draw_about_acumulate(tweets, min_date, max_date, False, base_title, events, slot_time),
-            f"{prefix}_about_country.png",
+            f"{stem}_about_country.png",
         )
         add(
             "Account country - cumulative (with amplification)",
             _charts.draw_about_acumulate(tweets, min_date, max_date, True, base_title, events, slot_time),
-            f"{prefix}_about_country_RTs.png",
+            f"{stem}_about_country_RTs.png",
         )
         add(
             "Account country - writing vs. amplification",
             _charts.draw_about_scatter(tweets, min_date, max_date, base_title),
-            f"{prefix}_about_country_scatter.png",
+            f"{stem}_about_country_scatter.png",
         )
         add(
             "Suspicious profiles (username changes)",
             _charts.draw_about_suspicious(tweets, min_date, max_date, base_title),
-            f"{prefix}_about_suspicious.png",
+            f"{stem}_about_suspicious.png",
         )
 
     if communities is not None and not communities.empty:
         add(
             "Most frequent words by community",
             _charts.words_frequency_by_community(tweets, communities, base_title, translate=word_translator),
-            f"{prefix}_{communities_relation}_words_by_community.png",
+            f"{stem}_{communities_relation}_words_by_community.png",
         )
         add(
             "Tweets by community",
             _charts.tweets_by_community(tweets, min_date, max_date, communities, base_title, events, slot_time),
-            f"{prefix}_{communities_relation}_tweets_by_community.png",
+            f"{stem}_{communities_relation}_tweets_by_community.png",
         )
 
     return figs, image_path
@@ -587,9 +635,12 @@ def generate_tweet_report(project_dir: Path, prefix: str, base_title: str, *args
     figs, _ = generate_tweet_charts(project_dir, prefix, base_title, *args, log=log, **kwargs)
     zmin, zmax = kwargs.get("min_date_zoom"), kwargs.get("max_date_zoom")
     tag = zoom_tag(zmin, zmax) if (zmin and zmax) else ""
-    subtitle = f"Dataset {prefix}" + (f" — zoom {zmin} → {zmax}" if tag else "")
-    html = build_html_report(figs, title=f"{base_title}: tweets report", subtitle=subtitle)
-    out_path = Path(project_dir) / f"{prefix}_informe_tweets{tag}.html"
+    source = kwargs.get("source", "tweets")
+    stem = _source_stem(prefix, source)
+    what = {"tweets": "tweets", "replies": "comments", "quotes": "quotes"}[source]
+    subtitle = f"Dataset {stem}" + (f" — zoom {zmin} → {zmax}" if tag else "")
+    html = build_html_report(figs, title=f"{base_title}: {what} report", subtitle=subtitle)
+    out_path = Path(project_dir) / f"{stem}_informe_tweets{tag}.html"
     out_path.write_text(html, encoding="utf-8")
     for fig in figs.values():
         plt.close(fig)

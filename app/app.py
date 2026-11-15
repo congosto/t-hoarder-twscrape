@@ -1242,9 +1242,24 @@ with left:
             if not st.session_state.active_project:
                 st.write("Select or create a project in 'Project' before generating charts.")
             else:
+                tg_source_label = st.radio(
+                    "Tweets of", ["Tweets", "Comments", "Quotes"], horizontal=True,
+                    key="tg_source",
+                    help="Tweets: {dataset}.csv. Comments / Quotes: the replies or quotes "
+                         "downloaded for the dataset ({dataset}_replies.csv / "
+                         "{dataset}_quotes.csv); charts and report are saved as "
+                         "{dataset}_replies / {dataset}_quotes. With Show communities, each "
+                         "comment or quote takes its author's community from Detect "
+                         "communities (any relation).",
+                )
+                tg_source = {"Tweets": "tweets", "Comments": "replies",
+                             "Quotes": "quotes"}[tg_source_label]
                 col_prefix, col_title = st.columns(2)
                 with col_prefix:
-                    tg_prefix = prefix_input("Dataset", "tg_prefix", kinds=("search",))
+                    # los comentarios y citas se bajan también de datasets de User TL
+                    tg_prefix = prefix_input(
+                        "Dataset", "tg_prefix",
+                        kinds=("search",) if tg_source == "tweets" else _ALL_KINDS)
                 with col_title:
                     tg_title = st.text_input("Base title", key="tg_title")
 
@@ -1334,7 +1349,7 @@ with left:
                                 translate_words=tg_translate,
                                 show_events=tg_events, events_file=tg_events_file,
                                 show_communities=tg_communities, communities_relation=tg_comm_relation,
-                                show_about=tg_about,
+                                show_about=tg_about, source=tg_source,
                                 min_date_zoom=tg_zoom_min if tg_zoom else None,
                                 max_date_zoom=tg_zoom_max if tg_zoom else None,
                                 log=log,

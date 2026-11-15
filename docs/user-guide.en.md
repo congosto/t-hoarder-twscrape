@@ -571,7 +571,16 @@ sets are generated, one per dataset type:
 
   You specify the *Dataset*, the title prefix that all the charts will
   carry, the time zone and the minimum reach and RT values above which
-  influencers are labeled in the charts. Optionally you can:
+  influencers are labeled in the charts. *Tweets of* chooses which tweets
+  are charted: **Tweets** (those of the dataset), **Comments** or **Quotes**
+  (the downloaded replies or quotes, `{dataset}_replies.csv` or
+  `{dataset}_quotes.csv`). With comments or quotes, the charts and the
+  report are saved as `{dataset}_replies` or `{dataset}_quotes`
+  (`{dataset}_replies_graficas/`…), and communities do not need *Classify
+  tweets*: each comment or quote takes its author's community from *Detect
+  communities*, with any relation (replies_RT or quotes_RT being the
+  natural choice).
+  Optionally you can:
   - **Include the communities** (they must have been computed before in
     *Graphs*, with *Detect communities* and *Classify tweets*): adds the
     per-community charts — how much each pole of the conversation posts
