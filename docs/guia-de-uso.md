@@ -398,6 +398,12 @@ descarga se puede guardar y **compartir como un único archivo**, que
 cualquiera puede abrir en su navegador. Si el dataset no ha cambiado desde
 la última vez, se reutiliza el ya generado en vez de recalcularlo.
 
+Con **Dashboard of** se elige de qué tweets se hace: *Tweets* (los del
+dataset), *Comments* o *Quotes* (los comentarios o las citas descargados
+para el dataset, `{dataset}_replies.csv` / `{dataset}_quotes.csv`). Los de
+comentarios y citas se guardan como `{dataset}_replies_dashboard.html` /
+`{dataset}_quotes_dashboard.html`.
+
 ## Tools
 
 Herramientas para manejar los datasets del proyecto activo. Dos de ellas

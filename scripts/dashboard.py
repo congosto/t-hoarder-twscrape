@@ -110,17 +110,31 @@ def _render_html(payload: dict) -> str:
     )
 
 
+# Dashboard of (16-11-2026): de qué fichero sale el dashboard (mismo criterio
+# que Charts > Tweets of)
+DASHBOARD_SOURCES = {"tweets": "Tweets", "replies": "Comments", "quotes": "Quotes"}
+
+
 def generate_dashboard(project_dir, prefix: str, title: str | None = None,
-                       log=print, force: bool = False):
+                       log=print, force: bool = False, source: str = "tweets"):
     """Genera (o reutiliza) el dashboard de {prefix}.csv (mismo para datasets
     de search y de users). Devuelve (html, path). Si el HTML existe y es igual
     o más nuevo que el CSV y no se fuerza, lo reutiliza; si el CSV es más nuevo,
-    regenera."""
+    regenera.
+
+    source = replies / quotes: dashboard de los comentarios o citas descargados
+    ({prefix}_replies.csv / {prefix}_quotes.csv), guardado como
+    {prefix}_replies_dashboard.html / {prefix}_quotes_dashboard.html."""
+    if source not in DASHBOARD_SOURCES:
+        raise ValueError(f"source must be one of {', '.join(DASHBOARD_SOURCES)}")
     project_dir = Path(project_dir)
-    csv_path = project_dir / f"{prefix}.csv"
-    html_path = project_dir / f"{prefix}_dashboard.html"
+    stem = prefix if source == "tweets" else f"{prefix}_{source}"
+    csv_path = project_dir / f"{stem}.csv"
+    html_path = project_dir / f"{stem}_dashboard.html"
     if not csv_path.exists():
-        raise FileNotFoundError(f"{prefix}.csv does not exist in the active project.")
+        hint = "" if source == "tweets" else f" Download it first (Download > {DASHBOARD_SOURCES[source]})."
+        raise FileNotFoundError(f"{stem}.csv does not exist in the active project.{hint}")
+    prefix = stem
 
     # regenera si el CSV o este propio módulo (plantilla/lógica) son más nuevos
     # que el HTML: así los cambios de código se reflejan sin borrar la caché

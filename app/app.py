@@ -892,6 +892,16 @@ with left:
         if not st.session_state.active_project:
             st.write("Select or create a project in 'Project' before opening a dashboard.")
         else:
+            db_source_label = st.radio(
+                "Dashboard of", ["Tweets", "Comments", "Quotes"], horizontal=True,
+                key="db_source",
+                help="Tweets: {dataset}.csv. Comments / Quotes: the replies or quotes "
+                     "downloaded for the dataset ({dataset}_replies.csv / "
+                     "{dataset}_quotes.csv); saved as {dataset}_replies_dashboard.html / "
+                     "{dataset}_quotes_dashboard.html.",
+            )
+            db_source = {"Tweets": "tweets", "Comments": "replies",
+                         "Quotes": "quotes"}[db_source_label]
             db_prefix = prefix_input("Dataset", "db_prefix")
             db_title = st.text_input("Title (optional)", key="db_title")
             if st.button("Show dashboard", key="db_show"):
@@ -901,8 +911,10 @@ with left:
                     try:
                         project_dir = projects.select_project(st.session_state.active_project)
                         with st.spinner("Building dashboard..."):
+                            default_title = db_prefix if db_source == "tweets" else                                 f"{db_prefix} ({db_source_label.lower()})"
                             html, path = dashboard.generate_dashboard(
-                                project_dir, db_prefix, db_title or db_prefix, log=log,
+                                project_dir, db_prefix, db_title or default_title,
+                                log=log, source=db_source,
                             )
                         set_result_report(html, path)
                     except (FileNotFoundError, ValueError) as e:

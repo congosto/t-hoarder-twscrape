@@ -395,6 +395,12 @@ button you can save it and **share it as a single file** that anyone can
 open in their browser. If the dataset has not changed since last time, the
 already-generated one is reused instead of recalculating it.
 
+**Dashboard of** chooses which tweets it is built from: *Tweets* (the
+dataset's own), *Comments* or *Quotes* (the comments or quotes downloaded
+for the dataset, `{dataset}_replies.csv` / `{dataset}_quotes.csv`). Those of
+comments and quotes are saved as `{dataset}_replies_dashboard.html` /
+`{dataset}_quotes_dashboard.html`.
+
 ## Tools
 
 Utilities to manage the datasets of the active project. Two of them (Merge
