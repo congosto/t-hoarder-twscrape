@@ -1,5 +1,6 @@
 import queue
 import time
+from types import SimpleNamespace
 from pathlib import Path
 
 import pandas as pd
@@ -99,6 +100,36 @@ def _fmt_elapsed(seconds: int) -> str:
     return f"{seconds // 3600}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
 
 
+_BLOCK_RETRIES = 3
+_BLOCK_RETRY_WAIT = 60  # s; se multiplica por el nº de intento
+
+
+def _search_unblocked(query: str, n: int, product: str, log, counts) -> list[dict]:
+    """Búsqueda que no confunde un bloqueo con el final de los datos
+    (20-11-2026). Si twscrape aborta ("Blocked by Cloudflare: 429") se
+    reintenta la consulta con esperas crecientes; si sigue bloqueada se lanza
+    RuntimeError para que la descarga pare y se reanude desde el contexto, en
+    vez de dar la ventana por completa. Excepción: si antes del bloqueo ya
+    habían llegado >= min(n, _OVERFLOW_WARN) tweets, la ventana desborda
+    igualmente y la continuación sigue desde su frontera, así que se aceptan.
+
+    counts necesita atributos queries y received (cada intento cuenta)."""
+    for attempt in range(1, _BLOCK_RETRIES + 1):
+        tweets, blocked = run_async(scraping.search_tweets_watched(query, n=n, product=product))
+        counts.queries += 1
+        counts.received += len(tweets)
+        if not blocked or len(tweets) >= min(n, _OVERFLOW_WARN):
+            return tweets
+        if attempt == _BLOCK_RETRIES:
+            raise RuntimeError(
+                f"Search blocked by X ({blocked}) after {_BLOCK_RETRIES} attempts. "
+                f"Progress is saved: launch the download again later to resume.")
+        wait = _BLOCK_RETRY_WAIT * attempt
+        log(f"Search blocked ({blocked}) with {len(tweets)} tweets received; "
+            f"retrying in {wait} seconds ({attempt}/{_BLOCK_RETRIES})...")
+        time.sleep(wait)
+
+
 class _DownloadStats:
     """Cronómetro y contadores de una descarga, para comparar alternativas
     (modo, frecuencia, nº de cuentas...). El tiempo es real e incluye las
@@ -117,11 +148,8 @@ class _DownloadStats:
         self.received = 0
         self.ended = False
 
-    def search(self, query: str, n: int, product: str) -> list[dict]:
-        tweets = run_async(scraping.search_tweets(query, n=n, product=product))
-        self.queries += 1
-        self.received += len(tweets)
-        return tweets
+    def search(self, query: str, n: int, product: str, log=print) -> list[dict]:
+        return _search_unblocked(query, n, product, log, counts=self)
 
     def _seconds(self) -> int:
         return int(time.monotonic() - self.start)
@@ -222,7 +250,7 @@ def _record_overflow(path: Path, source: str, since, until, product: str,
 
 
 def historical_search(data_path: Path, dataset: str, prefix: str, query: str, since, until,
-                       frequency: str, sleep_time: int = 5, n: int = 900, product: str = "Top",
+                       frequency: str, sleep_time: int = 1, n: int = 900, product: str = "Top",
                        log=print) -> Path:
     _log_handler = _start_forwarding_twscrape_logs(log)
     stats = None
@@ -267,7 +295,7 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
             log(f"From {a} to {b}")
             query_date = f"{query} {_time_operators(a, b, product)}"
             log(f"--> Downloading {query_date} (product={product}) ......")
-            tweets = stats.search(query_date, n=n, product=product)
+            tweets = stats.search(query_date, n=n, product=product, log=log)
             log(f"Downloaded {len(tweets)} tweets")
             if len(tweets) >= _overflow_threshold(n):
                 _record_overflow(overflow_file, query, a, b, product, frequency, len(tweets), n, log)
@@ -324,7 +352,9 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
 # el 94 % en datos densos y con el último tweet el 61 %; con la mediana de las
 # fechas de la última página se recupera >= 97 % (pruebas del 17-10-2026 con
 # «gobierno lang:es», 9.006 tweets en 3 h). Solo si la frontera no avanza se
-# subdivide con la siguiente frecuencia de la escalera, como antes.
+# subdivide con la siguiente frecuencia de la escalera, como antes. Desde el
+# 20-11-2026 también se continúa si la respuesta llega cortada sin desbordar
+# (>= _OPT_CUT_MIN tweets): X puede dejar de paginar antes de su techo.
 #
 # El producto es SIEMPRE Latest (2026-09-03). Antes la escalera usaba Top en las
 # ventanas intradía recientes y añadía una pasada Top de "residuo viral" en las
@@ -335,6 +365,15 @@ def historical_search(data_path: Path, dataset: str, prefix: str, query: str, si
 
 _OPT_LADDER = ["1 month", "1 week", "1 day", "6 hour", "3 hour", "1 hour", "30 min"]
 _OPT_OVERFLOW = 500
+# Respuesta cortada (20-11-2026): X puede dejar de paginar mucho antes de su
+# techo sin dar error. En el debate cara a cara, [00:00, 22:04) devolvió 441
+# tweets, todos de 22:01-22:04, y como 441 < 500 se dio el día por completo:
+# se perdió entera la hora de las 21h (~20.000 tweets en otro dataset). Por
+# eso, aunque no desborde, si llegan >= _OPT_CUT_MIN tweets (5 páginas) se
+# sigue pidiendo [since, frontera); la ventana solo se da por completa cuando
+# una consulta trae menos de eso. Cuesta una consulta más por ventana con
+# 100-499 tweets, que en una ventana completa vuelve casi vacía.
+_OPT_CUT_MIN = 100
 
 
 def _initial_frequency(since, until) -> str:
@@ -369,23 +408,36 @@ def _continuation_frontier(tweets: list[dict], a: pd.Timestamp, b: pd.Timestamp)
 def _optimized_window(a: pd.Timestamp, b: pd.Timestamp, level: int, fetch, threshold: int,
                       record) -> int:
     """Descarga [a, b) a la frecuencia _OPT_LADDER[level] continuando por la
-    frontera mientras desborde. fetch(a, b, freq) descarga y guarda una
+    frontera mientras desborde o llegue cortada (>= _OPT_CUT_MIN sin desbordar
+    y sin alcanzar el inicio). fetch(a, b, freq) descarga y guarda una
     ventana y devuelve sus tweets; record(a, b, freq, ntweets, action) anota
-    el overflow. Devuelve el nº de consultas que desbordaron."""
+    cada continuación. Devuelve el nº de consultas continuadas."""
     overflows = 0
     freq = _OPT_LADDER[level]
     while True:
         tweets = fetch(a, b, freq)
-        if len(tweets) < threshold:
+        short = len(tweets) < threshold
+        if short and len(tweets) < _OPT_CUT_MIN:
             return overflows
-        overflows += 1
         frontier = _continuation_frontier(tweets, a, b)
         if frontier is None or frontier <= a:
-            record(a, b, freq, len(tweets), "overflow (window start reached, complete)")
+            if not short:
+                overflows += 1
+                record(a, b, freq, len(tweets), "overflow (window start reached, complete)")
             return overflows
         # el epoch va en segundos: se redondea hacia arriba para no dejar fuera
         # el segundo de la frontera (el solape se deduplica al final)
         rest = frontier.ceil("s") + pd.Timedelta(seconds=1)
+        if short:
+            # X puede cortar la paginación antes de su techo (ver _OPT_CUT_MIN):
+            # se pide el resto; si de verdad estaba completa, vendrá casi vacío
+            if rest >= b:
+                return overflows
+            overflows += 1
+            record(a, b, freq, len(tweets), f"cut short -> continue until {rest:%Y-%m-%d %H:%M:%S}")
+            b = rest
+            continue
+        overflows += 1
         if rest < b:
             record(a, b, freq, len(tweets), f"overflow -> continue until {rest:%Y-%m-%d %H:%M:%S}")
             b = rest
@@ -429,7 +481,7 @@ def _record_overflow_opt(path: Path, source: str, since, until, product: str,
 
 
 def optimized_search(data_path: Path, dataset: str, prefix: str, query: str, since, until,
-                     sleep_time: int = 5, n: int = 900, log=print) -> Path:
+                     sleep_time: int = 1, n: int = 900, log=print) -> Path:
     _log_handler = _start_forwarding_twscrape_logs(log)
     stats = None
     try:
@@ -483,7 +535,7 @@ def optimized_search(data_path: Path, dataset: str, prefix: str, query: str, sin
             pace()
             query_date = f"{query} {_optimized_operators(a, b)}"
             log(f"--> Downloading {query_date} (product=Latest, frequency={freq}) ......")
-            tweets = stats.search(query_date, n=n, product="Latest")
+            tweets = stats.search(query_date, n=n, product="Latest", log=log)
             log(f"Downloaded {len(tweets)} tweets")
             if tweets:
                 store(tweets, a, b)
@@ -521,7 +573,7 @@ def optimized_search(data_path: Path, dataset: str, prefix: str, query: str, sin
 
 
 def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: list[str],
-                         since, until, frequency: str, sleep_time: int = 5, n: int = 900,
+                         since, until, frequency: str, sleep_time: int = 1, n: int = 900,
                          product: str = "Top", log=print) -> Path:
     _log_handler = _start_forwarding_twscrape_logs(log)
     stats = None
@@ -572,7 +624,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
                 log(f"From {a} to {b}")
                 query_date = f"from:{_user} {_time_operators(a, b, product)}"
                 log(f"--> Downloading {query_date} (product={product}) ......")
-                tweets = stats.search(query_date, n=n, product=product)
+                tweets = stats.search(query_date, n=n, product=product, log=log)
                 log(f"Downloaded {len(tweets)} tweets")
                 if len(tweets) >= _overflow_threshold(n):
                     _record_overflow(overflow_file, f"from:{_user}", a, b, product, frequency, len(tweets), n, log)
@@ -614,7 +666,7 @@ def historical_timeline(data_path: Path, dataset: str, prefix: str, list_users: 
 
 
 def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: list[str],
-                       since, until, sleep_time: int = 5, n: int = 900, log=print) -> Path:
+                       since, until, sleep_time: int = 1, n: int = 900, log=print) -> Path:
     """Descarga optimizada de timelines: mismo criterio que optimized_search
     (frecuencia inicial según el periodo, siempre Latest —ventanas de >= 1 día
     alineadas a medianoche y epoch en las intradía—, continuación desde la
@@ -668,7 +720,7 @@ def optimized_timeline(data_path: Path, dataset: str, prefix: str, list_users: l
                 pace()
                 query_date = f"from:{_user} {_optimized_operators(a, b)}"
                 log(f"--> Downloading {query_date} (product=Latest, frequency={freq}) ......")
-                tweets = stats.search(query_date, n=n, product="Latest")
+                tweets = stats.search(query_date, n=n, product="Latest", log=log)
                 log(f"Downloaded {len(tweets)} tweets")
                 if tweets:
                     store(tweets, a, b, _user)
@@ -795,7 +847,7 @@ def get_retweets(data_path: Path, dataset: str, prefix: str, min_rts: int = 1,
 
 
 def get_replies(data_path: Path, dataset: str, prefix: str, min_replies: int = 1,
-                 last_days: int = 4, sleep_time: int = 5, n: int = 900,
+                 last_days: int = 4, sleep_time: int = 1, n: int = 900,
                  log=print) -> Path:
     """Respuestas de cada tweet vía el buscador (conversation_id:{id}
     filter:replies) con el criterio de la descarga optimizada (13-11-2026):
@@ -806,22 +858,32 @@ def get_replies(data_path: Path, dataset: str, prefix: str, min_replies: int = 1
     que fuera de sus 7 días de memoria es errático. Desde el 14-11-2026 es la
     ÚNICA descarga de comentarios (antes get_replies_advanced; la antigua
     get_replies con tweet_replies de twscrape se eliminó) y su salida es
-    {prefix}_replies.csv."""
+    {prefix}_replies.csv.
+
+    Falsos positivos (18-11-2026): el buscador cuela tweets que solo mencionan
+    al autor y no están en la conversación. Se queda lo que tiene
+    conversation_id_str == id del tweet, así que las respuestas a respuestas
+    (los hilos) se conservan."""
     return _search_per_tweet(
         data_path, dataset, prefix, kind="replies", count_col="reply_count",
         min_count=min_replies, query=lambda tid: f"conversation_id:{tid} filter:replies",
+        belongs=lambda df: _id_text(df["conversation_id_str"]),
         link_col="url_replied", noun="replies", title="Comments",
         last_days=last_days, sleep_time=sleep_time, n=n, log=log)
 
 
 def get_quotes(data_path: Path, dataset: str, prefix: str, min_quotes: int = 1,
-               last_days: int = 4, sleep_time: int = 5, n: int = 900, log=print) -> Path:
+               last_days: int = 4, sleep_time: int = 1, n: int = 900, log=print) -> Path:
     """Citas de cada tweet (14-11-2026) vía el buscador (quoted_tweet_id:{id}),
     con el mismo criterio que get_replies. Salida {prefix}_quotes.csv
-    con url_quoted = url del tweet citado."""
+    con url_quoted = url del tweet citado.
+
+    Falsos positivos (18-11-2026): se descarta lo que no cita ese tweet
+    (quoted_tweet_url de otro tweet o vacío, como otros tweets del autor)."""
     return _search_per_tweet(
         data_path, dataset, prefix, kind="quotes", count_col="quote_count",
         min_count=min_quotes, query=lambda tid: f"quoted_tweet_id:{tid}",
+        belongs=lambda df: _status_id(df["quoted_tweet_url"]),
         link_col="url_quoted", noun="quotes", title="Quotes",
         last_days=last_days, sleep_time=sleep_time, n=n, log=log)
 
@@ -831,8 +893,51 @@ def _status_id(urls: pd.Series) -> pd.Series:
     return urls.astype(str).str.extract(r"/status/(\d+)")[0]
 
 
+def _id_text(ids: pd.Series) -> pd.Series:
+    """Ids como texto sin el '.0' que deja un CSV releído como float."""
+    return ids.astype(str).str.replace(r"\.0$", "", regex=True)
+
+
+def _write_per_tweet_summary(tweets: pd.DataFrame, found: pd.DataFrame, kind: str,
+                             count_col: str, link_col: str, path: Path) -> None:
+    """Una fila por tweet de origen buscado (18-11-2026, spec de la autora)
+    con lo descargado frente al contador de X que trae {prefix}.csv.
+
+    replies: replies_direct (responden al propio tweet), replies_total (toda
+    la conversación, hilos incluidos), pct_direct = direct / reply_count y
+    pct_total = total / reply_count. El reply_count de X se parece al total de
+    la conversación, no a las directas (jordi_wild: 17.127 de contador, 16.203
+    en total y 9.380 directas), así que pct_total es el que dice cuánto se ha
+    descargado. Los porcentajes pueden pasar del 100 % si el contador se tomó
+    antes de que llegaran más respuestas.
+    quotes: quotes_downloaded y pct_downloaded = downloaded / quote_count.
+
+    Los tweets sin nada descargado salen con 0, para ver qué falta."""
+    src = _status_id(found[link_col]) if len(found) else pd.Series(dtype=str)
+    out = tweets[["url", "date", "username", count_col, "tweet_id"]].copy()
+    out[count_col] = pd.to_numeric(out[count_col], errors="coerce").fillna(0).astype(int)
+
+    def per_tweet(mask) -> pd.Series:
+        return out["tweet_id"].map(src[mask].value_counts()).fillna(0).astype(int)
+
+    if kind == "replies":
+        direct = (_id_text(found["in_reply_to_tweet_id_str"]) == src) if len(found) \
+            else pd.Series(dtype=bool)
+        out["replies_direct"] = per_tweet(direct)
+        out["replies_total"] = per_tweet(src.notna())
+        got, pct = "replies_direct", "pct_direct"
+    else:
+        out["quotes_downloaded"] = per_tweet(src.notna())
+        got, pct = "quotes_downloaded", "pct_downloaded"
+    counter = out[count_col].where(out[count_col] > 0)
+    out[pct] = (100 * out[got] / counter).round(1)
+    if kind == "replies":
+        out["pct_total"] = (100 * out["replies_total"] / counter).round(1)
+    out.drop(columns="tweet_id").to_csv(path, index=False, encoding="utf-8")
+
+
 def _search_per_tweet(data_path: Path, dataset: str, prefix: str, kind: str, count_col: str,
-                      min_count: int, query, link_col: str, noun: str, title: str,
+                      min_count: int, query, belongs, link_col: str, noun: str, title: str,
                       last_days: int, sleep_time: int, n: int, log) -> Path:
     """Para cada tweet de {prefix}.csv con count_col >= min_count, busca
     query(tweet_id) con Latest en [fecha del tweet, + last_days) continuando
@@ -840,7 +945,12 @@ def _search_per_tweet(data_path: Path, dataset: str, prefix: str, kind: str, cou
     url del tweet de origen en link_col. Reanuda por tweet_id. El propio
     tweet de origen nunca entra en el fichero (14-11-2026): si el buscador lo
     devuelve, al sacar después los RTs de comentarios/citas se mezclarían los
-    del tweet original."""
+    del tweet original.
+
+    belongs(df) da, para cada resultado, el id del tweet al que pertenece
+    (conversación o tweet citado); los que no coinciden con el de origen son
+    falsos positivos del buscador y no pasan al fichero, aunque sí quedan en
+    {prefix}_{kind}_raw.csv para poder revisarlos (18-11-2026)."""
     _log_handler = _start_forwarding_twscrape_logs(log)
     try:
         output = Path(data_path) / dataset
@@ -864,7 +974,8 @@ def _search_per_tweet(data_path: Path, dataset: str, prefix: str, kind: str, cou
 
         threshold = min(n, _OPT_OVERFLOW)
         start_time = time.monotonic()
-        counts = {"queries": 0, "received": 0}
+        counts = {"false_positives": 0}
+        counter = SimpleNamespace(queries=0, received=0)
         _pacer = {"first": True}
         overflow_count = 0
 
@@ -881,9 +992,7 @@ def _search_per_tweet(data_path: Path, dataset: str, prefix: str, kind: str, cou
                 pace()
                 query_date = f"{query(_tid)} {_optimized_operators(a, b)}"
                 log(f"--> Downloading {query_date} (product=Latest) ......")
-                replies = run_async(scraping.search_tweets(query_date, n=n, product="Latest"))
-                counts["queries"] += 1
-                counts["received"] += len(replies)
+                replies = _search_unblocked(query_date, n, "Latest", log, counter)
                 log(f"Downloaded {len(replies)} {noun}")
                 if replies:
                     df = _to_dataframe(replies)
@@ -893,6 +1002,11 @@ def _search_per_tweet(data_path: Path, dataset: str, prefix: str, kind: str, cou
                         return replies
                     df = clean_text(df)
                     _write_csv(df, output_raw_file, output_raw_file.exists())
+                    fp = belongs(df) != str(_tid)
+                    if fp.any():
+                        counts["false_positives"] += int(fp.sum())
+                        log(f"Discarded {int(fp.sum())} false positive(s) not in {_url}")
+                        df = df[~fp]
                     df = clean_tweets(df, a, b)
                     if len(df):
                         _write_csv(df, output_file, append)
@@ -926,18 +1040,30 @@ def _search_per_tweet(data_path: Path, dataset: str, prefix: str, kind: str, cou
         # el solape de 1 s de las continuaciones y las reanudaciones a mitad de
         # un tweet dejan repetidos
         total = 0
+        df = pd.DataFrame(columns=["url", link_col, "in_reply_to_tweet_id_str"])
         if output_file.exists():
-            df = pd.read_csv(output_file, encoding="utf-8").drop_duplicates(subset="url")
-            # también limpia ficheros de descargas anteriores a este filtro
+            # como texto: releído con tipos, las columnas de ids con huecos
+            # (in_reply_to_*) pasaban a float y se reescribían como 2.12e+18
+            df = pd.read_csv(output_file, encoding="utf-8",
+                             dtype=str).drop_duplicates(subset="url")
+            # también limpia ficheros de descargas anteriores a estos filtros
             if link_col in df.columns:
                 df = df[_status_id(df["url"]) != _status_id(df[link_col])]
+                fp = belongs(df) != _status_id(df[link_col])
+                if fp.any():
+                    counts["false_positives"] += int(fp.sum())
+                    df = df[~fp]
             df.to_csv(output_file, index=False, encoding="utf-8")
             total = len(df)
+        summary_file = output / f"{prefix}_{kind}_summary.csv"
+        _write_per_tweet_summary(tweets, df, kind, count_col, link_col, summary_file)
+        log(f"Per-tweet summary saved in {summary_file.name}")
         if overflow_count:
             log(f"{overflow_count} query(ies) overflowed and were continued from their "
                 f"frontier — see {overflow_file.name} for every range change.")
-        log(f"Elapsed {_fmt_elapsed(int(time.monotonic() - start_time))} — {counts['queries']} "
-            f"queries, {counts['received']} {noun} received, {total} unique in the file")
+        log(f"Elapsed {_fmt_elapsed(int(time.monotonic() - start_time))} — {counter.queries} "
+            f"queries, {counter.received} {noun} received, {counts['false_positives']} "
+            f"false positives discarded, {total} unique in the file")
         log(f"'{title}' download completed")
         return output_file
     finally:

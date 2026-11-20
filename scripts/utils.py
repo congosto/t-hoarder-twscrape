@@ -216,6 +216,15 @@ def import_dataset(project_dir: Path, source, dest: str, kind: str | None = None
     # corrompa). keep_default_na=False para no convertir vacíos en NaN.
     df = pd.read_csv(source, dtype=str, keep_default_na=False, encoding="utf-8")
     log(f"Read {len(df)} rows from {source.name}")
+    # filas con más campos que la cabecera: pandas convierte los campos de más
+    # en índice y desplaza todas las columnas (el nombre acaba en 'id', etc.).
+    # Pasó con una exportación de 37 campos y cabecera de 35 (20-11-2026).
+    if not isinstance(df.index, pd.RangeIndex):
+        extra = df.index.nlevels
+        raise ValueError(
+            f"The rows have {extra} more field(s) than the header ({len(df.columns)} "
+            f"columns), so every column would be shifted. Fix the header of the "
+            f"source CSV (add the missing column names) and import it again.")
 
     missing_req = [c for c in _IMPORT_REQUIRED if c not in df.columns]
     if missing_req:

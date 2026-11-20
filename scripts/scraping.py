@@ -1,7 +1,8 @@
 import asyncio
+from contextlib import aclosing
 
 from loguru import logger
-from twscrape import API, parse_users
+from twscrape import API, parse_tweets, parse_users
 
 from config import ACCOUNTS_DB
 
@@ -80,11 +81,50 @@ def _user_to_dict(user) -> dict:
 
 
 async def search_tweets(query: str, n: int = 100, product: str = "Top") -> list[dict]:
-    api = API(ACCOUNTS_DB)
-    tweets = []
-    async for tweet in api.search(query, limit=n, kv={"product": product}):
-        tweets.append(_tweet_to_dict(tweet))
+    tweets, _ = await search_tweets_watched(query, n=n, product=product, page_pause=0)
     return tweets
+
+
+SEARCH_PAGE_PAUSE = 0.5  # s entre páginas de una búsqueda (20-11-2026)
+
+
+async def search_tweets_watched(query: str, n: int = 100, product: str = "Top",
+                                page_pause: float = SEARCH_PAGE_PAUSE
+                                ) -> tuple[list[dict], str | None]:
+    """Como search_tweets, pero devuelve además el aviso "Blocked by ..." si
+    twscrape abortó la búsqueda (None si no). Al abortar, el iterador termina
+    en silencio con lo que llevara, así que sin esto un 429 de Cloudflare en la
+    primera página es indistinguible de una ventana sin tweets (20-11-2026,
+    debate cara a cara: la continuación recibió 0 por el 429 y dio el día por
+    completo).
+
+    page_pause espacia las páginas (20 tweets cada una), como en
+    get_retweeters: twscrape las pide seguidas y una consulta que desborda son
+    ~40 peticiones en ráfaga desde la misma IP, lo que dispara el 429 de
+    Cloudflare en temas densos (debate cara a cara, 20-11-2026)."""
+    blocked: list[str] = []
+    handler = logger.add(_block_sink(blocked), level="WARNING")
+    try:
+        api = API(ACCOUNTS_DB)
+        tweets = []
+        async with aclosing(api.search_raw(query, limit=n, kv={"product": product})) as pages:
+            async for rep in pages:
+                tweets.extend(_tweet_to_dict(t) for t in parse_tweets(rep.json(), n))
+                if page_pause:
+                    await asyncio.sleep(page_pause)
+    finally:
+        logger.remove(handler)
+    return tweets, (blocked[-1] if blocked else None)
+
+
+def _block_sink(blocked: list[str]):
+    """Sink de loguru que guarda en blocked los avisos "Blocked by ..." de
+    twscrape (Cloudflare/HTML), la única señal de que abortó la petición."""
+    def sink(message):
+        if message.record["name"].startswith("twscrape") and \
+                message.record["message"].startswith("Blocked by"):
+            blocked.append(message.record["message"])
+    return sink
 
 
 async def user_tweets(username: str, n: int = 100) -> list[dict]:
@@ -174,14 +214,8 @@ async def get_retweeters(tweet_id: int | str, n: int = 100, page_pause: float = 
     seguidas y un tweet con miles de RTs eran cientos de peticiones en ráfaga
     desde la misma IP, que es lo que disparaba el 429 de Cloudflare (12-10-2026).
     Dormir con el generador suspendido retrasa la petición de la página siguiente."""
-    blocked = []
-
-    def sink(message):
-        if message.record["name"].startswith("twscrape") and \
-                message.record["message"].startswith("Blocked by"):
-            blocked.append(message.record["message"])
-
-    handler = logger.add(sink, level="WARNING")
+    blocked: list[str] = []
+    handler = logger.add(_block_sink(blocked), level="WARNING")
     try:
         api = API(ACCOUNTS_DB)
         retweeters = []

@@ -147,8 +147,12 @@ downloads work the way they do.
   **900–1,000 tweets per account every 15 minutes**. It is not a fixed or
   documented figure: X announces it in each response and can change it;
   twscrape simply obeys it. That is why the app requests at most ~900
-  tweets per query and pauses a few seconds between queries: burning the
-  quota in a burst only makes X return empty responses.
+  tweets per query and spaces requests out: half a second between the
+  pages of a query and one second between queries. Burning the quota in a
+  burst only makes X return empty responses or Cloudflare block the IP
+  (error 429). If a block still happens, the query is retried after 1 and
+  2 minutes; if it persists, the download stops without marking the window
+  as complete and resumes when launched again.
 
 - **Account pool** — when an account exhausts its quota for an operation,
   twscrape sets it aside until X unlocks it and **continues with another
@@ -204,6 +208,14 @@ thing that really needs deciding: **the window size**.
    among the rest, and taking the oldest one would leave gaps. Only if the
    frontier does not move does it subdivide the window at the next
    frequency of the ladder month → week → day → 6 h → 3 h → 1 h → 30 min.
+
+   X sometimes stops paging well before its ceiling, without any error: in
+   the 19-11-2026 election debate one query returned 441 tweets, all from
+   the last three minutes of a day that had tens of thousands. So the
+   continuation also goes on when 100 tweets or more arrive even without
+   an overflow, and the window is only considered complete when a query
+   brings fewer than 100. On a window that really was complete, that extra
+   query comes back almost empty.
 3. On windows shorter than a day and on continuations (which end at a
    specific time), the query uses `since_time:` / `until_time:` in epoch,
    which is how Latest honours the time of day; the fine trim to the
@@ -324,7 +336,19 @@ switched off, the time of that session is lost.
   thousands of them. It generates `{dataset}_replies.csv`, with the
   `url_replied` column (the url of the replied tweet) and without the
   original tweet, and records every overflow in
-  `{dataset}_replies_overflow.csv`.
+  `{dataset}_replies_overflow.csv`. The search engine sometimes slips in
+  tweets that only mention the author; those outside the tweet's
+  conversation are discarded, but replies to other replies are kept, so
+  threads are not lost. What is discarded stays in
+  `{dataset}_replies_raw.csv` in case you want to review it. When it
+  finishes it also saves `{dataset}_replies_summary.csv`, with one row per
+  searched tweet: X's reply counter (`reply_count`), the direct replies
+  downloaded (`replies_direct`), every reply in the conversation including
+  threads (`replies_total`) and the percentage of each over the counter
+  (`pct_direct`, `pct_total`). X's counter is closer to the whole
+  conversation than to the direct replies, so `pct_total` is the one that
+  tells how much was downloaded. It can exceed 100% because the counter
+  dates from when the dataset was downloaded.
 
 - **Quotes** — for each tweet of the dataset with at least *Min Quotes*
   quotes, it downloads the tweets that quote it. It works like Comments
@@ -332,7 +356,11 @@ switched off, the time of that session is lost.
   tweet's date until *Last* days later, and continuation if it overflows.
   It generates `{dataset}_quotes.csv`, with the `url_quoted` column (the url
   of the quoted tweet) and without the original tweet, and records overflows in
-  `{dataset}_quotes_overflow.csv`.
+  `{dataset}_quotes_overflow.csv`. Results that do not quote that tweet are
+  discarded (they stay in `{dataset}_quotes_raw.csv`). It also saves
+  `{dataset}_quotes_summary.csv` with, per tweet, the quote counter
+  (`quote_count`), the quotes downloaded (`quotes_downloaded`) and their
+  percentage (`pct_downloaded`).
 
 - **About** — for each author of the dataset, downloads what X shows on the
   *About this account* page of their profile (`x.com/{user}/about`): the

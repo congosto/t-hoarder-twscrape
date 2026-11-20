@@ -150,8 +150,12 @@ descargas funcionan como funcionan.
   **900–1.000 tweets por cuenta cada 15 minutos**. No es una cifra fija ni
   documentada: X la anuncia en cada respuesta y puede cambiarla; twscrape
   simplemente la obedece. Por eso la app pide como máximo ~900 tweets por
-  consulta y hace una pausa de unos segundos entre consultas: quemar la cuota
-  en ráfaga solo consigue que X devuelva respuestas vacías.
+  consulta y espacia las peticiones: medio segundo entre las páginas de una
+  consulta y un segundo entre consultas. Quemar la cuota en ráfaga solo
+  consigue que X devuelva respuestas vacías o que Cloudflare bloquee la IP
+  (error 429). Si aun así llega un bloqueo, la consulta se reintenta tras 1
+  y 2 minutos; si persiste, la descarga se para sin dar la ventana por
+  completa y se reanuda al relanzarla.
 
 - **Pool de cuentas** — cuando una cuenta agota su cuota para una operación,
   twscrape la deja en reserva hasta que X la desbloquea y **continúa con otra
@@ -207,6 +211,14 @@ de verdad hace falta decidir: **el tamaño de la ventana**.
    algunos más antiguos sueltos, y tomar el más antiguo dejaría huecos.
    Solo si la frontera no avanza se subdivide la ventana con la siguiente
    frecuencia de la escalera mes → semana → día → 6 h → 3 h → 1 h → 30 min.
+
+   X a veces deja de paginar mucho antes de su techo, sin dar error: en el
+   debate electoral del 19-11-2026 una consulta devolvió 441 tweets, todos
+   de los últimos tres minutos de un día que tenía decenas de miles. Por
+   eso la continuación sigue también cuando llegan 100 tweets o más aunque
+   no desborde, y la ventana solo se da por completa cuando una consulta
+   trae menos de 100. En una ventana que de verdad estaba completa, esa
+   consulta extra vuelve casi vacía.
 3. En las ventanas de menos de un día y en las continuaciones (que acaban
    a una hora concreta), la consulta usa `since_time:` / `until_time:` en
    epoch, que es la forma de que Latest respete la hora; el recorte fino al
@@ -327,6 +339,18 @@ pierde.
   en conversaciones con miles de ellas. Genera `{dataset}_replies.csv`, con
   la columna `url_replied` (la url del tweet respondido) y sin el tweet
   original, y anota cada desbordamiento en `{dataset}_replies_overflow.csv`.
+  El buscador cuela a veces tweets que solo mencionan al autor; se descartan
+  los que no pertenecen a la conversación del tweet, pero se conservan las
+  respuestas a otras respuestas, así que los hilos no se pierden. Lo
+  descartado queda en `{dataset}_replies_raw.csv` por si se quiere revisar.
+  Al terminar guarda también `{dataset}_replies_summary.csv`, con una fila
+  por tweet buscado: el contador de respuestas de X (`reply_count`), las
+  respuestas directas descargadas (`replies_direct`), todas las de la
+  conversación con los hilos (`replies_total`) y el porcentaje de cada una
+  sobre el contador (`pct_direct`, `pct_total`). El contador de X se parece
+  más al total de la conversación que a las directas, así que `pct_total` es
+  el que dice cuánto se ha descargado. Puede pasar del 100 % porque el
+  contador es de cuando se descargó el dataset.
 
 - **Quotes** — para cada tweet del dataset con al menos *Min Quotes* citas,
   descarga los tweets que lo citan. Funciona igual que Comments,
@@ -334,6 +358,10 @@ pierde.
   tweet hasta *Last* días después y continuación si desborda. Genera
   `{dataset}_quotes.csv`, con la columna `url_quoted` (la url del tweet
   citado) y sin el tweet original, y anota los desbordamientos en `{dataset}_quotes_overflow.csv`.
+  Se descartan los resultados que no citan ese tweet (quedan en
+  `{dataset}_quotes_raw.csv`). Guarda también `{dataset}_quotes_summary.csv`
+  con, por tweet, el contador de citas (`quote_count`), las descargadas
+  (`quotes_downloaded`) y su porcentaje (`pct_downloaded`).
 
 - **About** — para cada autor del dataset descarga lo que X muestra en la
   página *About this account* de su perfil (`x.com/{usuario}/about`): el
